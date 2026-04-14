@@ -1,0 +1,10 @@
+@import url("styles/layout.css");
+@import url("styles/score-entry.css");
+@import url("styles/member-calendar.css");
+@import url("styles/members.css");
+@import url("styles/profit-calendar.css");
+
+.abnormal-cell {
+    color: red;
+    font-weight: bold;
+}

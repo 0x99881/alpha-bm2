@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-head">
+    <div>
+        <h2>{{ ui.scores_title }}</h2>
+        <p>{{ ui.scores_summary }}</p>
+    </div>
+    <div class="stat-card">
+        <span>{{ ui.latest_score_column }}{{ score_summary.latest_column }}</span>
+        <strong>{{ ui.current_window.format(count=score_summary.window_size) }}</strong>
+    </div>
+</section>
+
+<section class="panel compact-panel">
+    <form method="post" action="{{ url_for('save_scores') }}">
+        <div class="toolbar compact-toolbar">
+            <div class="date-tools">
+                <label>
+                    {{ ui.record_date }}
+                    <input type="date" name="date" value="{{ selected_date }}">
+                </label>
+            </div>
+            <div class="quick-actions">
+                <span>{{ ui.batch_actions }}</span>
+                <button type="button" class="secondary-btn" data-fill-all="{{ quick_scores[0] }}">{{ ui.fill_all.format(score=quick_scores[0]) }}</button>
+                <button type="button" class="secondary-btn" data-clear-all="true">{{ ui.clear_all }}</button>
+            </div>
+            <div class="toolbar-actions">
+                <button type="submit" formaction="{{ url_for('open_excel_file') }}" formmethod="post" class="secondary-btn">{{ ui.open_excel }}</button>
+                <button type="submit" class="primary-btn">{{ ui.sync_excel }}</button>
+            </div>
+        </div>
+
+        <div class="drag-sort-hint" data-sort-status data-idle-text="{{ ui.drag_sort_hint }}">{{ ui.drag_sort_hint }}</div>
+        <div class="table-wrap compact-wrap">
+            <table class="score-table">
+                <thead>
+                    <tr>
+                        <th>{{ ui.label_name }}</th>
+                        <th>{{ ui.label_score }}</th>
+                        <th>{{ ui.label_quick_score }}</th>
+                        <th>{{ ui.label_before }}</th>
+                        <th>{{ ui.label_after }}</th>
+                        <th>{{ ui.label_manual_wear }}</th>
+                        <th>{{ ui.label_daily_wear }}</th>
+                        <th>{{ ui.label_income }}</th>
+                        <th>{{ ui.label_other_expense }}</th>
+                    </tr>
+                </thead>
+                <tbody data-sortable-members="true" data-reorder-url="{{ url_for('reorder_members') }}">
+                    {% for member in active_members %}
+                    <tr class="sortable-member-row" data-member-name="{{ member.name }}">
+                        <td class="name-cell drag-source-cell" draggable="true" data-drag-source="{{ member.name }}"><span class="drag-handle" aria-hidden="true">::</span><a class="member-link" href="{{ url_for('profit_calendar', name=member.name) }}">{{ member.name }}</a></td>
+                        <td><input type="number" name="score_{{ member.name }}" class="score-input compact-input" value="{{ member.score }}"></td>
+                        <td>
+                            <div class="quick-score-group compact">
+                                {% for score in quick_scores %}
+                                <button type="button" class="score-chip compact-chip" data-target="score_{{ member.name }}" data-score="{{ score }}">{{ score }}</button>
+                                {% endfor %}
+                            </div>
+                        </td>
+                        <td><input type="number" step="any" name="before_{{ member.name }}" class="balance-input compact-input" data-balance-group="{{ member.name }}" data-balance-role="before" placeholder="{{ ui.placeholder_before_balance }}" value="{{ member.before_balance }}"></td>
+                        <td><input type="number" step="any" name="after_{{ member.name }}" class="balance-input compact-input" data-balance-group="{{ member.name }}" data-balance-role="after" placeholder="{{ ui.placeholder_after_balance }}" value="{{ member.after_balance }}"></td>
+                        <td><input type="number" step="any" name="manual_wear_{{ member.name }}" class="manual-wear-input compact-input" data-manual-wear="{{ member.name }}" placeholder="{{ ui.placeholder_direct_fill }}" value="{{ member.manual_wear }}"></td>
+                        <td><span class="wear-result compact-result" data-wear-result="{{ member.name }}">{{ ui.wear_no_record }}</span></td>
+                        <td><input type="number" step="any" name="income_{{ member.name }}" class="income-input compact-input" placeholder="{{ ui.placeholder_default_zero }}" value="{{ member.income }}"></td>
+                        <td><input type="number" step="any" name="other_expense_{{ member.name }}" class="expense-input compact-input" placeholder="{{ ui.placeholder_default_zero }}" value="{{ member.other_expense }}"></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </form>
+</section>
+
+<section class="panel">
+    <div class="section-title">
+        <h3>{{ ui.rankings_title }}</h3>
+        <p>{{ ui.rankings_hint }}</p>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>{{ ui.label_rank }}</th>
+                    <th>{{ ui.label_name }}</th>
+                    <th>{{ ui.label_total_score }}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in score_summary.rankings %}
+                <tr>
+                    <td>{{ loop.index }}</td>
+                    <td><a class="member-link" href="{{ url_for('profit_calendar', name=item.name) }}">{{ item.name }}</a></td>
+                    <td>{{ item.total }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="3" class="empty-cell">{{ ui.empty_score_records }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

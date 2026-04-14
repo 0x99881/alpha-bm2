@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="calendar-toolbar">
+    <form method="get" action="{{ url_for('profit_calendar') }}" class="member-picker-panel">
+        <label>
+            {{ ui.calendar_member }}
+            <select name="name" class="member-select" onchange="this.form.submit()">
+                <option value="all" {% if selected_name == 'all' %}selected{% endif %}>{{ ui.all_members }}</option>
+                {% for member in members %}
+                <option value="{{ member.name }}" {% if member.name == selected_name %}selected{% endif %}>{{ member.name }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <input type="hidden" name="year" value="{{ calendar_data.year }}">
+        <input type="hidden" name="month" value="{{ calendar_data.month }}">
+    </form>
+
+    <div class="calendar-stats">
+        <div class="profit-stat-card">
+            <span>{{ ui.month_income_total }}</span>
+            <strong>{{ calendar_data.month_income_total }}</strong>
+        </div>
+        <div class="profit-stat-card wear-card">
+            <span>{{ ui.month_wear_total }}</span>
+            <strong>{{ calendar_data.month_wear_total }}</strong>
+        </div>
+        {% if calendar_data.is_all_members %}
+        <div class="profit-stat-card average-card">
+            <span>{{ calendar_data.month_income_account_count }}{{ ui.avg_income_suffix }}</span>
+            <strong>{{ calendar_data.month_avg_income }}</strong>
+        </div>
+        <div class="profit-stat-card average-card wear-average-card">
+            <span>{{ calendar_data.month_wear_account_count }}{{ ui.avg_wear_suffix }}</span>
+            <strong>{{ calendar_data.month_avg_wear }}</strong>
+        </div>
+        <div class="profit-stat-card average-card per-member-day-card"
+            data-average-card="true"
+            data-average-mode="all"
+            data-active-member-count="{{ calendar_data.month_wear_account_count }}"
+            data-month-day-count="{{ calendar_data.month_day_count }}"
+            data-default-wear="{{ calendar_data.month_wear_total }}"
+        >
+            <span>{{ ui.avg_per_member_per_day }}</span>
+            <strong data-average-value>{{ '%.2f'|format(calendar_data.avg_per_member_per_day) }}</strong>
+        </div>
+        {% endif %}
+        <div
+            class="profit-stat-card profit-status-card {% if calendar_data.month_profit_total >= 0 %}profit-positive-card{% else %}profit-negative-card{% endif %}"
+            data-profit-card="true"
+            data-default-title="{{ ui.profit_status_month }}"
+            data-range-title="{{ ui.profit_status_range }}"
+            data-positive-label="{{ ui.profit_positive }}"
+            data-negative-label="{{ ui.profit_negative }}"
+            data-default-income="{{ calendar_data.month_income_total }}"
+            data-default-wear="{{ calendar_data.month_wear_total }}"
+            data-stats-allowed="{{ 1 if calendar_data.stats_allowed else 0 }}"
+        >
+            <span data-profit-title>{{ ui.profit_status_month }}</span>
+            <strong data-profit-value>
+                {% if calendar_data.month_profit_total >= 0 %}
+                {{ ui.profit_positive }} +{{ calendar_data.month_profit_total }}
+                {% else %}
+                {{ ui.profit_negative }} {{ calendar_data.month_profit_total }}
+                {% endif %}
+            </strong>
+        </div>
+    </div>
+</section>
+
+<section class="profit-range-panel"
+    data-profit-range-root="true"
+    data-empty-text="{{ ui.selected_range_empty }}"
+    data-range-prefix="{{ ui.selected_range_label }}"
+    data-range-separator="{{ ui.range_separator }}"
+    data-month-prefix="{{ "%04d-%02d-"|format(calendar_data.year, calendar_data.month) }}"
+>
+    <div class="profit-range-copy">
+        <span class="profit-range-kicker">{{ ui.selected_range_title }}</span>
+        <strong class="profit-range-value" data-range-text>{{ ui.selected_range_empty }}</strong>
+        <p>{{ ui.selected_range_hint }}</p>
+    </div>
+    <div class="profit-range-stats">
+        <div class="profit-range-card">
+            <span>{{ ui.range_income_total }}</span>
+            <strong data-range-income>0.0</strong>
+        </div>
+        <div class="profit-range-card wear-range-card">
+            <span>{{ ui.range_wear_total }}</span>
+            <strong data-range-wear>0.0</strong>
+        </div>
+        {% if not calendar_data.is_all_members %}
+        <div class="profit-range-card single-average-range-card"
+            data-average-card="true"
+            data-average-mode="single"
+            data-month-day-count="{{ calendar_data.month_day_count }}"
+            data-default-wear="{{ calendar_data.month_wear_total }}"
+        >
+            <span>{{ ui.avg_member_daily_wear }}</span>
+            <strong data-average-value>{{ '%.2f'|format(calendar_data.avg_member_daily_wear) }}</strong>
+        </div>
+        {% endif %}
+    </div>
+    <button type="button" class="range-clear-button" data-range-clear disabled>{{ ui.button_clear_selection }}</button>
+</section>
+
+<div class="profit-content-row">
+<section class="profit-panel">
+    <div class="profit-header">
+        <a class="month-arrow" href="{{ url_for('profit_calendar', name=selected_name, year=calendar_data.prev_year, month=calendar_data.prev_month) }}">&larr;</a>
+        <strong>{{ calendar_data.month_label }}</strong>
+        <a class="month-arrow" href="{{ url_for('profit_calendar', name=selected_name, year=calendar_data.next_year, month=calendar_data.next_month) }}">&rarr;</a>
+    </div>
+
+    <div class="profit-weekdays">
+        <div>{{ ui.weekday_sun }}</div>
+        <div>{{ ui.weekday_mon }}</div>
+        <div>{{ ui.weekday_tue }}</div>
+        <div>{{ ui.weekday_wed }}</div>
+        <div>{{ ui.weekday_thu }}</div>
+        <div>{{ ui.weekday_fri }}</div>
+        <div>{{ ui.weekday_sat }}</div>
+    </div>
+
+    {% for week in calendar_data.weeks %}
+    <div class="profit-calendar-grid">
+        {% for cell in week %}
+        <button
+            type="button"
+            class="profit-day {% if not cell.in_month %}other-month{% endif %} {% if cell.date == calendar_data.today %}today{% endif %} {% if cell.wear is not none or cell.income is not none %}has-data{% endif %}"
+            data-calendar-open="true"
+            data-date="{{ cell.date }}"
+            data-wear="{% if cell.wear is not none %}{{ cell.wear }}{% endif %}"
+            data-income="{% if cell.income is not none %}{{ cell.income }}{% endif %}"
+            data-note="{{ cell.note or ui.no_note }}"
+            data-wear-count="{{ cell.wear_account_count or 0 }}"
+            data-income-count="{{ cell.income_account_count or 0 }}"
+            data-avg-wear="{% if cell.avg_wear is not none %}{{ cell.avg_wear }}{% endif %}"
+            data-avg-income="{% if cell.avg_income is not none %}{{ cell.avg_income }}{% endif %}"
+            data-breakdown='{{ cell.breakdown | tojson }}'
+            style="--profit-intensity: {{ cell.intensity }}"
+        >
+            <span class="profit-day-number">{{ cell.day }}</span>
+            {% if cell.wear is not none or cell.income is not none %}
+            <span class="profit-day-wear">{{ ui.wear }} {{ cell.wear or 0 }}</span>
+            <span class="profit-day-income">{{ ui.income }} {{ cell.income or 0 }}</span>
+            {% if calendar_data.is_all_members and (cell.wear_account_count or cell.income_account_count) %}
+            <span class="profit-day-average">{{ cell.wear_account_count or 0 }}{{ ui.avg_wear_suffix }} {{ cell.avg_wear }}</span>
+            <span class="profit-day-average">{{ cell.income_account_count or 0 }}{{ ui.avg_income_suffix }} {{ cell.avg_income }}</span>
+            <span class="profit-day-hint">{{ ui.breakdown_title }}</span>
+            {% endif %}
+            {% else %}
+            <span class="profit-day-empty">{{ ui.wear_no_record }}</span>
+            {% endif %}
+        </button>
+        {% endfor %}
+    </div>
+    {% endfor %}
+</section>
+
+{% if calendar_data.is_all_members %}
+<aside class="profit-board-panel"
+    data-profit-board-root="true"
+    data-board-empty="{{ ui.member_profit_board_empty }}"
+    data-active-members='{{ members | selectattr("status", "equalto", enabled_status) | map(attribute="name") | list | tojson }}'
+>
+    <div class="profit-board-head">
+        <div>
+            <span class="profit-board-kicker">{{ ui.member_profit_board_title }}</span>
+            <strong data-board-title>{{ ui.member_profit_board_title }}</strong>
+            <p>{{ ui.member_profit_board_hint }}</p>
+            <p class="profit-board-subhint">{{ ui.member_profit_board_range_hint }}</p>
+        </div>
+    </div>
+    <div class="profit-board-table-wrap">
+        <div class="profit-board-metric" data-board-profit-header>{{ ui.profit_status_month }}</div>
+        <div class="profit-board-list" data-board-body>
+            {% if calendar_data.profit_board_rows %}
+                {% for row in calendar_data.profit_board_rows | sort(attribute='profit', reverse=true) %}
+                <article class="profit-board-item">
+                    <div class="profit-board-topline">
+                        <span class="profit-board-rank">#{{ loop.index }}</span>
+                        <span class="profit-board-name" title="{{ row.name }}">{{ row.name }}</span>
+                        <strong class="profit-board-profit {% if row.profit >= 0 %}is-positive{% else %}is-negative{% endif %}">{% if row.profit >= 0 %}{{ ui.profit_positive }} +{{ '%.1f'|format(row.profit) }}{% else %}{{ ui.profit_negative }} {{ '%.1f'|format(row.profit) }}{% endif %}</strong>
+                    </div>
+                    <div class="profit-board-meta-row">
+                        <span class="profit-board-meta"><em>{{ ui.income }}</em><strong>{{ '%.1f'|format(row.income) }}</strong></span>
+                        <span class="profit-board-meta"><em>{{ ui.wear }}</em><strong>{{ '%.1f'|format(row.wear) }}</strong></span>
+                    </div>
+                </article>
+                {% endfor %}
+            {% else %}
+            <div class="profit-board-empty">{{ ui.member_profit_board_empty }}</div>
+            {% endif %}
+        </div>
+    </div>
+</aside>
+{% endif %}
+</div>
+
+<div class="calendar-modal" data-calendar-modal hidden>
+    <div class="calendar-modal-backdrop" data-calendar-close="true"></div>
+    <div class="calendar-modal-card">
+        <div class="calendar-modal-head">
+            <h3>{{ ui.calendar_detail_title }}</h3>
+            <button type="button" class="modal-close" data-calendar-close="true">{{ ui.close }}</button>
+        </div>
+        <div class="calendar-modal-body">
+            <p><strong>{{ ui.date }}</strong><span data-calendar-detail-date>{{ ui.choose_day }}</span></p>
+            <p><strong>{{ ui.label_daily_wear }}</strong><span data-calendar-detail-wear>-</span></p>
+            <p><strong>{{ ui.daily_income }}</strong><span data-calendar-detail-income>-</span></p>
+            <p><strong>{{ ui.note }}</strong><span data-calendar-detail-note>{{ ui.no_note }}</span></p>
+            <p><strong>{{ ui.wear_count }}</strong><span data-calendar-detail-wear-count>-</span></p>
+            <p><strong>{{ ui.income_count }}</strong><span data-calendar-detail-income-count>-</span></p>
+            <p><strong>{{ ui.avg_single_wear }}</strong><span data-calendar-detail-avg-wear>-</span></p>
+            <p><strong>{{ ui.avg_single_income }}</strong><span data-calendar-detail-avg-income>-</span></p>
+        </div>
+        <div class="calendar-breakdown" data-calendar-breakdown hidden>
+            <h4>{{ ui.breakdown_title }}</h4>
+            <div class="calendar-breakdown-list" data-calendar-breakdown-list></div>
+        </div>
+    </div>
+</div>
+{% endblock %}

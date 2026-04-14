@@ -1,0 +1,15 @@
+﻿# Runtime and local data
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Generated Excel / local state
+BM2记录_*.xlsx
+system_config.json
+
+# Local temp
+.tmp/
+vendor/
+_vendor/
+_verify_*/

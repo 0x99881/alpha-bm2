@@ -1,0 +1,74 @@
+.members-wrap {
+    max-width: 980px;
+    margin-right: auto;
+}
+
+.members-table {
+    width: auto;
+    min-width: 0;
+    table-layout: fixed;
+}
+
+.members-table th,
+.members-table td {
+    padding: 5px 6px;
+}
+
+.members-table th:nth-child(1),
+.members-table td:nth-child(1) {
+    width: 80px;
+}
+
+.members-table th:nth-child(2),
+.members-table td:nth-child(2) {
+    width: 100px;
+}
+
+.members-table th:nth-child(3),
+.members-table td:nth-child(3) {
+    width: 260px;
+}
+
+.members-table th:nth-child(4),
+.members-table td:nth-child(4),
+.members-table th:nth-child(5),
+.members-table td:nth-child(5) {
+    width: 180px;
+}
+
+.members-table th:nth-child(6),
+.members-table td:nth-child(6) {
+    width: 170px;
+}
+
+.compact-row-form {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.compact-row-form input[type="text"] {
+    width: 170px;
+}
+
+.member-actions {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.member-row-disabled {
+    opacity: 0.88;
+}
+
+.small-btn {
+    min-height: 30px;
+    padding: 0 10px;
+    font-size: 12px;
+    border-radius: 8px;
+}
+
+.delete-btn {
+    background: #fee2e2;
+    color: #b91c1c;
+}

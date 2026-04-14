@@ -1,0 +1,597 @@
+.calendar-toolbar {
+    display: flex;
+    gap: 18px;
+    align-items: flex-start;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+}
+
+.member-picker-panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 18px 20px;
+    min-width: 240px;
+    box-shadow: 0 14px 32px rgba(15, 23, 42, 0.06);
+}
+
+.member-select {
+    min-width: 180px;
+    min-height: 42px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 0 12px;
+    font-size: 15px;
+    background: #fff;
+    color: var(--text);
+}
+
+.calendar-stats {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+}
+
+.profit-stat-card {
+    min-width: 180px;
+    background: linear-gradient(135deg, #1d4ed8 0%, #3b82f6 100%);
+    color: #fff;
+    border-radius: 18px;
+    padding: 18px 20px;
+    box-shadow: 0 14px 32px rgba(37, 99, 235, 0.2);
+}
+
+.profit-stat-card span {
+    display: block;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.76);
+    margin-bottom: 8px;
+}
+
+.profit-stat-card strong {
+    font-size: 28px;
+}
+
+.profit-stat-card.wear-card {
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+    box-shadow: 0 14px 32px rgba(15, 23, 42, 0.22);
+}
+
+.profit-stat-card.average-card {
+    background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%);
+    box-shadow: 0 14px 32px rgba(20, 184, 166, 0.18);
+}
+
+.profit-stat-card.wear-average-card {
+    background: linear-gradient(135deg, #7c2d12 0%, #ea580c 100%);
+    box-shadow: 0 14px 32px rgba(234, 88, 12, 0.18);
+}
+
+.profit-content-row {
+    width: 100%;
+    max-width: 1420px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 286px;
+    align-items: flex-start;
+    gap: 14px;
+}
+
+.profit-panel {
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    background: linear-gradient(180deg, #0f172a 0%, #111827 100%);
+    border-radius: 24px;
+    padding: 20px;
+    box-shadow: 0 20px 50px rgba(15, 23, 42, 0.24);
+}
+
+.profit-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    color: #f8fafc;
+    margin-bottom: 20px;
+}
+
+.profit-header strong {
+    font-size: 24px;
+    letter-spacing: 0.02em;
+}
+
+.month-arrow {
+    width: 40px;
+    height: 40px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+    background: rgba(255, 255, 255, 0.08);
+    color: #f8fafc;
+    font-size: 18px;
+}
+
+.month-arrow:hover {
+    background: rgba(255, 255, 255, 0.16);
+}
+
+.profit-weekdays,
+.profit-calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 6px;
+}
+
+.profit-weekdays {
+    margin-bottom: 12px;
+}
+
+.profit-weekdays div {
+    text-align: center;
+    color: #94a3b8;
+    font-size: 13px;
+}
+
+.profit-calendar-grid {
+    margin-bottom: 10px;
+}
+
+.profit-day {
+    min-height: 106px;
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 16px;
+    padding: 9px;
+    background: linear-gradient(180deg, rgba(30, 41, 59, 0.94) 0%, rgba(15, 23, 42, 0.98) 100%);
+    color: #e2e8f0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: flex-start;
+    gap: 8px;
+    text-align: left;
+    box-shadow: inset 0 0 0 999px rgba(34, 197, 94, calc(var(--profit-intensity) * 0.35));
+}
+
+.profit-day.has-data:hover {
+    transform: translateY(-1px);
+    border-color: rgba(96, 165, 250, 0.5);
+}
+
+.profit-day.other-month {
+    opacity: 0.35;
+}
+
+.profit-day.today {
+    border-color: #fbbf24;
+    box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.55), inset 0 0 0 999px rgba(34, 197, 94, calc(var(--profit-intensity) * 0.35));
+}
+
+.profit-day-number {
+    font-size: 18px;
+    font-weight: 700;
+    color: #f8fafc;
+}
+
+.profit-day-wear,
+.profit-day-income,
+.profit-day-empty {
+    font-size: 12px;
+    color: #cbd5e1;
+}
+
+.profit-day-income {
+    color: #93c5fd;
+}
+
+.profit-day-average {
+    font-size: 11px;
+    color: #94a3b8;
+}
+
+.profit-day-hint {
+    font-size: 10px;
+    color: #fbbf24;
+}
+
+.calendar-modal[hidden] {
+    display: none;
+}
+
+.calendar-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+}
+
+.calendar-modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.62);
+}
+
+.calendar-modal-card {
+    position: relative;
+    z-index: 1;
+    width: min(420px, calc(100vw - 32px));
+    margin: 10vh auto 0;
+    border-radius: 22px;
+    background: #ffffff;
+    padding: 22px;
+    box-shadow: 0 24px 60px rgba(15, 23, 42, 0.28);
+}
+
+.calendar-modal-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.calendar-modal-head h3 {
+    margin: 0;
+}
+
+.modal-close {
+    min-height: 34px;
+    padding: 0 12px;
+    background: #e2e8f0;
+    color: #0f172a;
+}
+
+.calendar-modal-body p {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    margin: 0 0 12px;
+}
+
+.calendar-modal-body strong {
+    color: var(--muted);
+    font-size: 13px;
+}
+
+@media (max-width: 960px) {
+    .profit-panel {
+        padding: 18px;
+    }
+
+    .profit-calendar-grid,
+    .profit-weekdays {
+        gap: 8px;
+    }
+
+    .profit-day {
+        min-height: 98px;
+    }
+}
+
+
+.calendar-breakdown {
+    margin-top: 18px;
+    padding-top: 14px;
+    border-top: 1px solid var(--line);
+}
+
+.calendar-breakdown h4 {
+    margin: 0 0 12px;
+}
+
+.calendar-breakdown-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 240px;
+    overflow: auto;
+}
+
+.calendar-breakdown-row {
+    display: grid;
+    grid-template-columns: 1fr 90px 90px;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: #f8fafc;
+    border: 1px solid var(--line);
+}
+
+
+.profit-range-panel {
+    max-width: 1120px;
+    display: flex;
+    align-items: stretch;
+    justify-content: space-between;
+    gap: 18px;
+    flex-wrap: wrap;
+    margin-bottom: 18px;
+    padding: 18px 20px;
+    border-radius: 22px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    box-shadow: 0 14px 32px rgba(15, 23, 42, 0.08);
+}
+
+.profit-range-copy {
+    min-width: 240px;
+    flex: 1 1 320px;
+}
+
+.profit-range-kicker {
+    display: block;
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 8px;
+}
+
+.profit-range-value {
+    display: block;
+    font-size: 20px;
+    margin-bottom: 8px;
+}
+
+.profit-range-copy p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 14px;
+}
+
+.profit-range-stats {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.profit-range-card {
+    min-width: 150px;
+    padding: 16px 18px;
+    border-radius: 18px;
+    background: linear-gradient(135deg, rgba(29, 78, 216, 0.12) 0%, rgba(59, 130, 246, 0.2) 100%);
+    border: 1px solid rgba(59, 130, 246, 0.18);
+}
+
+.profit-range-card span {
+    display: block;
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 8px;
+}
+
+.profit-range-card strong {
+    font-size: 24px;
+}
+
+.wear-range-card {
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.06) 0%, rgba(15, 23, 42, 0.12) 100%);
+    border-color: rgba(15, 23, 42, 0.1);
+}
+
+.range-clear-button {
+    align-self: center;
+    min-height: 42px;
+    padding: 0 16px;
+}
+
+.range-clear-button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.profit-day {
+    position: relative;
+    overflow: hidden;
+    user-select: none;
+}
+
+.profit-day::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    transition: background 0.12s ease, box-shadow 0.12s ease;
+}
+
+.profit-day.range-selected::after {
+    background: rgba(96, 165, 250, 0.14);
+    box-shadow: inset 0 0 0 1px rgba(147, 197, 253, 0.72);
+}
+
+.profit-day.range-start::after,
+.profit-day.range-end::after {
+    background: rgba(59, 130, 246, 0.22);
+    box-shadow: inset 0 0 0 2px rgba(191, 219, 254, 0.94);
+}
+
+@media (max-width: 960px) {
+    .profit-range-panel {
+        padding: 16px;
+    }
+
+    .profit-range-card {
+        min-width: 132px;
+    }
+}
+
+
+.profit-status-card {
+    min-width: 190px;
+}
+
+.profit-positive-card {
+    background: linear-gradient(135deg, #15803d 0%, #22c55e 100%);
+    box-shadow: 0 14px 32px rgba(34, 197, 94, 0.2);
+}
+
+.profit-negative-card {
+    background: linear-gradient(135deg, #b91c1c 0%, #ef4444 100%);
+    box-shadow: 0 14px 32px rgba(239, 68, 68, 0.22);
+}
+
+
+.profit-board-panel {
+    width: 286px;
+    min-width: 286px;
+    max-width: 286px;
+    max-height: 760px;
+    padding: 14px;
+    border-radius: 24px;
+    background: linear-gradient(180deg, #0f172a 0%, #111827 100%);
+    box-shadow: 0 20px 50px rgba(15, 23, 42, 0.2);
+    display: flex;
+    flex-direction: column;
+}
+
+.profit-board-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.profit-board-kicker {
+    display: block;
+    font-size: 13px;
+    color: #60a5fa;
+    margin-bottom: 8px;
+}
+
+.profit-board-head strong {
+    display: block;
+    color: #f8fafc;
+    font-size: 20px;
+    margin-bottom: 6px;
+}
+
+.profit-board-head p {
+    margin: 0;
+    color: #94a3b8;
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.profit-board-subhint {
+    margin-top: 4px !important;
+}
+
+.profit-board-table-wrap {
+    overflow-y: auto;
+    overflow-x: hidden;
+    max-height: 640px;
+    padding-right: 2px;
+}
+
+.profit-board-metric {
+    color: #94a3b8;
+    font-size: 12px;
+    margin-bottom: 10px;
+}
+
+.profit-board-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.profit-board-item {
+    padding: 10px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.profit-board-topline {
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.profit-board-rank {
+    color: #94a3b8;
+    font-size: 12px;
+    text-align: left;
+}
+
+.profit-board-name {
+    min-width: 0;
+    color: #f8fafc;
+    font-size: 14px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.profit-board-profit {
+    font-size: 14px;
+    font-weight: 700;
+    text-align: right;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.profit-board-meta-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+.profit-board-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    min-width: 0;
+}
+
+.profit-board-meta em {
+    font-style: normal;
+    color: #94a3b8;
+    font-size: 11px;
+}
+
+.profit-board-meta strong {
+    color: #cbd5e1;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.profit-board-profit.is-positive {
+    color: #86efac;
+}
+
+.profit-board-profit.is-negative {
+    color: #fca5a5;
+}
+
+.profit-board-empty {
+    color: #94a3b8;
+    text-align: center;
+    padding: 18px 8px;
+    font-size: 12px;
+}
+
+@media (max-width: 1200px) {
+    .profit-content-row {
+        grid-template-columns: 1fr;
+    }
+
+    .profit-board-panel {
+        width: 100%;
+        min-width: 0;
+        max-width: none;
+        max-height: 620px;
+    }
+
+    .profit-board-table-wrap {
+        max-height: 420px;
+    }
+}
+

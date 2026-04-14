@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ title or ui.app_title }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=asset_version) }}">
+    {% block head_extra %}{% endblock %}
+</head>
+<body>
+    <div class="app-shell">
+        <aside class="sidebar">
+            <div class="brand">
+                <h1>{{ ui.app_title }}</h1>
+                <p>{{ ui.local_tool }}</p>
+            </div>
+            <nav class="nav">
+                <a href="{{ url_for('score_entry') }}" class="{% if request.endpoint == 'score_entry' %}active{% endif %}">{{ ui.nav_scores }}</a>
+                <a href="{{ url_for('wear_entry') }}" class="{% if request.endpoint == 'wear_entry' %}active{% endif %}">{{ ui.nav_wear }}</a>
+                <a href="{{ url_for('profit_calendar') }}" class="{% if request.endpoint in ['profit_calendar', 'member_detail'] %}active{% endif %}">{{ ui.nav_calendar }}</a>
+                <a href="{{ url_for('members') }}" class="{% if request.endpoint == 'members' %}active{% endif %}">{{ ui.nav_members }}</a>
+            </nav>
+            <div class="theme-switch-card">
+                <span>{{ ui.page_mode }}</span>
+                <button type="button" class="theme-toggle" data-theme-toggle="true">{{ ui.theme_switch }}</button>
+            </div>
+            <div class="meta-card">
+                <span>{{ ui.current_excel }}</span>
+                <strong>{{ excel_filename }}</strong>
+            </div>
+        </aside>
+        <main class="content">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    <div class="flash-stack">
+                        {% for category, message in messages %}
+                            <div class="flash {{ category }}">{{ message }}</div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            {% endwith %}
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+    <script>
+        window.BM2_UI_TEXT = {{ js_ui_text | tojson }};
+    </script>
+    <script src="{{ url_for('static', filename='app.js', v=asset_version) }}"></script>
+</body>
+</html>

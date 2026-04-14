@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-head">
+    <div>
+        <h2>{{ ui.members_title }}</h2>
+        <p>{{ ui.members_summary.format(enabled_count=enabled_count) }}</p>
+    </div>
+    <div class="stat-card">
+        <span>{{ ui.members_total.format(count=members|length) }}</span>
+        <strong>{{ ui.members_enabled.format(count=enabled_count) }}</strong>
+    </div>
+</section>
+
+<section class="panel compact-panel">
+    <div class="section-title">
+        <h3>{{ ui.add_member_title }}</h3>
+        <p>{{ ui.add_member_hint }}</p>
+    </div>
+    <form method="post" action="{{ url_for('add_member') }}" class="member-add-form compact-toolbar">
+        <label>
+            {{ ui.label_name }}
+            <input type="text" name="name" class="compact-input" placeholder="{{ ui.placeholder_member_name }}">
+        </label>
+        <label class="wide-field">
+            {{ ui.label_note }}
+            <input type="text" name="note" class="compact-input" placeholder="{{ ui.placeholder_note }}">
+        </label>
+        <div class="form-actions">
+            <button type="submit" class="primary-btn">{{ ui.button_add_member }}</button>
+        </div>
+    </form>
+</section>
+
+<section class="panel compact-panel">
+    <div class="section-title">
+        <h3>{{ ui.member_list_title }}</h3>
+        <p>{{ ui.member_list_hint }}</p>
+    </div>
+    <div class="table-wrap compact-wrap members-wrap">
+        <table class="members-table">
+            <thead>
+                <tr>
+                    <th>{{ ui.label_name }}</th>
+                    <th>{{ ui.label_status }}</th>
+                    <th>{{ ui.label_note }}</th>
+                    <th>{{ ui.label_created_at }}</th>
+                    <th>{{ ui.label_disabled_at }}</th>
+                    <th>{{ ui.label_actions }}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for member in members %}
+                <tr class="{% if member.status == disabled_status %}member-row-disabled{% endif %}">
+                    <td class="name-cell"><a class="member-link" href="{{ url_for('member_detail', name=member.name) }}">{{ member.name }}</a></td>
+                    <td>
+                        <span class="status-tag {% if member.status == enabled_status %}enabled{% else %}disabled{% endif %}">{{ member.status }}</span>
+                    </td>
+                    <td>
+                        <form method="post" action="{{ url_for('update_member') }}" class="member-row-form compact-row-form">
+                            <input type="hidden" name="name" value="{{ member.name }}">
+                            <input type="text" name="note" class="compact-input" value="{{ member.note }}" placeholder="{{ ui.label_note }}">
+                            <input type="hidden" name="status" value="{{ member.status }}">
+                            <button type="submit" class="secondary-btn small-btn">{{ ui.button_save }}</button>
+                        </form>
+                    </td>
+                    <td>{{ member.created_at }}</td>
+                    <td>{{ member.disabled_at or '-' }}</td>
+                    <td>
+                        <div class="member-actions">
+                            <form method="post" action="{{ url_for('update_member') }}">
+                                <input type="hidden" name="name" value="{{ member.name }}">
+                                <input type="hidden" name="note" value="{{ member.note }}">
+                                <input type="hidden" name="status" value="{% if member.status == enabled_status %}{{ disabled_status }}{% else %}{{ enabled_status }}{% endif %}">
+                                <button type="submit" class="{% if member.status == enabled_status %}danger-btn{% else %}primary-btn{% endif %} small-btn">{% if member.status == enabled_status %}{{ ui.button_disable }}{% else %}{{ ui.button_restore }}{% endif %}</button>
+                            </form>
+                            <form method="post" action="{{ url_for('delete_member') }}" onsubmit="return confirm('{{ ui.confirm_delete_once.format(name=member.name) }}') && confirm('{{ ui.confirm_delete_twice.format(name=member.name) }}');">
+                                <input type="hidden" name="name" value="{{ member.name }}">
+                                <button type="submit" class="danger-btn small-btn delete-btn">{{ ui.button_delete }}</button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}
