@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-head">
+    <div>
+        <h2>{{ ui.wear_page_title }}</h2>
+        <p>{{ ui.wear_page_hint }}</p>
+    </div>
+    <div class="page-head-stats">
+        <div class="stat-card">
+            <span>{{ ui.current_sheet }}</span>
+            <strong>{{ ui.rows_columns.format(rows=wear_sheet.row_count, cols=wear_sheet.column_count) }}</strong>
+        </div>
+        <div class="stat-card">
+            <span>{{ ui.wear_abnormal_threshold }}</span>
+            <strong>{{ ui.wear_abnormal_hint.format(threshold=wear_sheet.abnormal_threshold) }}</strong>
+            <small>{{ ui.wear_abnormal_count.format(count=wear_sheet.abnormal_count) }}</small>
+            <form action="{{ url_for('save_wear_threshold') }}" method="post" class="stat-card-form">
+                <input
+                    type="number"
+                    name="wear_abnormal_threshold"
+                    step="0.1"
+                    value="{{ wear_sheet.abnormal_threshold }}"
+                    placeholder="{{ ui.wear_threshold_placeholder }}"
+                    aria-label="{{ ui.wear_threshold_value }}"
+                >
+                <button type="submit" class="secondary-btn compact-btn">{{ ui.wear_threshold_apply }}</button>
+            </form>
+        </div>
+        <div class="stat-card">
+            <span>{{ ui.wear_avg_daily }}</span>
+            <strong>{{ wear_sheet.avg_daily_wear }}</strong>
+        </div>
+    </div>
+</section>
+
+<section class="panel">
+    <div class="section-title">
+        <h3>{{ ui.excel_preview_title }}</h3>
+        <p>{{ ui.excel_preview_hint }}</p>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    {% for header in wear_sheet.headers %}
+                    <th>{{ header or '' }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in wear_sheet.rows %}
+                <tr>
+                    {% for cell in row %}
+                    <td{% if cell.is_abnormal %} class="abnormal-cell"{% endif %}>{{ '' if cell.value is none else cell.value }}</td>
+                    {% endfor %}
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="{{ wear_sheet.column_count or 1 }}" class="empty-cell">{{ ui.empty_wear_records }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

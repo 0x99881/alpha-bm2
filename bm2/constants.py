@@ -1,0 +1,107 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+CONFIG_FILE = BASE_DIR / "system_config.json"
+WORKBOOK_FILENAME_PREFIX = 'BM2\u8bb0\u5f55_'
+DATA_FILE_PATTERNS = ['BM2\u8bb0\u5f55_*.xlsx']
+
+DEFAULT_MEMBERS = [
+    "zj", "bb", "hd", "hp", "xys", "ryl", "gpp", "gsh", "gj", "dcl", "ys", "gmj",
+    "zt", "gyg", "dtjdx", "dtjpj", "dtjgege", "jshxh", "qhy", "zad", "whj", "hmj",
+]
+DEFAULT_QUICK_SCORES = [18, 17, 12, 3, 2, 0]
+
+ENABLED = '\u542f\u7528'
+DISABLED = '\u505c\u7528'
+WINDOW_SIZE = 15
+WEAR_ABNORMAL_THRESHOLD = 2.5
+
+SCORE_SHEET = '\u6bcf\u65e5\u79ef\u5206\u8bb0\u5f55'
+WEAR_SHEET = '\u6bcf\u65e5\u78e8\u635f\u8bb0\u5f55'
+INCOME_SHEET = '\u6bcf\u65e5\u6536\u5165\u8bb0\u5f55'
+EXPENSE_SHEET = '\u5176\u4ed6\u652f\u51fa\u8bb0\u5f55'
+PROFIT_SHEET = '\u6210\u5458\u76c8\u4e8f\u7edf\u8ba1'
+META_SHEET = '_\u79ef\u5206\u5217\u65e5\u671f'
+LEGACY_WEAR_SHEET = '\u65e7\u78e8\u635f\u8bb0\u5f55'
+
+SCORE_SHEET_ALIASES = [SCORE_SHEET]
+WEAR_SHEET_ALIASES = [WEAR_SHEET]
+INCOME_SHEET_ALIASES = [INCOME_SHEET]
+EXPENSE_SHEET_ALIASES = [EXPENSE_SHEET]
+PROFIT_SHEET_ALIASES = [PROFIT_SHEET]
+META_SHEET_ALIASES = [META_SHEET]
+
+TOTAL_HEADER = '\u603b\u79ef\u5206'
+NAME_HEADER = '\u59d3\u540d'
+WEAR_TOTAL_HEADER = '\u7d2f\u8ba1\u78e8\u635f'
+PROFIT_HEADER = '\u7d2f\u8ba1\u76c8\u4e8f'
+WEAR_NAME_HEADER = NAME_HEADER
+WEAR_META_SHEET = '_\u78e8\u635f\u5217\u65e5\u671f'
+WEAR_META_SHEET_ALIASES = [WEAR_META_SHEET]
+WEAR_META_HEADERS = ['\u65e5\u671f', '\u78e8\u635f\u5217']
+LEGACY_WEAR_HEADERS = ['\u65e5\u671f', '\u59d3\u540d', '\u6bcf\u65e5\u78e8\u635f']
+OLD_SCORE_PREFIX = '\u65e7-D'
+INCOME_NAME_HEADER = NAME_HEADER
+INCOME_META_SHEET = '_\u6536\u5165\u5217\u65e5\u671f'
+INCOME_META_SHEET_ALIASES = [INCOME_META_SHEET]
+INCOME_META_HEADERS = ['\u65e5\u671f', '\u6536\u5165\u5217']
+EXPENSE_NAME_HEADER = NAME_HEADER
+EXPENSE_META_SHEET = '_\u652f\u51fa\u5217\u65e5\u671f'
+EXPENSE_META_SHEET_ALIASES = [EXPENSE_META_SHEET]
+EXPENSE_META_HEADERS = ['\u65e5\u671f', '\u652f\u51fa\u5217']
+META_HEADERS = ['\u65e5\u671f', '\u79ef\u5206\u5217']
+PROFIT_HEADERS = ['\u59d3\u540d', '\u6536\u5165', '\u78e8\u635f', '\u76c8\u4e8f']
+
+VALUE_SHEET_SPECS = {
+    'wear': {
+        'sheet_name': WEAR_SHEET,
+        'sheet_aliases': WEAR_SHEET_ALIASES,
+        'name_header': WEAR_NAME_HEADER,
+        'meta_sheet': WEAR_META_SHEET,
+        'meta_aliases': WEAR_META_SHEET_ALIASES,
+        'meta_headers': WEAR_META_HEADERS,
+        'total_header': WEAR_TOTAL_HEADER,
+        'value_key': 'wear',
+        'sheet_method': '_wear_sheet',
+        'columns_method': '_wear_columns',
+        'ensure_method': '_ensure_wear_sheet_structure',
+        'round_method': '_round_wear',
+        'invalid_message_key': 'wear_sheet_invalid',
+    },
+    'income': {
+        'sheet_name': INCOME_SHEET,
+        'sheet_aliases': INCOME_SHEET_ALIASES,
+        'name_header': INCOME_NAME_HEADER,
+        'meta_sheet': INCOME_META_SHEET,
+        'meta_aliases': INCOME_META_SHEET_ALIASES,
+        'meta_headers': INCOME_META_HEADERS,
+        'total_header': None,
+        'value_key': 'income',
+        'sheet_method': '_income_sheet',
+        'columns_method': '_income_columns',
+        'ensure_method': '_ensure_income_sheet_structure',
+        'round_method': '_round_income',
+        'invalid_message_key': 'income_sheet_invalid',
+    },
+    'expense': {
+        'sheet_name': EXPENSE_SHEET,
+        'sheet_aliases': EXPENSE_SHEET_ALIASES,
+        'name_header': EXPENSE_NAME_HEADER,
+        'meta_sheet': EXPENSE_META_SHEET,
+        'meta_aliases': EXPENSE_META_SHEET_ALIASES,
+        'meta_headers': EXPENSE_META_HEADERS,
+        'total_header': None,
+        'value_key': 'expense',
+        'sheet_method': '_expense_sheet',
+        'columns_method': '_expense_columns',
+        'ensure_method': '_ensure_expense_sheet_structure',
+        'round_method': '_round_expense',
+        'invalid_message_key': 'expense_sheet_invalid',
+    },
+}
+
+ENABLED_ALIASES = {ENABLED}
+DISABLED_ALIASES = {DISABLED}
