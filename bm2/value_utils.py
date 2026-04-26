@@ -17,18 +17,6 @@ def round_value_sheet_number(value: Decimal | float | int) -> float:
     return round(float(value), 1)
 
 
-def round_wear(value: Decimal | float | int) -> float:
-    return round_value_sheet_number(value)
-
-
-def round_income(value: Decimal | float | int) -> float:
-    return round_value_sheet_number(value)
-
-
-def round_expense(value: Decimal | float | int) -> float:
-    return round_value_sheet_number(value)
-
-
 def build_threshold_abnormal_flags(
     rows: list[list[Any]],
     target_cols: list[int],

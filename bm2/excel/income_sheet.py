@@ -1,0 +1,58 @@
+from __future__ import annotations
+
+from .header_locator import find_column, find_sheet_by_alias, parse_numeric_header
+from .member_rows import ensure_member_rows, sort_rows_by_name
+from ..constants import INCOME_NAME_HEADER, INCOME_SHEET, INCOME_SHEET_ALIASES
+
+
+class IncomeSheet:
+    def __init__(self, store) -> None:
+        self.store = store
+
+    def sheet(self, workbook):
+        sheet = find_sheet_by_alias(workbook, INCOME_SHEET_ALIASES)
+        if sheet is not None:
+            if sheet.title != INCOME_SHEET:
+                sheet.title = INCOME_SHEET
+            return sheet
+        return workbook.create_sheet(title=INCOME_SHEET)
+
+    def columns(self, sheet) -> list[tuple[int, int]]:
+        result = []
+        for col in range(1, sheet.max_column + 1):
+            number = parse_numeric_header(sheet.cell(1, col).value)
+            if number is not None:
+                result.append((number, col))
+        result.sort(key=lambda item: item[0])
+        return result
+
+    def ensure_structure(self, workbook) -> bool:
+        sheet = self.sheet(workbook)
+        changed = False
+
+        name_col = find_column(sheet, INCOME_NAME_HEADER)
+        if name_col is None:
+            sheet.cell(1, sheet.max_column + 1, INCOME_NAME_HEADER)
+            changed = True
+            name_col = find_column(sheet, INCOME_NAME_HEADER)
+
+        assert name_col is not None
+        if name_col != sheet.max_column:
+            name_values = [sheet.cell(row, name_col).value for row in range(1, sheet.max_row + 1)]
+            sheet.delete_cols(name_col)
+            insert_at = sheet.max_column + 1
+            sheet.insert_cols(insert_at, 1)
+            for row, value in enumerate(name_values, start=1):
+                sheet.cell(row, insert_at, value)
+            changed = True
+            name_col = insert_at
+
+        changed = ensure_member_rows(
+            sheet,
+            members=self.store.get_members(),
+            name_col=name_col,
+            total_col=None,
+            value_columns=[col for _, col in self.columns(sheet)],
+        ) or changed
+        sort_rows_by_name(sheet, name_col)
+        return changed

@@ -1,17 +1,10 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
-
 from openpyxl import Workbook, load_workbook
-from openpyxl.styles import Font, PatternFill
 
 from .constants import (
-    EXPENSE_META_HEADERS,
-    EXPENSE_META_SHEET,
     EXPENSE_META_SHEET_ALIASES,
     EXPENSE_NAME_HEADER,
-    INCOME_META_HEADERS,
-    INCOME_META_SHEET,
     INCOME_META_SHEET_ALIASES,
     INCOME_NAME_HEADER,
     META_HEADERS,
@@ -22,34 +15,14 @@ from .constants import (
     PROFIT_HEADER,
     PROFIT_SHEET,
     PROFIT_SHEET_ALIASES,
-    SCORE_SHEET,
-    TOTAL_HEADER,
-    WEAR_META_HEADERS,
-    LEGACY_WEAR_HEADERS,
-    OLD_SCORE_PREFIX,
-    WEAR_META_SHEET,
     WEAR_META_SHEET_ALIASES,
     WEAR_NAME_HEADER,
-    WEAR_SHEET,
-    WEAR_TOTAL_HEADER,
-    VALUE_SHEET_SPECS,
     WINDOW_SIZE,
 )
+from .excel.profit_recalculator import recalculate_score_profits
 
 
 class StoreStructureMixin:
-    def _value_sheet_spec(self, sheet_type: str) -> dict[str, object]:
-        return VALUE_SHEET_SPECS[sheet_type]
-
-    def _value_sheet_helpers(self, sheet_type: str):
-        spec = self._value_sheet_spec(sheet_type)
-        return (
-            spec,
-            getattr(self, spec['sheet_method']),
-            getattr(self, spec['columns_method']),
-            getattr(self, spec['round_method']),
-        )
-
     def _ensure_sheet_member_rows(self, sheet, *, name_col: int, total_col: int | None, value_columns: list[int], extra_columns: list[int] | None = None) -> bool:
         _, changed = self._ensure_member_rows(
             sheet,
@@ -60,31 +33,8 @@ class StoreStructureMixin:
         )
         return changed
 
-    def _finalize_score_sheet_structure(self, workbook, sheet, *, total_col: int, profit_col: int, name_col: int) -> None:
-        self._recalculate_totals(sheet, total_col)
-        self._recalculate_score_profits(workbook, sheet, profit_col)
-        self._sort_named_rows(sheet, total_col, name_col)
-        recent_numbers = [number for number, _ in self._d_columns(sheet)][-WINDOW_SIZE:]
-        self._format_score_sheet(sheet, recent_numbers, total_col)
-
-    def _finalize_wear_sheet_structure(self, sheet, *, total_col: int, name_col: int) -> None:
-        self._recalculate_wear_totals(sheet, total_col)
-        self._sort_named_rows(sheet, total_col, name_col)
-        self._format_wear_sheet(sheet, total_col)
-
-    def _finalize_value_sheet_structure(self, sheet, *, name_col: int) -> None:
-        self._sort_rows_by_name(sheet, name_col)
-
     def _create_initial_score_sheet(self, workbook) -> None:
-        score_sheet = workbook.active
-        score_sheet.title = SCORE_SHEET
-        initial_header_count = 41
-        end_date = datetime.now().date()
-        for column_index in range(1, initial_header_count + 1):
-            header_date = end_date - timedelta(days=(initial_header_count - column_index))
-            score_sheet.cell(1, column_index, header_date.strftime('%m-%d'))
-        score_sheet.cell(1, initial_header_count + 1, TOTAL_HEADER)
-        score_sheet.cell(1, initial_header_count + 2, NAME_HEADER)
+        self.score_sheet.create_initial_sheet(workbook)
 
     def _ensure_meta_sheets(self, workbook) -> bool:
         changed = False
@@ -102,153 +52,28 @@ class StoreStructureMixin:
         return changed
 
     def _ensure_score_sheet_structure(self, workbook) -> bool:
-        sheet = self._score_sheet(workbook)
-        changed = False
-
-        col = 1
-        while col <= sheet.max_column:
-            if sheet.cell(1, col).value is not None:
-                col += 1
-                continue
-            if any(sheet.cell(row, col).value is not None for row in range(2, sheet.max_row + 1)):
-                col += 1
-                continue
-            sheet.delete_cols(col)
-            changed = True
-
-        total_col, profit_col, name_col, tail_changed = self._ensure_score_tail_columns(sheet)
-        changed = changed or tail_changed
-        changed = self._repair_score_headers(sheet, total_col, profit_col) or changed
-
-        changed = self._ensure_sheet_member_rows(
-            sheet,
-            name_col=name_col,
-            total_col=total_col,
-            value_columns=[col for _, col in self._d_columns(sheet)],
-            extra_columns=[profit_col],
-        ) or changed
-
-        self._finalize_score_sheet_structure(workbook, sheet, total_col=total_col, profit_col=profit_col, name_col=name_col)
-        return changed
+        return self.score_sheet.ensure_structure(workbook)
 
     def _repair_score_headers(self, sheet, total_col: int, profit_col: int) -> bool:
-        score_columns = [col for _, col in self._d_columns(sheet)]
-        if not score_columns:
-            return False
-        headers = [sheet.cell(1, col).value for col in score_columns]
-        has_legacy_header = any(self._parse_d_header(value) is not None for value in headers)
-        if not has_legacy_header:
-            return False
-
-        end_date = datetime.now().date()
-        expected_headers = [
-            (end_date - timedelta(days=(len(score_columns) - index - 1))).strftime('%m-%d')
-            for index in range(len(score_columns))
-        ]
-        if headers == expected_headers:
-            return False
-
-        for header_value, col in zip(expected_headers, score_columns):
-            sheet.cell(1, col, header_value)
-        sheet.cell(1, total_col, TOTAL_HEADER)
-        sheet.cell(1, profit_col, PROFIT_HEADER)
-        sheet.cell(1, total_col + 2, NAME_HEADER)
-        return True
-
+        return self.score_sheet.repair_headers(sheet, total_col, profit_col)
 
     def _recalculate_score_profits(self, workbook, score_sheet, profit_col: int) -> None:
-        score_name_col = self._find_column(score_sheet, NAME_HEADER)
-        income_sheet = self._income_sheet(workbook)
-        wear_sheet = self._wear_sheet(workbook)
-        income_name_col = self._find_column(income_sheet, INCOME_NAME_HEADER)
-        wear_name_col = self._find_column(wear_sheet, WEAR_NAME_HEADER)
-        if score_name_col is None or income_name_col is None or wear_name_col is None:
-            return
-
-        income_row_map = self._build_name_row_map(income_sheet, income_name_col)
-        wear_row_map = self._build_name_row_map(wear_sheet, wear_name_col)
-        income_columns = [col for _, col in self._income_columns(income_sheet)]
-        wear_columns = [col for _, col in self._wear_columns(wear_sheet)]
-
-        for row in range(2, score_sheet.max_row + 1):
-            member_name = str(score_sheet.cell(row, score_name_col).value or '').strip()
-            if not member_name:
-                continue
-            income_total = self._round_income(
-                self._sum_sheet_row_values(income_sheet, income_row_map[member_name], income_columns)
-                if member_name in income_row_map else 0
-            )
-            wear_total = self._round_wear(
-                self._sum_sheet_row_values(wear_sheet, wear_row_map[member_name], wear_columns)
-                if member_name in wear_row_map else 0
-            )
-            score_sheet.cell(row, profit_col, self._round_income(income_total - wear_total))
+        recalculate_score_profits(workbook, score_sheet, profit_col, self.income_sheet, self.wear_sheet)
 
     def _recalculate_wear_totals(self, sheet, total_col: int) -> None:
-        name_col = self._find_column(sheet, WEAR_NAME_HEADER)
-        if name_col is None:
-            return
-        for row in range(2, sheet.max_row + 1):
-            if not sheet.cell(row, name_col).value:
-                continue
-            total = 0.0
-            for _, col in self._wear_columns(sheet):
-                value = sheet.cell(row, col).value
-                numeric = self._round_wear(value or 0)
-                sheet.cell(row, col, numeric)
-                total += numeric
-            sheet.cell(row, total_col, self._round_wear(total))
+        self.wear_sheet.recalculate_totals(sheet, total_col)
 
     def _format_wear_sheet(self, sheet, total_col: int) -> None:
-        threshold = self.get_wear_abnormal_threshold()
-        normal_font = Font(color='000000', bold=False)
-        abnormal_font = Font(color='FF0000', bold=True)
-        for _, wear_col in self._wear_columns(sheet):
-            for row in range(2, sheet.max_row + 1):
-                cell = sheet.cell(row, wear_col)
-                value = cell.value
-                if value in (None, ''):
-                    cell.font = normal_font
-                    continue
-                try:
-                    numeric_value = float(value)
-                except (TypeError, ValueError):
-                    cell.font = normal_font
-                    continue
-                cell.font = abnormal_font if numeric_value > threshold else normal_font
-
-        for row in range(2, sheet.max_row + 1):
-            sheet.cell(row, total_col).font = normal_font
+        self.wear_sheet.format_sheet(sheet, total_col)
 
     def _ensure_wear_sheet_structure(self, workbook) -> bool:
-        sheet = self._wear_sheet(workbook)
-        changed = False
-
-        legacy_headers = ["日期", "姓名", "每日磨损"]
-        current_headers = [sheet.cell(1, idx).value for idx in range(1, 4)]
-        if current_headers == legacy_headers:
-            self._migrate_legacy_wear_rows(workbook, sheet)
-            changed = True
-
-        total_col, name_col, tail_changed = self._ensure_summary_columns(sheet, WEAR_TOTAL_HEADER, WEAR_NAME_HEADER)
-        changed = changed or tail_changed
-
-        changed = self._ensure_sheet_member_rows(
-            sheet,
-            name_col=name_col,
-            total_col=total_col,
-            value_columns=[col for _, col in self._wear_columns(sheet)],
-        ) or changed
-
-        self._finalize_wear_sheet_structure(sheet, total_col=total_col, name_col=name_col)
-        return changed
+        return self.wear_sheet.ensure_structure(workbook)
 
     def _ensure_income_sheet_structure(self, workbook) -> bool:
-        return self._ensure_configured_value_sheet_structure(workbook, 'income')
+        return self.income_sheet.ensure_structure(workbook)
 
     def _ensure_expense_sheet_structure(self, workbook) -> bool:
-        return self._ensure_configured_value_sheet_structure(workbook, 'expense')
-
+        return self.expense_sheet.ensure_structure(workbook)
 
     def _safe_float(self, value) -> float:
         try:
@@ -308,46 +133,6 @@ class StoreStructureMixin:
         self._sort_profit_rows(sheet, name_col=name_col, profit_col=4)
         return changed
 
-    def _ensure_configured_value_sheet_structure(self, workbook, sheet_type: str) -> bool:
-        spec, sheet_getter, columns_getter, _ = self._value_sheet_helpers(sheet_type)
-        return self._ensure_value_sheet_structure(
-            workbook,
-            sheet_getter=sheet_getter,
-            name_header=spec['name_header'],
-            columns_getter=columns_getter,
-        )
-
-    def _ensure_value_sheet_structure(self, workbook, *, sheet_getter, name_header: str, columns_getter) -> bool:
-        sheet = sheet_getter(workbook)
-        changed = False
-
-        name_col = self._find_column(sheet, name_header)
-        if name_col is None:
-            sheet.cell(1, sheet.max_column + 1, name_header)
-            changed = True
-            name_col = self._find_column(sheet, name_header)
-
-        assert name_col is not None
-        if name_col != sheet.max_column:
-            name_values = [sheet.cell(row, name_col).value for row in range(1, sheet.max_row + 1)]
-            sheet.delete_cols(name_col)
-            insert_at = sheet.max_column + 1
-            sheet.insert_cols(insert_at, 1)
-            for row, value in enumerate(name_values, start=1):
-                sheet.cell(row, insert_at, value)
-            changed = True
-            name_col = insert_at
-
-        changed = self._ensure_sheet_member_rows(
-            sheet,
-            name_col=name_col,
-            total_col=None,
-            value_columns=[col for _, col in columns_getter(sheet)],
-        ) or changed
-        self._finalize_value_sheet_structure(sheet, name_col=name_col)
-        return changed
-
-    # 首次启动时补齐工作簿和隐藏辅助页。
     def _ensure_workbook(self) -> None:
         changed = False
         if self.workbook_path.exists():
@@ -357,32 +142,26 @@ class StoreStructureMixin:
             self._create_initial_score_sheet(workbook)
             changed = True
 
-        changed = self._ensure_meta_sheets(workbook) or changed
-        changed = self._ensure_score_sheet_structure(workbook) or changed
-        changed = self._ensure_wear_sheet_structure(workbook) or changed
-        changed = self._ensure_income_sheet_structure(workbook) or changed
-        changed = self._ensure_expense_sheet_structure(workbook) or changed
-        if PROFIT_SHEET in workbook.sheetnames:
-            workbook.remove(workbook[PROFIT_SHEET])
-            changed = True
-        if changed:
-            self._save_workbook(workbook)
-        workbook.close()
+        try:
+            changed = self._ensure_meta_sheets(workbook) or changed
+            changed = self._ensure_score_sheet_structure(workbook) or changed
+            changed = self._ensure_wear_sheet_structure(workbook) or changed
+            changed = self._ensure_income_sheet_structure(workbook) or changed
+            changed = self._ensure_expense_sheet_structure(workbook) or changed
+            if PROFIT_SHEET in workbook.sheetnames:
+                workbook.remove(workbook[PROFIT_SHEET])
+                changed = True
+            if changed:
+                self._sync_member_visibility_in_workbook(workbook)
+                self._save_workbook(workbook)
+        finally:
+            workbook.close()
 
     def _append_meta(self, workbook, date_text: str, col_name: str) -> None:
         workbook[META_SHEET].append([date_text, col_name])
 
     def _append_value_meta(self, workbook, sheet_type: str, date_text: str, col_name: str) -> None:
         workbook[self._value_sheet_spec(sheet_type)['meta_sheet']].append([date_text, col_name])
-
-    def _append_wear_meta(self, workbook, date_text: str, col_name: str) -> None:
-        self._append_value_meta(workbook, 'wear', date_text, col_name)
-
-    def _append_income_meta(self, workbook, date_text: str, col_name: str) -> None:
-        self._append_value_meta(workbook, 'income', date_text, col_name)
-
-    def _append_expense_meta(self, workbook, date_text: str, col_name: str) -> None:
-        self._append_value_meta(workbook, 'expense', date_text, col_name)
 
     def _read_sheet_meta(self, workbook, sheet_name: str) -> list[tuple[str, str]]:
         if sheet_name not in workbook.sheetnames:
@@ -398,99 +177,8 @@ class StoreStructureMixin:
             return f"{year:04d}-{value[:2]}-{value[2:]}"
         return value
 
-    def _migrate_legacy_wear_rows(self, workbook, sheet) -> None:
-        legacy_rows = []
-        for row in sheet.iter_rows(min_row=2, values_only=True):
-            if not row[0] or not row[1]:
-                continue
-            legacy_rows.append(
-                {
-                    'date': str(row[0]),
-                    'name': str(row[1]),
-                    'wear': float(row[2] or 0),
-                }
-            )
-
-        sheet.delete_rows(1, sheet.max_row)
-        meta_sheet = workbook[WEAR_META_SHEET] if WEAR_META_SHEET in workbook.sheetnames else workbook.create_sheet(WEAR_META_SHEET)
-        meta_sheet.delete_rows(1, meta_sheet.max_row)
-        meta_sheet.append(WEAR_META_HEADERS)
-
-        date_order: list[str] = []
-        member_names: list[str] = []
-        data_map: dict[tuple[str, str], float] = {}
-        for item in legacy_rows:
-            date_text = item['date']
-            member_name = item['name']
-            if date_text not in date_order:
-                date_order.append(date_text)
-            if member_name not in member_names:
-                member_names.append(member_name)
-            data_map[(member_name, date_text)] = item['wear']
-
-        for index, date_text in enumerate(date_order, start=1):
-            sheet.cell(1, index, date_text[5:].replace('-', ''))
-            meta_sheet.append([date_text, str(index)])
-
-        total_col = len(date_order) + 1
-        name_col = total_col + 1
-        sheet.cell(1, total_col, WEAR_TOTAL_HEADER)
-        sheet.cell(1, name_col, WEAR_NAME_HEADER)
-        for member_name in member_names:
-            row = sheet.max_row + 1
-            running_total = 0.0
-            for index, date_text in enumerate(date_order, start=1):
-                wear = self._round_wear(data_map.get((member_name, date_text), 0.0))
-                sheet.cell(row, index, wear)
-                running_total += wear
-            sheet.cell(row, total_col, self._round_wear(running_total))
-            sheet.cell(row, name_col, member_name)
-
     def _recalculate_totals(self, sheet, total_col: int) -> None:
-        name_col = self._find_column(sheet, NAME_HEADER)
-        if name_col is None:
-            return
-        d_cols = self._d_columns(sheet)
-        recent_numbers = {number for number, _ in d_cols[-WINDOW_SIZE:]}
-        for row in range(2, sheet.max_row + 1):
-            if not sheet.cell(row, name_col).value:
-                continue
-            total = 0
-            for number, d_col in d_cols:
-                value = sheet.cell(row, d_col).value
-                numeric = int(value or 0)
-                sheet.cell(row, d_col, numeric)
-                if number in recent_numbers:
-                    total += numeric
-            sheet.cell(row, total_col, total)
+        self.score_sheet.recalculate_totals(sheet, total_col)
 
     def _format_score_sheet(self, sheet, recent_numbers: list[int], total_col: int) -> None:
-        old_fill = PatternFill(start_color='DDDDDD', end_color='DDDDDD', fill_type='solid')
-        light = (204, 255, 204)
-        dark = (0, 170, 0)
-        recent_set = set(recent_numbers)
-        for number, d_col in self._d_columns(sheet):
-            is_recent = number in recent_set
-            fill = PatternFill(fill_type=None) if is_recent else old_fill
-            for row in range(2, sheet.max_row + 1):
-                sheet.cell(row, d_col).fill = fill
-
-        totals = []
-        for row in range(2, sheet.max_row + 1):
-            value = sheet.cell(row, total_col).value
-            if isinstance(value, (int, float)):
-                totals.append(float(value))
-        max_score = max(totals) if totals else 0.0
-        min_score = min(totals) if totals else 0.0
-        for row in range(2, sheet.max_row + 1):
-            value = sheet.cell(row, total_col).value
-            score = float(value) if isinstance(value, (int, float)) else 0.0
-            if max_score == min_score:
-                color = '99FF99'
-            else:
-                ratio = (score - min_score) / (max_score - min_score)
-                red = int(light[0] + (dark[0] - light[0]) * ratio)
-                green = int(light[1] + (dark[1] - light[1]) * ratio)
-                blue = int(light[2] + (dark[2] - light[2]) * ratio)
-                color = f'{red:02X}{green:02X}{blue:02X}'
-            sheet.cell(row, total_col).fill = PatternFill(start_color=color, end_color=color, fill_type='solid')
+        self.score_sheet.format_sheet(sheet, recent_numbers, total_col)

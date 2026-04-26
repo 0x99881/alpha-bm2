@@ -4,13 +4,13 @@ from ..constants import WINDOW_SIZE
 
 
 class ScorePresenter:
-    def __init__(self, repository) -> None:
-        self.repository = repository
+    def __init__(self, store) -> None:
+        self.store = store
 
     def build_score_summary(self):
-        column_count = self.repository.get_score_column_count()
+        summary = self.store.get_score_summary_data()
         return {
-            'latest_column': self.repository.get_score_latest_column(),
-            'window_size': min(WINDOW_SIZE, column_count),
-            'rankings': self.repository.get_score_rankings(limit=999),
+            'latest_column': summary['latest_column'],
+            'window_size': min(WINDOW_SIZE, summary['column_count']),
+            'rankings': summary['rankings'][:999],
         }

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from ..excel.value_normalizer import normalize_wear
 from ..ui_text import UI_TEXT
-from ..value_utils import build_threshold_abnormal_flags, round_wear, to_float_or_none
+from ..value_utils import build_threshold_abnormal_flags, to_float_or_none
 
 
 class WearPresenter:
@@ -39,7 +40,7 @@ class WearPresenter:
             ]
             row_cells.append(
                 {
-                    'value': round_wear(sum(row_wear_values) / len(row_wear_values)) if row_wear_values else 0.0,
+                    'value': normalize_wear(sum(row_wear_values) / len(row_wear_values)) if row_wear_values else 0.0,
                     'is_abnormal': False,
                 }
             )
@@ -49,7 +50,7 @@ class WearPresenter:
             'rows': rows,
             'row_count': len(rows),
             'column_count': len(headers),
-            'avg_daily_wear': round_wear(sum(wear_values) / len(wear_values)) if wear_values else 0.0,
+            'avg_daily_wear': normalize_wear(sum(wear_values) / len(wear_values)) if wear_values else 0.0,
             'abnormal_threshold': threshold,
             'abnormal_count': abnormal_count,
         }
