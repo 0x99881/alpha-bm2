@@ -35,6 +35,12 @@ def register_routes(app, store: ExcelStore) -> None:
             selected_date=selected_date,
         )
 
+    def _get_requested_score_date() -> str:
+        raw_date = request.args.get('date', '').strip()
+        if raw_date:
+            return raw_date
+        return store.get_next_score_date()
+
     def _get_selected_date_from_form() -> str:
         return request.form.get('date', '').strip() or datetime.now().strftime('%Y-%m-%d')
 
@@ -71,7 +77,7 @@ def register_routes(app, store: ExcelStore) -> None:
 
     @app.route('/scores')
     def score_entry():
-        return _render_score_entry(selected_date=datetime.now().strftime('%Y-%m-%d'))
+        return _render_score_entry(selected_date=_get_requested_score_date())
 
     @app.post('/scores/open-excel')
     def open_excel_file():
@@ -84,7 +90,8 @@ def register_routes(app, store: ExcelStore) -> None:
             else:
                 subprocess.Popen(['xdg-open', str(workbook_path)])
             flash(MESSAGES['excel_opened'].format(filename=workbook_path.name), 'success')
-        except Exception:
+        except OSError:
+            app.logger.exception("Failed to open workbook: %s", workbook_path)
             flash(MESSAGES['excel_open_failed'].format(filename=workbook_path.name), 'error')
         return redirect(url_for('score_entry'))
 
@@ -97,6 +104,17 @@ def register_routes(app, store: ExcelStore) -> None:
             return _render_score_entry(selected_date=selected_date, entries=submission['entries'])
         _flash_save_score_result(selected_date, submission['result'])
         return redirect(url_for('score_entry'))
+
+    @app.post('/cycles/new')
+    def create_new_cycle():
+        date_text = request.form.get('start_date', '').strip()
+        try:
+            new_filename = store.create_new_cycle(date_text)
+            flash(MESSAGES['new_cycle_created'].format(filename=new_filename), 'success')
+            return redirect(url_for('score_entry', date=date_text))
+        except ValueError as exc:
+            flash(str(exc), 'error')
+        return _render_score_entry(selected_date=date_text or store.get_next_score_date())
 
     @app.route('/wear')
     def wear_entry():
@@ -140,7 +158,7 @@ def register_routes(app, store: ExcelStore) -> None:
         ordered_names = payload.get('ordered_names') or []
         if not isinstance(ordered_names, list):
             return jsonify({'ok': False}), 400
-        store.reorder_active_members([str(name).strip() for name in ordered_names])
+        store.member_service.reorder_active_members([str(name).strip() for name in ordered_names])
         return jsonify({'ok': True})
 
     @app.route('/members')
@@ -154,7 +172,7 @@ def register_routes(app, store: ExcelStore) -> None:
         name = request.form.get('name', '').strip()
         note = request.form.get('note', '').strip()
         try:
-            store.add_member(name, note)
+            store.member_service.add_member(name, note)
             flash(MESSAGES['member_added'].format(name=name), 'success')
         except ValueError as exc:
             flash(str(exc), 'error')
@@ -166,7 +184,7 @@ def register_routes(app, store: ExcelStore) -> None:
         note = request.form.get('note', '').strip()
         status = request.form.get('status', '').strip()
         try:
-            store.update_member(name, note, status=status)
+            store.member_service.update_member(name, note, status=status)
             if status == ENABLED:
                 flash(MESSAGES['member_restored'].format(name=name), 'success')
             elif status == DISABLED:
@@ -181,7 +199,7 @@ def register_routes(app, store: ExcelStore) -> None:
     def delete_member():
         name = request.form.get('name', '').strip()
         try:
-            store.delete_member(name)
+            store.member_service.delete_member(name)
             flash(MESSAGES['member_deleted'].format(name=name), 'success')
         except ValueError as exc:
             flash(str(exc), 'error')

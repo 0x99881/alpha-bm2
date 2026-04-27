@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-import re
-from typing import Any
+from typing import Any, NamedTuple
 
 from .constants import (
     EXPENSE_SHEET,
@@ -12,19 +11,40 @@ from .constants import (
     INCOME_SHEET_ALIASES,
     LEGACY_WEAR_SHEET,
     NAME_HEADER,
-    OLD_SCORE_PREFIX,
     PROFIT_HEADER,
-    SCORE_SHEET,
-    SCORE_SHEET_ALIASES,
     TOTAL_HEADER,
+    VALUE_SHEET_SPECS,
     WEAR_SHEET,
     WEAR_SHEET_ALIASES,
+    DATA_START_ROW,
 )
 
 
+class ValueSheetHelpers(NamedTuple):
+    spec: dict[str, Any]
+    sheet_getter: Any
+    ensure_structure: Any
+    columns_getter: Any
+    value_formatter: Any
+
+
 class StoreSheetUtilsMixin:
+    def _value_sheet_spec(self, sheet_type: str) -> dict[str, Any]:
+        return VALUE_SHEET_SPECS[sheet_type]
+
+    def _value_sheet_helpers(self, sheet_type: str):
+        spec = self._value_sheet_spec(sheet_type)
+        return ValueSheetHelpers(
+            spec=spec,
+            sheet_getter=getattr(self, spec['sheet_method']),
+            ensure_structure=getattr(self, spec['ensure_method']),
+            columns_getter=getattr(self, spec['columns_method']),
+            value_formatter=getattr(self, spec['round_method']),
+        )
+
+
     def _find_member_row(self, sheet, name_col: int, member_name: str) -> int | None:
-        for row in range(2, sheet.max_row + 1):
+        for row in range(DATA_START_ROW, sheet.max_row + 1):
             if str(sheet.cell(row, name_col).value or "").strip() == member_name:
                 return row
         return None
@@ -75,28 +95,13 @@ class StoreSheetUtilsMixin:
         return sheet, changed
 
     def _wear_sheet(self, workbook):
-        sheet = self._find_sheet_by_alias(workbook, WEAR_SHEET_ALIASES)
-        if sheet is not None:
-            if sheet.title != WEAR_SHEET:
-                sheet.title = WEAR_SHEET
-            return sheet
-        return workbook.create_sheet(title=WEAR_SHEET)
+        return self.wear_sheet.sheet(workbook)
 
     def _income_sheet(self, workbook):
-        sheet = self._find_sheet_by_alias(workbook, INCOME_SHEET_ALIASES)
-        if sheet is not None:
-            if sheet.title != INCOME_SHEET:
-                sheet.title = INCOME_SHEET
-            return sheet
-        return workbook.create_sheet(title=INCOME_SHEET)
+        return self.income_sheet.sheet(workbook)
 
     def _expense_sheet(self, workbook):
-        sheet = self._find_sheet_by_alias(workbook, EXPENSE_SHEET_ALIASES)
-        if sheet is not None:
-            if sheet.title != EXPENSE_SHEET:
-                sheet.title = EXPENSE_SHEET
-            return sheet
-        return workbook.create_sheet(title=EXPENSE_SHEET)
+        return self.expense_sheet.sheet(workbook)
 
 
     def _profit_sheet(self, workbook):
@@ -108,15 +113,7 @@ class StoreSheetUtilsMixin:
         return workbook.create_sheet(title=PROFIT_SHEET)
 
     def _score_sheet(self, workbook):
-        sheet = self._find_sheet_by_alias(workbook, SCORE_SHEET_ALIASES)
-        if sheet is not None:
-            if sheet.title != SCORE_SHEET:
-                sheet.title = SCORE_SHEET
-            return sheet
-        if workbook.sheetnames:
-            workbook[workbook.sheetnames[0]].title = SCORE_SHEET
-            return workbook[SCORE_SHEET]
-        return workbook.create_sheet(title=SCORE_SHEET)
+        return self.score_sheet.sheet(workbook)
 
     def _parse_value_header(self, value: Any) -> int | None:
         if not isinstance(value, str):
@@ -126,19 +123,13 @@ class StoreSheetUtilsMixin:
         return int(value)
 
     def _wear_columns(self, sheet) -> list[tuple[int, int]]:
-        result = []
-        for col in range(1, sheet.max_column + 1):
-            number = self._parse_value_header(sheet.cell(1, col).value)
-            if number is not None:
-                result.append((number, col))
-        result.sort(key=lambda item: item[0])
-        return result
+        return self.wear_sheet.columns(sheet)
 
     def _income_columns(self, sheet) -> list[tuple[int, int]]:
-        return self._wear_columns(sheet)
+        return self.income_sheet.columns(sheet)
 
     def _expense_columns(self, sheet) -> list[tuple[int, int]]:
-        return self._wear_columns(sheet)
+        return self.expense_sheet.columns(sheet)
 
     def _find_column(self, sheet, header: str) -> int | None:
         for col in range(1, sheet.max_column + 1):
@@ -148,7 +139,7 @@ class StoreSheetUtilsMixin:
 
     def _build_name_row_map(self, sheet, name_col: int) -> dict[str, int]:
         mapping: dict[str, int] = {}
-        for row in range(2, sheet.max_row + 1):
+        for row in range(DATA_START_ROW, sheet.max_row + 1):
             name = sheet.cell(row, name_col).value
             if name:
                 mapping[str(name).strip()] = row
@@ -176,7 +167,7 @@ class StoreSheetUtilsMixin:
         first_rows: dict[str, int] = {}
         duplicate_rows: list[int] = []
         changed = False
-        for row in range(2, sheet.max_row + 1):
+        for row in range(DATA_START_ROW, sheet.max_row + 1):
             raw_name = sheet.cell(row, name_col).value
             if not raw_name:
                 continue
@@ -267,41 +258,11 @@ class StoreSheetUtilsMixin:
 
 
     def _ensure_score_tail_columns(self, sheet) -> tuple[int, int, int, bool]:
-        total_col = self._find_column(sheet, TOTAL_HEADER)
-        profit_col = self._find_column(sheet, PROFIT_HEADER)
-        name_col = self._find_column(sheet, NAME_HEADER)
-        changed = False
-
-        if total_col is not None and profit_col is not None and name_col is not None and profit_col == total_col + 1 and name_col == profit_col + 1:
-            sheet.cell(1, total_col, TOTAL_HEADER)
-            sheet.cell(1, profit_col, PROFIT_HEADER)
-            sheet.cell(1, name_col, NAME_HEADER)
-            return total_col, profit_col, name_col, changed
-
-        total_values = [sheet.cell(row, total_col).value for row in range(1, sheet.max_row + 1)] if total_col is not None else [None] * sheet.max_row
-        profit_values = [sheet.cell(row, profit_col).value for row in range(1, sheet.max_row + 1)] if profit_col is not None else [None] * sheet.max_row
-        name_values = [sheet.cell(row, name_col).value for row in range(1, sheet.max_row + 1)] if name_col is not None else [None] * sheet.max_row
-
-        existing_cols = [col for col in [total_col, profit_col, name_col] if col is not None]
-        for col_index in sorted(existing_cols, reverse=True):
-            sheet.delete_cols(col_index)
-        insert_at = sheet.max_column + 1
-        sheet.insert_cols(insert_at, 3)
-        for row, value in enumerate(total_values, start=1):
-            sheet.cell(row, insert_at, value)
-        for row, value in enumerate(profit_values, start=1):
-            sheet.cell(row, insert_at + 1, value)
-        for row, value in enumerate(name_values, start=1):
-            sheet.cell(row, insert_at + 2, value)
-        sheet.cell(1, insert_at, TOTAL_HEADER)
-        sheet.cell(1, insert_at + 1, PROFIT_HEADER)
-        sheet.cell(1, insert_at + 2, NAME_HEADER)
-        changed = True
-        return insert_at, insert_at + 1, insert_at + 2, changed
+        return self.score_sheet.ensure_tail_columns(sheet)
 
     def _sort_named_rows(self, sheet, total_col: int, name_col: int) -> None:
         rows = []
-        for row in range(2, sheet.max_row + 1):
+        for row in range(DATA_START_ROW, sheet.max_row + 1):
             values = [sheet.cell(row, col).value for col in range(1, sheet.max_column + 1)]
             if values[name_col - 1]:
                 rows.append(values)
@@ -317,7 +278,7 @@ class StoreSheetUtilsMixin:
 
     def _sort_rows_by_name(self, sheet, name_col: int) -> None:
         rows = []
-        for row in range(2, sheet.max_row + 1):
+        for row in range(DATA_START_ROW, sheet.max_row + 1):
             values = [sheet.cell(row, col).value for col in range(1, sheet.max_column + 1)]
             if values[name_col - 1]:
                 rows.append(values)
@@ -327,30 +288,13 @@ class StoreSheetUtilsMixin:
                 sheet.cell(row_index, col_index, value)
 
     def _parse_d_header(self, value: Any) -> int | None:
-        if not isinstance(value, str):
-            return None
-        normalized = value.replace(f"{OLD_SCORE_PREFIX}-", "").replace(OLD_SCORE_PREFIX, "")
-        if not normalized.startswith("D"):
-            return None
-        suffix = normalized[1:]
-        return int(suffix) if suffix.isdigit() else None
+        return self.score_sheet.parse_legacy_header(value)
 
     def _is_mmdd_header(self, value: Any) -> bool:
-        return isinstance(value, str) and re.fullmatch(r"\d{2}-\d{2}", value) is not None
+        return self.score_sheet.is_date_header(value)
+
+    def _score_date_columns(self, sheet) -> list[tuple[int, int]]:
+        return self.score_sheet.date_columns(sheet)
 
     def _d_columns(self, sheet) -> list[tuple[int, int]]:
-        total_col = self._find_column(sheet, TOTAL_HEADER)
-        if total_col is not None:
-            result = []
-            for number, col in enumerate(range(1, total_col), start=1):
-                if sheet.cell(1, col).value is not None:
-                    result.append((number, col))
-            return result
-
-        result = []
-        for col in range(1, sheet.max_column + 1):
-            number = self._parse_d_header(sheet.cell(1, col).value)
-            if number is not None:
-                result.append((number, col))
-        result.sort(key=lambda item: item[0])
-        return result
+        return self._score_date_columns(sheet)

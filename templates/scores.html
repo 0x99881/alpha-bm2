@@ -11,6 +11,22 @@
     </div>
 </section>
 
+<section class="panel compact-panel new-cycle-panel">
+    <details class="new-cycle-details">
+        <summary class="new-cycle-summary">{{ ui.new_cycle_btn }}</summary>
+        <form method="post" action="{{ url_for('create_new_cycle') }}" class="new-cycle-form">
+            <p class="new-cycle-hint">{{ ui.new_cycle_hint }}</p>
+            <div class="new-cycle-row">
+                <label>
+                    {{ ui.new_cycle_date_label }}
+                    <input type="date" name="start_date" value="{{ selected_date }}" required>
+                </label>
+                <button type="submit" class="primary-btn">{{ ui.new_cycle_confirm }}</button>
+            </div>
+        </form>
+    </details>
+</section>
+
 <section class="panel compact-panel">
     <form method="post" action="{{ url_for('save_scores') }}">
         <div class="toolbar compact-toolbar">

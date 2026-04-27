@@ -1,6 +1,6 @@
 (() => {
     const namespace = window.BM2 || (window.BM2 = {});
-    const { getUiText, setText } = namespace;
+    const { getUiText, membersService, setText } = namespace;
 
     namespace.initMembersSort = () => {
         const sortableBody = document.querySelector("[data-sortable-members]");
@@ -78,14 +78,7 @@
             setSortStatus(getUiText("reorderSaving", "Saving order..."), "saving");
 
             try {
-                const response = await fetch(reorderUrl, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ ordered_names: currentNames }),
-                });
-                if (!response.ok) {
-                    throw new Error("reorder failed");
-                }
+                await membersService.reorderMembers(reorderUrl, currentNames);
                 originalNames = currentNames;
                 setSortStatus(getUiText("reorderSaved", "Order saved"), "success");
             } catch {

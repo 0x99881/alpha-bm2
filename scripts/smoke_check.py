@@ -4,6 +4,7 @@ import importlib
 import re
 import shutil
 import sys
+import unittest
 from pathlib import Path
 
 
@@ -14,8 +15,6 @@ if str(PROJECT_ROOT) not in sys.path:
 
 MODULES_TO_IMPORT = [
     "bm2.store",
-    "bm2.workbook_manager",
-    "bm2.record_repository",
     "bm2.services.score_service",
     "bm2.presenters.score_presenter",
     "bm2.presenters.wear_presenter",
@@ -60,11 +59,11 @@ class SmokeCheckRunner:
 
         self.check("ExcelStore 初始化", _run)
 
-    def check_repository_entry(self) -> None:
+    def check_store_read_entry(self) -> None:
         def _run():
             store = self.build_store()
-            next_date = store.record_repository.get_next_score_date()
-            wear_records = store.record_repository.get_member_wear_records("bb")
+            next_date = store.get_next_score_date()
+            wear_records = store.get_member_wear_records("bb")
             return f"next_date={next_date}, wear_records={len(wear_records)}"
 
         self.check("repository 入口", _run)
@@ -121,15 +120,73 @@ class SmokeCheckRunner:
 
         self.check("模板静态资源", _run)
 
+    def check_page_routes(self) -> None:
+        def _run():
+            from flask import Flask
+
+            from bm2.store import ExcelStore
+            from bm2.web import register_routes
+
+            temp_dir = PROJECT_ROOT / ".smoke_route_tmp"
+            if temp_dir.exists():
+                shutil.rmtree(temp_dir)
+            temp_dir.mkdir()
+            try:
+                app = Flask(
+                    __name__,
+                    template_folder=str(PROJECT_ROOT / "templates"),
+                    static_folder=str(PROJECT_ROOT / "static"),
+                )
+                app.secret_key = "smoke"
+                register_routes(app, ExcelStore(temp_dir))
+                client = app.test_client()
+                routes = ["/scores", "/wear", "/profit-calendar", "/members"]
+                failures = []
+                for route in routes:
+                    response = client.get(route)
+                    if response.status_code != 200:
+                        failures.append(f"{route}={response.status_code}")
+                if failures:
+                    raise ValueError(", ".join(failures))
+                return f"routes={len(routes)}"
+            finally:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+
+        self.check("页面路由", _run)
+
+    def check_architecture_rules(self) -> None:
+        def _run():
+            from scripts.architecture_check import run_checks
+
+            failures = run_checks()
+            if failures:
+                raise ValueError("; ".join(failures))
+            return "rules=3"
+
+        self.check("架构依赖规则", _run)
+
+    def check_unit_tests(self) -> None:
+        def _run():
+            suite = unittest.defaultTestLoader.discover(str(PROJECT_ROOT / "tests"))
+            result = unittest.TextTestRunner(stream=sys.stdout, verbosity=0).run(suite)
+            if not result.wasSuccessful():
+                raise ValueError(f"failures={len(result.failures)}, errors={len(result.errors)}")
+            return f"tests={result.testsRun}"
+
+        self.check("单元测试", _run)
+
     def run(self) -> int:
         try:
             self.check_module_imports()
             self.check_excel_store_init()
-            self.check_repository_entry()
+            self.check_store_read_entry()
             self.check_presenter_entry()
             self.check_service_entry()
             self.check_store_entry()
             self.check_static_assets()
+            self.check_page_routes()
+            self.check_architecture_rules()
+            self.check_unit_tests()
         finally:
             if self._temp_root and self._temp_root.exists():
                 shutil.rmtree(self._temp_root, ignore_errors=True)

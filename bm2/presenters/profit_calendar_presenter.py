@@ -3,8 +3,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+from ..excel.value_normalizer import normalize_income, normalize_wear
 from ..profit_calendar_utils import build_calendar_weeks, build_month_label, build_month_neighbors
-from ..value_utils import round_income, round_wear
 
 
 class ProfitCalendarPresenter:
@@ -37,8 +37,8 @@ class ProfitCalendarPresenter:
     def _sum_profit_calendar_totals(self, month_records: list[dict[str, Any]], stats_allowed: bool) -> tuple[float, float]:
         if not stats_allowed:
             return 0.0, 0.0
-        month_income = round_income(sum(float(item.get('income', 0) or 0) for item in month_records))
-        month_wear = round_wear(sum(float(item.get('wear', 0) or 0) for item in month_records))
+        month_income = normalize_income(sum(float(item.get('income', 0) or 0) for item in month_records))
+        month_wear = normalize_wear(sum(float(item.get('wear', 0) or 0) for item in month_records))
         return month_income, month_wear
 
     def _count_profit_stats_members(self, *, name: str, stats_allowed: bool, active_members: list[dict[str, Any]]) -> int:
@@ -54,8 +54,8 @@ class ProfitCalendarPresenter:
         active_member_count: int,
         data_day_count: int,
     ) -> dict[str, float | int]:
-        avg_income = round_income(month_income / active_member_count) if active_member_count else 0.0
-        avg_wear = round_wear(month_wear / active_member_count) if active_member_count else 0.0
+        avg_income = normalize_income(month_income / active_member_count) if active_member_count else 0.0
+        avg_wear = normalize_wear(month_wear / active_member_count) if active_member_count else 0.0
         avg_per_member_per_day = round(month_wear / (active_member_count * data_day_count), 2) if active_member_count and data_day_count else 0.0
         avg_member_daily_wear = round(month_wear / data_day_count, 2) if data_day_count else 0.0
         return {
@@ -126,7 +126,7 @@ class ProfitCalendarPresenter:
             **calendar_data,
             'month_income_total': month_income,
             'month_wear_total': month_wear,
-            'month_profit_total': round_income(month_income - month_wear),
+            'month_profit_total': normalize_income(month_income - month_wear),
             **average_stats,
             'profit_board_rows': board_rows,
             'profit_positive_list': profit_positive_list,
