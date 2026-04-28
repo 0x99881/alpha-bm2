@@ -1,0 +1,12 @@
+.git
+.claude
+.env.local
+.tmp_browser_pages
+.tmp_test_workspaces
+.smoke_tmp
+.smoke_route_tmp
+.npm-cache
+.vercel-local
+__pycache__
+scripts
+*.pyc

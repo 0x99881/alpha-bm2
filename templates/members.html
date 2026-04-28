@@ -9,6 +9,9 @@
         <span>{{ ui.members_total.format(count=members|length) }}</span>
         <strong>{{ ui.members_enabled.format(count=enabled_count) }}</strong>
     </div>
+    <form method="post" action="{{ url_for('supabase_sync_now') }}">
+        <button type="submit" class="secondary-btn">{{ ui.sync_cloud }}</button>
+    </form>
 </section>
 
 <section class="panel compact-panel">

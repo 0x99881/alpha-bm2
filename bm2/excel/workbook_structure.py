@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from openpyxl import Workbook, load_workbook
 
-from .constants import (
+from ..constants import (
     EXPENSE_META_SHEET_ALIASES,
     EXPENSE_NAME_HEADER,
+    DISABLED,
     INCOME_META_SHEET_ALIASES,
     INCOME_NAME_HEADER,
     META_HEADERS,
@@ -19,7 +20,7 @@ from .constants import (
     WEAR_NAME_HEADER,
     WINDOW_SIZE,
 )
-from .excel.profit_recalculator import recalculate_score_profits
+from .profit_recalculator import recalculate_score_profits
 
 
 class StoreStructureMixin:
@@ -138,6 +139,8 @@ class StoreStructureMixin:
         if self.workbook_path.exists():
             workbook = load_workbook(self.workbook_path)
         else:
+            if getattr(self, 'read_only', False):
+                raise FileNotFoundError(f"Workbook not found: {self.workbook_path}")
             workbook = Workbook()
             self._create_initial_score_sheet(workbook)
             changed = True
@@ -151,11 +154,37 @@ class StoreStructureMixin:
             if PROFIT_SHEET in workbook.sheetnames:
                 workbook.remove(workbook[PROFIT_SHEET])
                 changed = True
-            if changed:
+            if changed and not getattr(self, 'read_only', False):
                 self._sync_member_visibility_in_workbook(workbook)
-                self._save_workbook(workbook)
+                self.workbook_repository.save(workbook)
         finally:
             workbook.close()
+
+    def _sync_member_visibility_in_workbook(self, workbook) -> None:
+        self._ensure_score_sheet_structure(workbook)
+        self._ensure_wear_sheet_structure(workbook)
+        self._ensure_income_sheet_structure(workbook)
+        self._ensure_expense_sheet_structure(workbook)
+
+        score_sheet = self._score_sheet(workbook)
+        wear_sheet = self._wear_sheet(workbook)
+        income_sheet = self._income_sheet(workbook)
+        expense_sheet = self._expense_sheet(workbook)
+        score_name_col = self._find_column(score_sheet, NAME_HEADER)
+        wear_name_col = self._find_column(wear_sheet, WEAR_NAME_HEADER)
+        income_name_col = self._find_column(income_sheet, INCOME_NAME_HEADER)
+        expense_name_col = self._find_column(expense_sheet, EXPENSE_NAME_HEADER)
+
+        for member in self.get_members():
+            should_hide = member['status'] == DISABLED
+            if score_name_col is not None:
+                self._set_member_row_hidden(score_sheet, score_name_col, member['name'], should_hide)
+            if wear_name_col is not None:
+                self._set_member_row_hidden(wear_sheet, wear_name_col, member['name'], should_hide)
+            if income_name_col is not None:
+                self._set_member_row_hidden(income_sheet, income_name_col, member['name'], should_hide)
+            if expense_name_col is not None:
+                self._set_member_row_hidden(expense_sheet, expense_name_col, member['name'], should_hide)
 
     def _append_meta(self, workbook, date_text: str, col_name: str) -> None:
         workbook[META_SHEET].append([date_text, col_name])

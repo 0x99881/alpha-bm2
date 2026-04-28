@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 # COMPATIBILITY LAYER
 
@@ -22,7 +22,7 @@ class StoreReaderFacade:
     def get_score_rankings(self, limit: int = 999, workbook=None) -> list[dict[str, int | str]]:
         own_workbook = workbook is None
         if own_workbook:
-            workbook = self._open_workbook()
+            workbook = self.workbook_repository.open()
         rows = []
         try:
             self._ensure_score_sheet_structure(workbook)
@@ -38,7 +38,7 @@ class StoreReaderFacade:
         return self.score_sheet.read_rankings(sheet)
 
     def get_score_latest_column(self) -> str:
-        workbook = self._open_workbook()
+        workbook = self.workbook_repository.open()
         try:
             self._ensure_score_sheet_structure(workbook)
             sheet = self._score_sheet(workbook)
@@ -47,7 +47,7 @@ class StoreReaderFacade:
             workbook.close()
 
     def get_score_column_count(self) -> int:
-        workbook = self._open_workbook()
+        workbook = self.workbook_repository.open()
         try:
             self._ensure_score_sheet_structure(workbook)
             sheet = self._score_sheet(workbook)
@@ -56,7 +56,7 @@ class StoreReaderFacade:
             workbook.close()
 
     def get_active_member_profit_map(self) -> dict[str, float]:
-        workbook = self._open_workbook()
+        workbook = self.workbook_repository.open()
         try:
             self._ensure_score_sheet_structure(workbook)
             sheet = self._score_sheet(workbook)
@@ -65,7 +65,7 @@ class StoreReaderFacade:
             workbook.close()
 
     def get_score_summary_data(self) -> dict[str, Any]:
-        workbook = self._open_workbook()
+        workbook = self.workbook_repository.open()
         try:
             self._ensure_score_sheet_structure(workbook)
             sheet = self._score_sheet(workbook)
@@ -81,6 +81,13 @@ class StoreReaderFacade:
         finally:
             workbook.close()
 
+    def get_score_sheet_snapshot(self) -> dict[str, Any]:
+        workbook = self.workbook_repository.open()
+        try:
+            return self.score_sheet.snapshot(workbook)
+        finally:
+            workbook.close()
+
     def _get_member_value_records(
         self,
         *,
@@ -91,7 +98,7 @@ class StoreReaderFacade:
     ) -> list[dict[str, Any]]:
         own_workbook = workbook is None
         if own_workbook:
-            workbook = self._open_workbook()
+            workbook = self.workbook_repository.open()
         try:
             return read_member_value_records(self, workbook, name=name, year_hint=year_hint, sheet_type=sheet_type)
         finally:
@@ -119,7 +126,7 @@ class StoreReaderFacade:
         return build_threshold_abnormal_flags(rows, target_cols, threshold)
 
     def get_wear_sheet_snapshot(self) -> dict[str, Any]:
-        workbook = self._open_workbook()
+        workbook = self.workbook_repository.open()
         try:
             return self.wear_sheet.snapshot(workbook)
         finally:
@@ -164,7 +171,7 @@ class StoreReaderFacade:
         return month_records
 
     def get_all_members_calendar_dataset(self, year: int, month: int) -> dict[str, Any]:
-        workbook = self._open_workbook()
+        workbook = self.workbook_repository.open()
         try:
             merged_map: dict[str, dict[str, Any]] = {}
             for member in self.get_active_members():
@@ -183,7 +190,7 @@ class StoreReaderFacade:
             'month_records': month_records,
             'record_map': {item['date']: item for item in month_records},
             'max_abs_wear': max_abs_wear,
-            'note_text': '鍙屽嚮灞曞紑鍚勫彿鏄庣粏',
+            'note_text': '閸欏苯鍤仦鏇炵磻閸氬嫬褰块弰搴ｇ矎',
         }
 
     def _merge_all_member_day_record(self, merged_map: dict[str, dict[str, Any]], *, member_name: str, item: dict[str, Any]) -> None:
@@ -227,7 +234,7 @@ class StoreReaderFacade:
         return month_records
 
     def get_next_score_date(self) -> str:
-        workbook = self._open_workbook()
+        workbook = self.workbook_repository.open()
         try:
             latest_date = latest_header_date(workbook, self.score_sheet)
         finally:
@@ -241,3 +248,4 @@ class StoreReaderFacade:
             except ValueError:
                 pass
         return datetime.now().strftime('%Y-%m-%d')
+

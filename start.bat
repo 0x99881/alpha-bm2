@@ -30,7 +30,12 @@ if /i "%~1"=="--check" (
     exit /b 0
 )
 
-start "" %APP_URL%
+for /f "tokens=5" %%p in ('netstat -ano ^| findstr /r /c:":5000 .*LISTENING"') do (
+    start "" %APP_URL%
+    exit /b 0
+)
+
+start "" powershell -NoProfile -WindowStyle Hidden -Command "Start-Sleep -Seconds 2; Start-Process '%APP_URL%'"
 %PY_CMD% app.py
 
 if errorlevel 1 (

@@ -1,6 +1,12 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
-# COMPATIBILITY LAYER
+# COMPATIBILITY LAYER - Excel is a derived artifact of SQLite.
+#
+# StoreWriterFacade writes score data into the Excel workbook.
+# It is NOT part of any business or sync flow; it is called only by:
+#   SQLiteToExcelExporter - the sole sanctioned SQLite to Excel export path
+#
+# Do not add new callers.
 
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -194,7 +200,7 @@ class StoreWriterFacade:
         raise ValueError(f'无法在 {date_text} 之后 {UNIQUE_DATE_SEARCH_LIMIT} 天内找到可用日期')
 
     def save_scores_and_wear(self, date_text: str, entries: list[dict[str, str]]) -> dict[str, Any]:
-        workbook = self._open_workbook()
+        workbook = self.workbook_repository.open()
         try:
             self._ensure_score_sheet_structure(workbook)
             self._ensure_wear_sheet_structure(workbook)
@@ -213,7 +219,7 @@ class StoreWriterFacade:
 
             recent_numbers = [number for number, _ in self._score_date_columns(targets['score'].sheet)][-WINDOW_SIZE:]
             self._finalize_daily_save(workbook, effective_date_text=effective_date_text, recent_numbers=recent_numbers, targets=targets)
-            self._save_workbook(workbook)
+            self.workbook_repository.save(workbook)
             return {
                 'target_column': targets['score'].header,
                 'wear_column': targets['wear'].header,
@@ -223,3 +229,4 @@ class StoreWriterFacade:
             }
         finally:
             workbook.close()
+

@@ -1,88 +1,83 @@
 # BM2 管理系统
 
-一个本地运行的 BM2 管理工具。
+BM2 是一个 Python / Flask 项目，用来管理成员、每日积分、排名展示和线上同步。
 
-它适合单人日常维护，不需要数据库，不需要联网，直接用 Excel 保存数据。运行后在浏览器里操作，所有记录都会同步到本地 Excel 文件。
+当前项目已经完成架构收口：
+
+- 本地数据主库：SQLite
+- 线上 / 手机端同步源：Supabase
+- Excel：只作为导出、备份、历史导入格式
+- 旧 JSON / cloud blob / bm2_cloud 路线：已废弃
+
+## 当前数据流
+
+本地使用：
+
+```text
+页面 / web.py
+  -> service
+  -> SQLite repository / writer
+  -> bm2_local.db
+```
+
+线上 / 手机端使用：
+
+```text
+页面 / web.py
+  -> service
+  -> Supabase client
+  -> Supabase
+```
+
+本地和线上同步：
+
+```text
+SQLite
+  <-> SyncService
+  <-> Supabase
+```
+
+Excel：
+
+```text
+SQLite -> Excel 导出
+Excel  -> 历史导入 / 迁移来源
+```
 
 ## 主要功能
 
-### 1. 每日积分录入
-- 支持快捷填分和手动输入
-- 支持批量填分、批量清空
-- 支持成员拖拽排序，并自动保存顺序
-- 支持设置默认记录日期
-- 支持一键打开当前 Excel
-- 保存后会把新数据继续追加到积分表中，不覆盖历史
+- 每日积分提交
+- 手机 / 线上积分提交
+- 成员新增、修改、停用、删除、排序
+- 积分排名和积分总览
+- 盈亏日历展示
+- Supabase push / pull / sync
+- Excel 导出
 
-### 2. 每日磨损记录
-- 支持通过交易前余额、交易后余额自动计算磨损
-- 支持直接手动填写磨损
-- 支持填写收入和其他支出
-- 页面可直接查看 Excel 中的磨损记录
-- 支持平均每日磨损、成员平均磨损显示
-- 支持异常磨损高亮标记
+## 架构规则
 
-### 3. 成员收益日历
-- 支持按成员查看月历
-- 支持查看每天的磨损和收入
-- 支持滑动选择日期区间自动统计
-- 支持本月统计和区间统计
-- 支持盈利榜、亏损榜查看
-- 支持夜间模式切换
+后续开发必须遵守：
 
-### 4. 成员管理
-- 支持新增成员
-- 支持停用、恢复成员
-- 支持删除成员
-- 删除成员时会同步删除 Excel 中对应数据
-- 停用成员会自动排到底部
-- 停用成员会在 Excel 中隐藏，但历史数据会保留
+- SQLite 是唯一的本地主数据源。
+- Supabase 是唯一的线上 / 手机端同步源。
+- Excel 不能再作为业务主写入路径。
+- JSON 文件同步、bm2_cloud、cloud_sync、blob_sync 等旧路线不能恢复。
+- `web.py` 只负责请求和响应。
+- `services/` 负责业务流程。
+- `repositories/` 负责数据读写。
+- `bm2/store.py` 只能是薄入口，不承载业务逻辑。
+- `static/` 是前端源码。
+- `public/` 如果存在，只能是构建产物，不手写维护。
 
-## 数据保存方式
-
-项目使用一个本地 Excel 文件保存数据。
-
-首次运行时，如果当前目录下没有可用的 Excel 文件，系统会自动创建一个新的文件，例如：
+更详细的后续开发规则见：
 
 ```text
-BM2记录_2026-03-31.xlsx
+AGENTS.md
+docs/development_rules.md
+docs/data_flow.md
 ```
-
-后续再次打开时，会继续使用这个文件，不会反复新建。
-
-目前数据会写入这些表：
-- 每日积分记录
-- 每日磨损记录
-- 每日收入记录
-- 其他支出记录
-- 积分和磨损相关辅助表
 
 ## 运行方式
-
-### 方式一：命令行启动
-
-```bash
-python app.py
-```
-
-启动后在浏览器打开：
-
-```text
-http://127.0.0.1:5000
-```
-
-### 方式二：双击启动
-
-直接双击项目里的：
-
-```text
-start.bat
-```
-
-## 环境要求
-
-- Python 3.10 及以上
-- Windows 本地环境
 
 安装依赖：
 
@@ -90,49 +85,91 @@ start.bat
 pip install -r requirements.txt
 ```
 
+本地启动：
+
+```bash
+python app.py
+```
+
+浏览器打开：
+
+```text
+http://127.0.0.1:5000
+```
+
+Windows 下也可以双击：
+
+```text
+start.bat
+```
+
+## Supabase 配置
+
+如果要启用线上 / 手机端同步，需要配置 Supabase 环境变量。
+
+常用配置项：
+
+```text
+SUPABASE_URL
+SUPABASE_KEY
+```
+
+只读线上模式：
+
+```text
+BM2_READ_ONLY=1
+```
+
+在 Vercel 环境中，项目会按线上只读 / 手机端模式运行。
+
+## 测试和检查
+
+每次改动后建议运行：
+
+```bash
+python scripts/architecture_check.py
+python scripts/smoke_check.py
+```
+
+`architecture_check.py` 会阻止旧架构路线重新出现。
+
 ## 项目结构
 
 ```text
-app.py                  启动入口
-bm2/                    主要业务代码
-templates/              页面模板
-static/                 样式和脚本
-start.bat               一键启动
+app.py                 Flask 启动入口
+bm2/web.py             HTTP 路由
+bm2/store.py           薄 facade
+bm2/services/          业务流程
+bm2/repositories/      SQLite / Supabase 数据访问
+bm2/excel/             Excel 导入导出和表结构处理
+bm2/presenters/        页面展示数据组装
+static/                前端源码
+templates/             页面模板
+scripts/               架构检查和冒烟检查
+docs/                  架构说明和 Supabase SQL
+AGENTS.md              给 AI/开发者看的项目规则
 ```
 
-## 最近更新
+## 不要上传的文件
 
-### 2026-04-15
-
-修复的问题：
-
-- 修复了四张表日期不同步的问题，避免同一次录入被拆到不同日期
-- 修复了积分表日期会被重新改乱的问题，避免和磨损、收入、支出对不上
-
-新增和调整：
-
-- 调整为四张表统一按“当前最后一天的下一天”自动顺延
-- 记分页默认显示下一次应该录入的日期，保持和四张表一致
-
-### 更早更新
-
-- 去掉了积分录入页里不需要的盈亏显示
-- 盈亏数据保留在 Excel 中，不在录入页重复展示
-- 完善了每日积分、磨损、收入、其他支出的联动记录
-- 完善了成员收益日历和统计展示
-- 完善了成员管理、停用、恢复、删除和 Excel 同步逻辑
-- 修复了多处中文显示、页面按钮和稳定性问题
-
-## 说明
-
-- 这是本地单用户工具，不是云系统
-- 默认不依赖数据库
-- 默认不依赖外网
-- 上传仓库时不建议把本地 Excel 和本地配置一起提交
-
-## 依赖
+这些文件不要放进公开代码包：
 
 ```text
-Flask==3.1.3
-openpyxl==3.1.5
+.env.local
+bm2_local.db
+BM2记录_*.xlsx
+__pycache__/
+.tmp_*/
+public/
+bm2_cloud/
 ```
+
+## 当前状态
+
+代码层面的桥梁已经建好：
+
+```text
+本地 SQLite <-> SyncService <-> Supabase
+```
+
+也就是说，后续功能应该继续围绕这条主线扩展，不要再新增 Excel 主写入、JSON 同步或旧 cloud blob 通道。

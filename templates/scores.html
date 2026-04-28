@@ -29,6 +29,7 @@
 
 <section class="panel compact-panel">
     <form method="post" action="{{ url_for('save_scores') }}">
+        <input type="hidden" name="overwrite_step" value="{{ overwrite_prompt.next_step if overwrite_prompt else 0 }}">
         <div class="toolbar compact-toolbar">
             <div class="date-tools">
                 <label>
@@ -43,9 +44,18 @@
             </div>
             <div class="toolbar-actions">
                 <button type="submit" formaction="{{ url_for('open_excel_file') }}" formmethod="post" class="secondary-btn">{{ ui.open_excel }}</button>
+                <button type="submit" formaction="{{ url_for('refresh_from_excel') }}" formmethod="post" class="secondary-btn">{{ ui.refresh_from_excel }}</button>
+                <button type="submit" formaction="{{ url_for('supabase_sync_now') }}" formmethod="post" class="secondary-btn">{{ ui.sync_cloud }}</button>
                 <button type="submit" class="primary-btn">{{ ui.sync_excel }}</button>
             </div>
         </div>
+
+        {% if overwrite_prompt %}
+        <div class="flash warning overwrite-warning">
+            <strong>{{ overwrite_prompt.message }}</strong>
+            <span>{{ overwrite_prompt.confirm_label }}</span>
+        </div>
+        {% endif %}
 
         <div class="drag-sort-hint" data-sort-status data-idle-text="{{ ui.drag_sort_hint }}">{{ ui.drag_sort_hint }}</div>
         <div class="table-wrap compact-wrap">
@@ -87,36 +97,5 @@
             </table>
         </div>
     </form>
-</section>
-
-<section class="panel">
-    <div class="section-title">
-        <h3>{{ ui.rankings_title }}</h3>
-        <p>{{ ui.rankings_hint }}</p>
-    </div>
-    <div class="table-wrap">
-        <table>
-            <thead>
-                <tr>
-                    <th>{{ ui.label_rank }}</th>
-                    <th>{{ ui.label_name }}</th>
-                    <th>{{ ui.label_total_score }}</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for item in score_summary.rankings %}
-                <tr>
-                    <td>{{ loop.index }}</td>
-                    <td><a class="member-link" href="{{ url_for('profit_calendar', name=item.name) }}">{{ item.name }}</a></td>
-                    <td>{{ item.total }}</td>
-                </tr>
-                {% else %}
-                <tr>
-                    <td colspan="3" class="empty-cell">{{ ui.empty_score_records }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
 </section>
 {% endblock %}

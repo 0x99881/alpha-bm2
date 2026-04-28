@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ title or ui.app_title }}</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=asset_version) }}">
+    <link rel="stylesheet" href="{{ url_for('asset_file', filename='style.css', v=asset_version) }}">
     {% block head_extra %}{% endblock %}
 </head>
 <body>
@@ -12,18 +12,30 @@
         <aside class="sidebar">
             <div class="brand">
                 <h1>{{ ui.app_title }}</h1>
-                <p>{{ ui.local_tool }}</p>
+                <p>{{ ui.local_tool_read_only if read_only_mode else ui.local_tool }}</p>
             </div>
             <nav class="nav">
+                {% if read_only_mode %}
                 <a href="{{ url_for('score_entry') }}" class="{% if request.endpoint == 'score_entry' %}active{% endif %}">{{ ui.nav_scores }}</a>
+                <a href="{{ url_for('score_overview') }}" class="{% if request.endpoint == 'score_overview' %}active{% endif %}">{{ ui.nav_score_overview }}</a>
+                {% else %}
+                <a href="{{ url_for('score_entry') }}" class="{% if request.endpoint == 'score_entry' %}active{% endif %}">{{ ui.nav_scores }}</a>
+                <a href="{{ url_for('score_overview') }}" class="{% if request.endpoint == 'score_overview' %}active{% endif %}">{{ ui.nav_score_overview }}</a>
                 <a href="{{ url_for('wear_entry') }}" class="{% if request.endpoint == 'wear_entry' %}active{% endif %}">{{ ui.nav_wear }}</a>
                 <a href="{{ url_for('profit_calendar') }}" class="{% if request.endpoint in ['profit_calendar', 'member_detail'] %}active{% endif %}">{{ ui.nav_calendar }}</a>
                 <a href="{{ url_for('members') }}" class="{% if request.endpoint == 'members' %}active{% endif %}">{{ ui.nav_members }}</a>
+                {% endif %}
             </nav>
             <div class="theme-switch-card">
                 <span>{{ ui.page_mode }}</span>
                 <button type="button" class="theme-toggle" data-theme-toggle="true">{{ ui.theme_switch }}</button>
             </div>
+            {% if read_only_mode %}
+            <div class="meta-card">
+                <span>{{ ui.read_only_badge }}</span>
+                <strong>{{ ui.read_only_page_hint }}</strong>
+            </div>
+            {% endif %}
             <div class="meta-card">
                 <span>{{ ui.current_excel }}</span>
                 <strong>{{ excel_filename }}</strong>
@@ -45,13 +57,13 @@
     <script>
         window.BM2_UI_TEXT = {{ js_ui_text | tojson }};
     </script>
-    <script src="{{ url_for('static', filename='utils.js', v=asset_version) }}"></script>
-    <script src="{{ url_for('static', filename='request.js', v=asset_version) }}"></script>
-    <script src="{{ url_for('static', filename='members_service.js', v=asset_version) }}"></script>
-    <script src="{{ url_for('static', filename='theme.js', v=asset_version) }}"></script>
-    <script src="{{ url_for('static', filename='scores.js', v=asset_version) }}"></script>
-    <script src="{{ url_for('static', filename='members_sort.js', v=asset_version) }}"></script>
-    <script src="{{ url_for('static', filename='profit_calendar.js', v=asset_version) }}"></script>
-    <script src="{{ url_for('static', filename='app.js', v=asset_version) }}"></script>
+    <script src="{{ url_for('asset_file', filename='utils.js', v=asset_version) }}"></script>
+    <script src="{{ url_for('asset_file', filename='request.js', v=asset_version) }}"></script>
+    <script src="{{ url_for('asset_file', filename='members_service.js', v=asset_version) }}"></script>
+    <script src="{{ url_for('asset_file', filename='theme.js', v=asset_version) }}"></script>
+    <script src="{{ url_for('asset_file', filename='scores.js', v=asset_version) }}"></script>
+    <script src="{{ url_for('asset_file', filename='members_sort.js', v=asset_version) }}"></script>
+    <script src="{{ url_for('asset_file', filename='profit_calendar.js', v=asset_version) }}"></script>
+    <script src="{{ url_for('asset_file', filename='app.js', v=asset_version) }}"></script>
 </body>
 </html>

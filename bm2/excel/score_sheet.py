@@ -197,6 +197,30 @@ class ScoreSheet:
     def column_count(self, sheet) -> int:
         return len(self.date_columns(sheet))
 
+    def snapshot(self, workbook) -> dict[str, Any]:
+        self.ensure_structure(workbook)
+        sheet = self.sheet(workbook)
+        date_columns = self.date_columns(sheet)
+        recent_date_cols = [col for _, col in date_columns[-WINDOW_SIZE:]]
+        total_col = find_column(sheet, TOTAL_HEADER)
+        profit_col = find_column(sheet, PROFIT_HEADER)
+        name_col = find_column(sheet, NAME_HEADER)
+        visible_columns = list(recent_date_cols)
+        for col in (total_col, profit_col, name_col):
+            if col is not None:
+                visible_columns.append(col)
+        headers = [sheet.cell(1, col).value for col in visible_columns]
+        raw_rows = []
+        for row in range(DATA_START_ROW, sheet.max_row + 1):
+            if name_col is not None and not sheet.cell(row, name_col).value:
+                continue
+            values = [sheet.cell(row, col).value for col in visible_columns]
+            raw_rows.append(values)
+        return {
+            'headers': headers,
+            'raw_rows': raw_rows,
+        }
+
     def active_member_profit_map(self, sheet, active_members: list[dict[str, str]]) -> dict[str, float]:
         name_col = find_column(sheet, NAME_HEADER)
         profit_col = find_column(sheet, PROFIT_HEADER)

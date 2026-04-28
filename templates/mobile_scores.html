@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-head">
+    <div>
+        <h2>{{ ui.nav_scores }}</h2>
+        <p>手机上先记分，电脑打开后会补回本地。</p>
+    </div>
+    <div class="stat-card">
+        <span>{{ ui.record_date }}</span>
+        <strong>{{ selected_date }}</strong>
+    </div>
+</section>
+
+<section class="panel compact-panel">
+    <form method="post" action="{{ url_for('save_scores') }}">
+        <input type="hidden" name="overwrite_step" value="{{ overwrite_prompt.next_step if overwrite_prompt else 0 }}">
+        <div class="toolbar compact-toolbar">
+            <div class="date-tools">
+                <label>
+                    {{ ui.record_date }}
+                    <input type="date" name="date" value="{{ selected_date }}" required>
+                </label>
+            </div>
+            <div class="quick-actions">
+                <span>{{ ui.batch_actions }}</span>
+                <button type="button" class="secondary-btn" data-fill-all="{{ quick_scores[0] }}">{{ ui.fill_all.format(score=quick_scores[0]) }}</button>
+                <button type="button" class="secondary-btn" data-clear-all="true">{{ ui.clear_all }}</button>
+            </div>
+            <div class="toolbar-actions">
+                <button type="submit" class="primary-btn">{{ ui.button_save }}</button>
+            </div>
+        </div>
+
+        {% if overwrite_prompt %}
+        <div class="flash warning overwrite-warning">
+            <strong>{{ overwrite_prompt.message }}</strong>
+            <span>{{ overwrite_prompt.confirm_label }}</span>
+        </div>
+        {% endif %}
+
+        <div class="table-wrap compact-wrap">
+            <table class="score-table">
+                <thead>
+                    <tr>
+                        <th>{{ ui.label_name }}</th>
+                        <th>{{ ui.label_score }}</th>
+                        <th>{{ ui.label_quick_score }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for member in active_members %}
+                    <tr>
+                        <td class="name-cell">{{ member.name }}</td>
+                        <td><input type="number" name="score_{{ member.name }}" class="score-input compact-input" value="{{ member.score }}"></td>
+                        <td>
+                            <div class="quick-score-group compact">
+                                {% for score in quick_scores %}
+                                <button type="button" class="score-chip compact-chip" data-target="score_{{ member.name }}" data-score="{{ score }}">{{ score }}</button>
+                                {% endfor %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="3" class="empty-cell">{{ ui.empty_score_records }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </form>
+</section>
+{% endblock %}
