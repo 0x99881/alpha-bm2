@@ -10,3 +10,9 @@
 __pycache__
 scripts
 *.pyc
+*.db
+*.db-shm
+*.db-wal
+BM2记录_*.xlsx
+~$*.xlsx
+system_config.json

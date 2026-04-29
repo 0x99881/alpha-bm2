@@ -3,6 +3,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from ..source_metadata import with_source_profit
+
 LOGGER = logging.getLogger(__name__)
 
 
@@ -53,7 +55,31 @@ class SQLiteSyncMergeRepositoryMixin:
         finally:
             connection.close()
 
-    def push_to_supabase(self, supabase_sync, *, force_full: bool = False) -> dict[str, int]:
+    @staticmethod
+    def _attach_score_profit_sources(
+        rows: list[dict[str, Any]],
+        score_profit_map: dict[str, float] | None,
+    ) -> list[dict[str, Any]]:
+        if not score_profit_map:
+            return rows
+        enriched_rows: list[dict[str, Any]] = []
+        for row in rows:
+            member_name = str(row.get("member_name", "")).strip()
+            if member_name not in score_profit_map:
+                enriched_rows.append(row)
+                continue
+            enriched = dict(row)
+            enriched["source"] = with_source_profit(enriched.get("source", "local"), score_profit_map[member_name])
+            enriched_rows.append(enriched)
+        return enriched_rows
+
+    def push_to_supabase(
+        self,
+        supabase_sync,
+        *,
+        force_full: bool = False,
+        score_profit_map: dict[str, float] | None = None,
+    ) -> dict[str, int]:
         """Push local rows to Supabase (incremental by updated_at > last_push).
         Manual upload treats the local database as the source of truth.
         First push is a full push. Upserts by id on Supabase side."""
@@ -67,6 +93,7 @@ class SQLiteSyncMergeRepositoryMixin:
         else:
             members = self._get_all_member_rows_for_push()
             scores = self._get_all_score_rows_for_push()
+        scores = self._attach_score_profit_sources(scores, score_profit_map)
         LOGGER.info(
             "Supabase push (%s): %d members, %d score_entries queued",
             mode, len(members), len(scores),

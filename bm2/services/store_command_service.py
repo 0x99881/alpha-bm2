@@ -107,7 +107,8 @@ class StoreCommandService:
         return self._context.sync_service.is_configured()
 
     def supabase_push(self, *, force_full: bool = True) -> dict[str, int]:
-        return self._context.sync_service.push(force_full=force_full)
+        score_profit_map = self._context.query_service.get_active_member_profit_map()
+        return self._context.sync_service.push(force_full=force_full, score_profit_map=score_profit_map)
 
     def supabase_pull(self) -> dict[str, int]:
         return self._context.sync_service.pull()

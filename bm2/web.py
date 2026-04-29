@@ -135,10 +135,17 @@ def register_routes(app, store: ExcelStore) -> None:
 
     @app.route('/score-overview')
     def score_overview():
+        if read_only_mode:
+            data = store.get_mobile_overview()
+            return render_template(
+                'mobile_score_overview.html',
+                score_sheet=data['score_sheet_view'],
+                score_summary=data['score_summary'],
+            )
         return render_template(
-            'mobile_score_overview.html' if read_only_mode else 'score_overview.html',
-            score_sheet=store.get_online_score_sheet_view() if read_only_mode else store.get_score_sheet_view(),
-            score_summary=store.get_online_score_summary() if read_only_mode else store.get_score_summary(),
+            'score_overview.html',
+            score_sheet=store.get_score_sheet_view(),
+            score_summary=store.get_score_summary(),
         )
 
     @app.route('/api/score-overview')

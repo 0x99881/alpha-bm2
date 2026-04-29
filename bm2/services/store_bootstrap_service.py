@@ -44,24 +44,34 @@ class StoreBootstrapService:
         context._reader = StoreReaderFacade(context)
         context._writer = StoreWriterFacade(context)
         context.query_service = StoreQueryService(context)
-        context._ensure_workbook()
-        context.local_db = LocalDatabase(context.base_dir, read_only=read_only)
         context.supabase = SupabaseClient(context.base_dir)
-        context.excel_exporter = SQLiteToExcelExporter(context.local_db, context._writer)
-        context.export_service = ExcelExportService(context)
-        context.migration_service = LocalDataMigrationService(
-            context.local_db,
-            context,
-            context.query_service.legacy_config_members,
-            context.excel_exporter,
-        )
-        context.migration_service.bootstrap_from_legacy_sources()
-        context.sync_service = SyncService(context.local_db, context.supabase, after_pull=context.migration_service.after_supabase_pull)
-        context.application_service = self.create_online_application_service(context)
         if read_only:
+            context.local_db = None
+            context.excel_exporter = None
+            context.export_service = ExcelExportService(context)
+            context.migration_service = None
+            context.sync_service = SyncService(context.local_db, context.supabase)
+            context.application_service = ApplicationService(
+                context.local_db,
+                context.supabase,
+                lambda: datetime.now().strftime("%Y-%m-%d"),
+            )
             entry_writer = SupabaseEntryWriter(context.supabase)
             context._sqlite_writer = None
         else:
+            context._ensure_workbook()
+            context.local_db = LocalDatabase(context.base_dir, read_only=read_only)
+            context.excel_exporter = SQLiteToExcelExporter(context.local_db, context._writer)
+            context.export_service = ExcelExportService(context)
+            context.migration_service = LocalDataMigrationService(
+                context.local_db,
+                context,
+                context.query_service.legacy_config_members,
+                context.excel_exporter,
+            )
+            context.migration_service.bootstrap_from_legacy_sources()
+            context.sync_service = SyncService(context.local_db, context.supabase, after_pull=context.migration_service.after_supabase_pull)
+            context.application_service = self.create_online_application_service(context)
             context._sqlite_writer = SQLiteEntryWriter(context.local_db)
             entry_writer = context._sqlite_writer
         context.daily_entry_service = DailyEntryService(entry_writer)

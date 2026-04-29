@@ -15,6 +15,7 @@ class SupabaseClient:
     def __init__(self, base_dir: Path) -> None:
         self.base_dir = Path(base_dir)
         self._env_cache: dict[str, str] | None = None
+        self._client_cache = None
 
     def _load_env_file(self) -> dict[str, str]:
         if self._env_cache is not None:
@@ -46,7 +47,9 @@ class SupabaseClient:
     def _client(self):
         from supabase import create_client  # type: ignore
 
-        return create_client(self._url(), self._key())
+        if self._client_cache is None:
+            self._client_cache = create_client(self._url(), self._key())
+        return self._client_cache
 
     def push_members(self, rows: list[dict[str, Any]]) -> int:
         if not rows:

@@ -12,10 +12,19 @@ class SyncService:
     def is_configured(self) -> bool:
         return self._supabase_client.is_configured()
 
-    def push(self, *, force_full: bool = False) -> dict[str, int]:
+    def push(
+        self,
+        *,
+        force_full: bool = False,
+        score_profit_map: dict[str, float] | None = None,
+    ) -> dict[str, int]:
         if not self.is_configured():
             return {"members": 0, "score_entries": 0}
-        return self._local_database.push_to_supabase(self._supabase_client, force_full=force_full)
+        return self._local_database.push_to_supabase(
+            self._supabase_client,
+            force_full=force_full,
+            score_profit_map=score_profit_map,
+        )
 
     def pull(self) -> dict[str, int]:
         if not self.is_configured():

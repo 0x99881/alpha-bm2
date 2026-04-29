@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Any
 
 from ..constants import WINDOW_SIZE
+from ..source_metadata import parse_source_profit, with_source_profit
 
 
 class SupabaseEntryWriter:
@@ -74,6 +75,8 @@ class SupabaseEntryWriter:
                 continue
             row_id = self._score_entry_id(member_name, saved_date)
             previous = existing.get(row_id) or {}
+            previous_profit = parse_source_profit(previous.get("source", ""))
+            source = "online" if previous_profit is None else with_source_profit("online", previous_profit)
             rows.append(
                 {
                     "id": row_id,
@@ -84,7 +87,7 @@ class SupabaseEntryWriter:
                     "updated_at": now_text,
                     "version": int(previous.get("version", 0) or 0) + 1,
                     "deleted": 0,
-                    "source": "online",
+                    "source": source,
                 }
             )
 
