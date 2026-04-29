@@ -30,7 +30,13 @@ if /i "%~1"=="--check" (
     exit /b 0
 )
 
-start "" %APP_URL%
+for /f "tokens=5" %%p in ('netstat -ano ^| findstr /r /c:":5000 .*LISTENING"') do (
+    echo Stopping old local server on port 5000...
+    taskkill /PID %%p /F >nul 2>nul
+    timeout /t 1 /nobreak >nul
+)
+
+start "" powershell -NoProfile -WindowStyle Hidden -Command "Start-Sleep -Seconds 2; Start-Process '%APP_URL%'"
 %PY_CMD% app.py
 
 if errorlevel 1 (

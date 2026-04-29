@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-head">
+    <div>
+        <h2>{{ ui.score_overview_title }}</h2>
+        <p>这里显示的是最近同步上来的最新积分表。</p>
+    </div>
+    <div class="page-head-stats">
+        <div class="stat-card">
+            <span>{{ ui.latest_score_column }}</span>
+            <strong>{{ score_summary.latest_column }}</strong>
+        </div>
+    </div>
+</section>
+
+<section class="panel">
+    <div class="section-title">
+        <h3>{{ ui.excel_preview_title }}</h3>
+        <p>{{ ui.excel_preview_hint }}</p>
+    </div>
+    {% set excel_letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ' %}
+    <div class="table-wrap excel-sheet-wrap">
+        <div class="excel-workbook">
+            <div class="excel-toolbar">
+                <span class="excel-toolbar-chip">Excel 视图</span>
+                <span class="excel-toolbar-chip">最近 15 天</span>
+                <span class="excel-toolbar-chip">最新列 {{ score_summary.latest_column }}</span>
+            </div>
+            <table class="excel-sheet-table">
+                <thead>
+                    <tr class="excel-letter-row">
+                        <th class="excel-corner-cell"></th>
+                        {% for header in score_sheet.headers %}
+                        <th class="excel-letter-cell">{{ excel_letters[loop.index0] if loop.index0 < excel_letters|length else loop.index }}</th>
+                        {% endfor %}
+                    </tr>
+                    <tr>
+                        <th class="excel-row-head excel-header-index">1</th>
+                        {% for header in score_sheet.headers %}
+                        <th class="excel-col-{{ header.kind }}">{{ header.value or '' }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in score_sheet.rows %}
+                    <tr>
+                        <th class="excel-row-head">{{ loop.index + 1 }}</th>
+                        {% for cell in row %}
+                        <td class="excel-col-{{ cell.kind }}">{{ '' if cell.value is none else cell.value }}</td>
+                        {% endfor %}
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <th class="excel-row-head">2</th>
+                        <td colspan="{{ score_sheet.column_count or 1 }}" class="empty-cell">{{ ui.empty_score_sheet_records }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+{% endblock %}

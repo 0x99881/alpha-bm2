@@ -12,15 +12,22 @@ StatusNormalizer = Callable[[str], str]
 
 
 class ConfigRepository:
-    def __init__(self, config_path: Path) -> None:
+    def __init__(self, config_path: Path, read_only: bool = False) -> None:
         self.config_path = config_path
+        self.read_only = read_only
+        self._memory_config: dict[str, Any] | None = None
 
     def load(self) -> dict[str, Any]:
         if self.config_path.exists():
             return json.loads(self.config_path.read_text(encoding='utf-8'))
+        if self._memory_config is not None:
+            return json.loads(json.dumps(self._memory_config, ensure_ascii=False))
         return {}
 
     def save(self, config: dict[str, Any]) -> None:
+        if self.read_only:
+            self._memory_config = json.loads(json.dumps(config, ensure_ascii=False))
+            return
         self.config_path.write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding='utf-8')
 
     def default_members(self, timestamp_factory: TimestampFactory) -> list[dict[str, str | int]]:

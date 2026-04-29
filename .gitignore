@@ -1,15 +1,31 @@
-﻿# Runtime and local data
+# Runtime and local data
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 
+# Local secrets - never commit
+.env.local
+*.db
+*.db-shm
+*.db-wal
+
 # Generated Excel / local state
 BM2记录_*.xlsx
 system_config.json
 
-# Local temp
+# Local temp and quarantine
 .tmp/
+.tmp_*/
+_legacy_quarantine_*/
 vendor/
 _vendor/
 _verify_*/
+.vercel
+
+# Build/package artifacts
+public/
+*.zip
+
+# Retired JSON sync data
+bm2_cloud/

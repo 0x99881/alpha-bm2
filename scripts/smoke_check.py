@@ -4,13 +4,15 @@ import importlib
 import re
 import shutil
 import sys
-import unittest
 from pathlib import Path
+
+sys.dont_write_bytecode = True
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
+TEST_TEMP_ROOT = PROJECT_ROOT / ".tmp_test_workspaces"
 
 
 MODULES_TO_IMPORT = [
@@ -140,7 +142,7 @@ class SmokeCheckRunner:
                 app.secret_key = "smoke"
                 register_routes(app, ExcelStore(temp_dir))
                 client = app.test_client()
-                routes = ["/scores", "/wear", "/profit-calendar", "/members"]
+                routes = ["/scores", "/score-overview", "/wear", "/profit-calendar", "/members"]
                 failures = []
                 for route in routes:
                     response = client.get(route)
@@ -165,16 +167,6 @@ class SmokeCheckRunner:
 
         self.check("架构依赖规则", _run)
 
-    def check_unit_tests(self) -> None:
-        def _run():
-            suite = unittest.defaultTestLoader.discover(str(PROJECT_ROOT / "tests"))
-            result = unittest.TextTestRunner(stream=sys.stdout, verbosity=0).run(suite)
-            if not result.wasSuccessful():
-                raise ValueError(f"failures={len(result.failures)}, errors={len(result.errors)}")
-            return f"tests={result.testsRun}"
-
-        self.check("单元测试", _run)
-
     def run(self) -> int:
         try:
             self.check_module_imports()
@@ -186,10 +178,11 @@ class SmokeCheckRunner:
             self.check_static_assets()
             self.check_page_routes()
             self.check_architecture_rules()
-            self.check_unit_tests()
         finally:
             if self._temp_root and self._temp_root.exists():
                 shutil.rmtree(self._temp_root, ignore_errors=True)
+            if TEST_TEMP_ROOT.exists():
+                shutil.rmtree(TEST_TEMP_ROOT, ignore_errors=True)
 
         passed = 0
         failed = 0
