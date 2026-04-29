@@ -53,12 +53,13 @@ class SQLiteSyncMergeRepositoryMixin:
         finally:
             connection.close()
 
-    def push_to_supabase(self, supabase_sync) -> dict[str, int]:
+    def push_to_supabase(self, supabase_sync, *, force_full: bool = False) -> dict[str, int]:
         """Push local rows to Supabase (incremental by updated_at > last_push).
+        Manual upload treats the local database as the source of truth.
         First push is a full push. Upserts by id on Supabase side."""
         if self.read_only:
             return {"members": 0, "score_entries": 0}
-        since = self._get_sync_state("supabase_last_push") or None
+        since = None if force_full else self._get_sync_state("supabase_last_push") or None
         mode = "incremental" if since else "full"
         if since:
             members = self._get_unsynced_member_rows_for_push(since)
@@ -66,38 +67,6 @@ class SQLiteSyncMergeRepositoryMixin:
         else:
             members = self._get_all_member_rows_for_push()
             scores = self._get_all_score_rows_for_push()
-        if hasattr(supabase_sync, "fetch_members_by_ids") and members:
-            remote_members = {
-                str(row["id"]): row
-                for row in supabase_sync.fetch_members_by_ids([str(row["id"]) for row in members])
-            }
-            remote_winner_rows = []
-            filtered_members = []
-            for row in members:
-                remote_row = remote_members.get(str(row["id"]))
-                if remote_row is not None and self._remote_wins(remote_row, row):
-                    remote_winner_rows.append(remote_row)
-                    continue
-                filtered_members.append(row)
-            if remote_winner_rows:
-                self._upsert_members_from_remote(remote_winner_rows)
-            members = filtered_members
-        if hasattr(supabase_sync, "fetch_score_entries_by_ids") and scores:
-            remote_scores = {
-                str(row["id"]): row
-                for row in supabase_sync.fetch_score_entries_by_ids([str(row["id"]) for row in scores])
-            }
-            remote_winner_rows = []
-            filtered_scores = []
-            for row in scores:
-                remote_row = remote_scores.get(str(row["id"]))
-                if remote_row is not None and self._remote_wins(remote_row, row):
-                    remote_winner_rows.append(remote_row)
-                    continue
-                filtered_scores.append(row)
-            if remote_winner_rows:
-                self._upsert_scores_from_remote(remote_winner_rows)
-            scores = filtered_scores
         LOGGER.info(
             "Supabase push (%s): %d members, %d score_entries queued",
             mode, len(members), len(scores),

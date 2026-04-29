@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Callable
 
 from ..constants import META_SHEET, NAME_HEADER, TOTAL_HEADER, WORKBOOK_FILENAME_PREFIX
@@ -21,9 +21,10 @@ class LocalDataMigrationService:
         self._excel_exporter = excel_exporter
 
     def bootstrap_from_legacy_sources(self) -> None:
+        score_rows = self._score_rows_from_workbook()
         self._local_database.sync_members(self._legacy_members_provider())
-        self._local_database.replace_score_entries_from_snapshot(self._score_rows_from_workbook())
-        cycle_start = self._workbook_cycle_start()
+        self._local_database.replace_score_entries_from_snapshot(score_rows)
+        cycle_start = self._score_rows_cycle_start(score_rows) or self._workbook_cycle_start()
         if cycle_start:
             self._local_database.set_sync_state("score_cycle_start_date", cycle_start)
 
@@ -34,16 +35,46 @@ class LocalDataMigrationService:
         self._excel_exporter.export_missing_dates(self._legacy_store)
         self.refresh_from_legacy_store()
 
+    @staticmethod
+    def _parse_score_header_date(header_text: str, year: int) -> date | None:
+        try:
+            return datetime.strptime(f"{year:04d}-{header_text}", "%Y-%m-%d").date()
+        except ValueError:
+            return None
+
+    def _score_header_date_map(self, workbook, used_columns: list[tuple[int, int]]) -> dict[int, str]:
+        score_sheet = self._legacy_store._score_sheet(workbook)
+        cycle_start = self._workbook_cycle_start()
+        if cycle_start:
+            year_hint = datetime.strptime(cycle_start, "%Y-%m-%d").year
+        else:
+            year_hint = datetime.now().year
+
+        result: dict[int, str] = {}
+        previous: date | None = None
+        for _, column_index in used_columns:
+            header_text = str(score_sheet.cell(1, column_index).value or "").strip()
+            if not self._legacy_store.score_sheet.is_date_header(header_text):
+                continue
+            current = self._parse_score_header_date(header_text, year_hint)
+            if current is None:
+                continue
+            while previous is not None and current <= previous:
+                current = date(current.year + 1, current.month, current.day)
+            result[column_index] = current.strftime("%Y-%m-%d")
+            previous = current
+        return result
+
     def _score_date_map_from_workbook(self, workbook) -> dict[int, str]:
         score_sheet = self._legacy_store._score_sheet(workbook)
-        meta_by_number: dict[int, str] = {}
+        meta_by_number: dict[int, list[str]] = {}
         for saved_date, column_name in read_sheet_meta(workbook, META_SHEET):
             column_name = str(column_name).strip()
             if not column_name.startswith("D"):
                 continue
             suffix = column_name[1:]
             if suffix.isdigit():
-                meta_by_number[int(suffix)] = str(saved_date).strip()
+                meta_by_number.setdefault(int(suffix), []).append(str(saved_date).strip())
 
         used_columns = [
             (number, col)
@@ -55,10 +86,16 @@ class LocalDataMigrationService:
 
         score_date_map: dict[int, str] = {}
         unresolved: list[tuple[int, int]] = []
+        header_date_map = self._score_header_date_map(workbook, used_columns)
         for number, column_index in used_columns:
-            saved_date = meta_by_number.get(number, "").strip()
-            if saved_date:
+            saved_dates = {item.strip() for item in meta_by_number.get(number, []) if item.strip()}
+            saved_date = next(iter(saved_dates)) if len(saved_dates) == 1 else ""
+            header_date = header_date_map.get(column_index, "")
+            header_text = str(score_sheet.cell(1, column_index).value or "").strip()
+            if saved_date and (not header_text or saved_date[5:] == header_text):
                 score_date_map[column_index] = saved_date
+            elif header_date:
+                score_date_map[column_index] = header_date
             else:
                 unresolved.append((number, column_index))
 
@@ -115,3 +152,16 @@ class LocalDataMigrationService:
             except ValueError:
                 pass
         return ""
+
+    @staticmethod
+    def _score_rows_cycle_start(rows: list[dict[str, object]]) -> str:
+        dates = []
+        for row in rows:
+            raw_date = str(row.get("score_date", "")).strip()
+            if not raw_date:
+                continue
+            try:
+                dates.append(datetime.strptime(raw_date, "%Y-%m-%d").date())
+            except ValueError:
+                continue
+        return min(dates).strftime("%Y-%m-%d") if dates else ""

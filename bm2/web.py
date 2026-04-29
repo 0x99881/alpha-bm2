@@ -181,44 +181,20 @@ def register_routes(app, store: ExcelStore) -> None:
         if validation_error is not None:
             flash(validation_error, 'error')
             return _render_score_entry(selected_date=selected_date, entries=entries)
-        overwrite_step = _get_overwrite_step_from_form()
-        if store.has_existing_score_date(selected_date) and overwrite_step < 2:
-            prompt_message = (
-                MESSAGES['score_overwrite_stage_one']
-                if overwrite_step == 0
-                else MESSAGES['score_overwrite_stage_two']
-            )
-            return _render_score_entry(
-                selected_date=selected_date,
-                entries=entries,
-                overwrite_prompt={
-                    'message': prompt_message,
-                    'next_step': overwrite_step + 1,
-                    'confirm_label': MESSAGES['score_overwrite_confirm'],
-                },
-            )
         submission = process_score_submission(store, active_members, request.form, selected_date)
         if not submission['ok']:
             flash(submission['error'], 'error')
             return _render_score_entry(selected_date=selected_date, entries=submission['entries'])
-        sync_result = None
+        excel_result = {}
         if not read_only_mode:
-            sync_result = store.after_local_score_submission(submission['result'])
+            excel_result = store.write_entries_to_excel(submission['result']['saved_date'], submission['entries'])
+            if not excel_result.get("ok"):
+                if excel_result.get("message"):
+                    flash(excel_result["message"], 'error')
+                return _render_score_entry(selected_date=selected_date, entries=submission['entries'])
         _flash_save_score_result(selected_date, submission['result'])
         if not read_only_mode:
-            if sync_result and sync_result.get("ok"):
-                push = sync_result.get("push", {})
-                flash(
-                    MESSAGES['remote_auto_sync_done'].format(
-                        members=push.get("members", 0),
-                        score_entries=push.get("score_entries", 0),
-                    ),
-                    'success',
-                )
-            elif sync_result and not sync_result.get("configured"):
-                flash(MESSAGES['remote_auto_sync_not_configured'], 'warning')
-            else:
-                flash(MESSAGES['remote_auto_sync_failed'], 'warning')
+            _flash_remote_sync_needed()
         return redirect(url_for('score_overview' if read_only_mode else 'score_entry'))
 
     @app.post('/scores/refresh-from-excel')
@@ -360,12 +336,58 @@ def register_routes(app, store: ExcelStore) -> None:
             abort(403)
         if not _ensure_supabase_configured():
             return _redirect_back_to_score_entry()
-        result = store.supabase_sync()
-        pull, push = result['pull'], result['push']
+        try:
+            push = store.supabase_push()
+        except Exception:
+            app.logger.exception("Supabase push failed")
+            flash(MESSAGES['supabase_upload_failed'], 'error')
+            return _redirect_back_to_score_entry()
         flash(
-            MESSAGES['supabase_sync_scores_done'].format(
-                pull_score_entries=pull["score_entries"],
+            MESSAGES['supabase_upload_done'].format(
+                push_members=push["members"],
                 push_score_entries=push["score_entries"],
+            ),
+            'success',
+        )
+        return _redirect_back_to_score_entry()
+
+    @app.post('/supabase-push')
+    def supabase_push_now():
+        if read_only_mode:
+            abort(403)
+        if not _ensure_supabase_configured():
+            return _redirect_back_to_score_entry()
+        try:
+            push = store.supabase_push()
+        except Exception:
+            app.logger.exception("Supabase push failed")
+            flash(MESSAGES['supabase_upload_failed'], 'error')
+            return _redirect_back_to_score_entry()
+        flash(
+            MESSAGES['supabase_upload_done'].format(
+                push_members=push["members"],
+                push_score_entries=push["score_entries"],
+            ),
+            'success',
+        )
+        return _redirect_back_to_score_entry()
+
+    @app.post('/supabase-pull')
+    def supabase_pull_now():
+        if read_only_mode:
+            abort(403)
+        if not _ensure_supabase_configured():
+            return _redirect_back_to_score_entry()
+        try:
+            pull = store.supabase_pull()
+        except Exception:
+            app.logger.exception("Supabase pull failed")
+            flash(MESSAGES['supabase_download_failed'], 'error')
+            return _redirect_back_to_score_entry()
+        flash(
+            MESSAGES['supabase_download_done'].format(
+                pull_members=pull["members"],
+                pull_score_entries=pull["score_entries"],
             ),
             'success',
         )

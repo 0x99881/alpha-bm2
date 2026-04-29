@@ -31,8 +31,9 @@ if /i "%~1"=="--check" (
 )
 
 for /f "tokens=5" %%p in ('netstat -ano ^| findstr /r /c:":5000 .*LISTENING"') do (
-    start "" %APP_URL%
-    exit /b 0
+    echo Stopping old local server on port 5000...
+    taskkill /PID %%p /F >nul 2>nul
+    timeout /t 1 /nobreak >nul
 )
 
 start "" powershell -NoProfile -WindowStyle Hidden -Command "Start-Sleep -Seconds 2; Start-Process '%APP_URL%'"

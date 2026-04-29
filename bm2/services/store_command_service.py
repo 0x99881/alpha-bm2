@@ -3,6 +3,8 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 
+from ..ui_text import MESSAGES
+
 
 LOGGER = logging.getLogger(__name__)
 
@@ -40,7 +42,9 @@ class StoreCommandService:
 
     def save_scores_and_wear(self, date_text: str, entries: list[dict[str, str]]):
         if self._context._sqlite_writer is not None:
-            return self._context._sqlite_writer.save_scores_and_wear(date_text, entries)
+            result = self._context._sqlite_writer.save_scores_and_wear(date_text, entries)
+            result["excel"] = self._write_entries_to_excel_safely(date_text, entries)
+            return result
         raise RuntimeError("save_scores_and_wear called in read-only mode")
 
     def add_member(self, name: str, note: str = "") -> None:
@@ -75,22 +79,35 @@ class StoreCommandService:
 
     def after_local_score_submission(self, result: dict) -> dict[str, object]:
         saved_date = str(result.get("saved_date") or "").strip()
+        excel = result.get("excel") or {"ok": True, "message": None}
         if self._context.read_only or not saved_date:
-            return {"ok": False, "configured": False, "push": {"members": 0, "score_entries": 0}}
+            return {"ok": False, "configured": False, "push": {"members": 0, "score_entries": 0}, "excel": excel}
         if not self._context.sync_service.is_configured():
-            return {"ok": False, "configured": False, "push": {"members": 0, "score_entries": 0}}
+            return {"ok": False, "configured": False, "push": {"members": 0, "score_entries": 0}, "excel": excel}
+        return {"ok": True, "configured": True, "push": {"members": 0, "score_entries": 0}, "excel": excel}
+
+    def write_entries_to_excel(self, date_text: str, entries: list[dict[str, str]]) -> dict[str, object]:
+        return self._write_entries_to_excel_safely(date_text, entries)
+
+    def _write_entries_to_excel_safely(self, date_text: str, entries: list[dict[str, str]]) -> dict[str, object]:
+        if self._context.read_only:
+            return {"ok": True, "exported": 0, "message": None}
         try:
-            push = self._context.sync_service.push()
+            excel_result = self._context._writer.save_scores_and_wear(date_text, entries)
+        except (ValueError, PermissionError, OSError) as exc:
+            LOGGER.exception("Excel export failed after local submission")
+            return {"ok": False, "exported": 0, "message": str(exc)}
         except Exception:
-            LOGGER.exception("Supabase auto-push failed after local submission")
-            return {"ok": False, "configured": True, "push": {"members": 0, "score_entries": 0}}
-        return {"ok": True, "configured": True, "push": push}
+            LOGGER.exception("Excel export failed after local submission")
+            workbook_name = getattr(self._context.workbook_path, "name", "")
+            return {"ok": False, "exported": 0, "message": MESSAGES["excel_save_failed"].format(filename=workbook_name)}
+        return {"ok": True, "exported": 1, "message": None, "result": excel_result}
 
     def is_supabase_configured(self) -> bool:
         return self._context.sync_service.is_configured()
 
-    def supabase_push(self) -> dict[str, int]:
-        return self._context.sync_service.push()
+    def supabase_push(self, *, force_full: bool = True) -> dict[str, int]:
+        return self._context.sync_service.push(force_full=force_full)
 
     def supabase_pull(self) -> dict[str, int]:
         return self._context.sync_service.pull()

@@ -18,12 +18,8 @@ class ApplicationService:
 
     def _online_member_rows(self) -> list[dict]:
         if not self._supabase_client.is_configured():
-            return self._local_database.get_member_rows()
-        try:
-            rows = self._supabase_client.pull_members()
-        except Exception:
-            LOGGER.exception("Supabase member read failed; using local snapshot")
-            return self._local_database.get_member_rows()
+            raise RuntimeError("线上数据库未配置，不能读取线上成员数据。")
+        rows = self._supabase_client.pull_members()
         rows.sort(
             key=lambda item: (
                 int(item.get("deleted", 0) or 0),
@@ -35,12 +31,8 @@ class ApplicationService:
 
     def _online_score_rows(self) -> list[dict]:
         if not self._supabase_client.is_configured():
-            return self._local_database.get_score_rows()
-        try:
-            return self._supabase_client.pull_score_entries()
-        except Exception:
-            LOGGER.exception("Supabase score read failed; using local snapshot")
-            return self._local_database.get_score_rows()
+            raise RuntimeError("线上数据库未配置，不能读取线上积分数据。")
+        return self._supabase_client.pull_score_entries()
 
     def online_score_rows_for_date(self, score_date: str) -> list[dict]:
         return [

@@ -17,7 +17,7 @@ from .domain.rules.daily_entry import IncompleteBalanceInput, resolve_wear_value
 from .excel.daily_target import DailyTarget
 from .excel.header_locator import find_column
 from .excel.member_rows import ensure_member_rows_with_map, sort_named_rows, sort_rows_by_name
-from .excel.sheet_metadata import append_sheet_meta
+from .excel.sheet_metadata import append_sheet_meta, read_sheet_meta
 from .excel.value_normalizer import normalize_expense, normalize_income, normalize_wear, parse_decimal
 from .excel.value_sheet_spec import get_value_sheet_spec
 from .ui_text import MESSAGES
@@ -179,6 +179,57 @@ class StoreWriterFacade:
     def _score_sheet_has_date(self, sheet, mmdd_text: str) -> bool:
         return self.score_sheet.has_date(sheet, mmdd_text)
 
+    def _remove_meta_rows_for_date(self, workbook, sheet_name: str, date_text: str) -> None:
+        if sheet_name not in workbook.sheetnames:
+            return
+        sheet = workbook[sheet_name]
+        for row in range(sheet.max_row, 1, -1):
+            if str(sheet.cell(row, 1).value or '').strip() == date_text:
+                sheet.delete_rows(row, 1)
+
+    def _score_column_numbers_for_date(self, workbook, date_text: str) -> set[int]:
+        numbers: set[int] = set()
+        for saved_date, column_name in read_sheet_meta(workbook, META_SHEET):
+            if str(saved_date).strip() != date_text:
+                continue
+            raw = str(column_name).strip()
+            if raw.startswith('D') and raw[1:].isdigit():
+                numbers.add(int(raw[1:]))
+        return numbers
+
+    def _remove_existing_daily_columns(self, workbook, date_text: str) -> None:
+        mmdd_text = date_text[5:]
+        day_code = mmdd_text.replace('-', '')
+
+        score_sheet = self._score_sheet(workbook)
+        score_numbers = self._score_column_numbers_for_date(workbook, date_text)
+        score_columns = self._score_date_columns(score_sheet)
+        for number, column_index in sorted(score_columns, key=lambda item: item[1], reverse=True):
+            header_text = str(score_sheet.cell(1, column_index).value or '').strip()
+            if number in score_numbers or header_text == mmdd_text:
+                score_sheet.delete_cols(column_index, 1)
+        self._remove_meta_rows_for_date(workbook, META_SHEET, date_text)
+
+        for sheet_type in ('wear', 'income', 'expense'):
+            helpers = self._value_sheet_helpers(sheet_type)
+            sheet = helpers.sheet_getter(workbook)
+            meta_sheet = helpers.spec['meta_sheet']
+            matching_headers = {
+                str(column_name).strip()
+                for saved_date, column_name in read_sheet_meta(workbook, meta_sheet)
+                if str(saved_date).strip() == date_text
+            }
+            columns_to_delete = []
+            for _, column_index in helpers.columns_getter(sheet):
+                header = sheet.cell(1, column_index).value
+                header_text = str(header or '').strip()
+                normalized_header = header_text.zfill(4) if header_text.isdigit() else header_text
+                if header_text in matching_headers or normalized_header == day_code:
+                    columns_to_delete.append(column_index)
+            for column_index in sorted(columns_to_delete, reverse=True):
+                sheet.delete_cols(column_index, 1)
+            self._remove_meta_rows_for_date(workbook, meta_sheet, date_text)
+
     def _parse_saved_date(self, date_text: str):
         return datetime.strptime(str(date_text).strip(), '%Y-%m-%d').date()
 
@@ -206,7 +257,8 @@ class StoreWriterFacade:
             self._ensure_wear_sheet_structure(workbook)
             self._ensure_income_sheet_structure(workbook)
             self._ensure_expense_sheet_structure(workbook)
-            effective_date_text = self._resolve_unique_daily_date(workbook, date_text)
+            effective_date_text = str(date_text).strip()
+            self._remove_existing_daily_columns(workbook, effective_date_text)
             targets = self._prepare_daily_targets(workbook, effective_date_text)
             row_maps = self._prepare_daily_row_maps(targets)
 
