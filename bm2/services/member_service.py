@@ -18,6 +18,9 @@ class MemberService:
     def get_active_members(self) -> list[dict[str, str]]:
         return [item for item in self._members_provider() if item['status'] == ENABLED]
 
+    def get_members(self) -> list[dict[str, str]]:
+        return self._members_provider()
+
     def _run_after_change(self) -> None:
         if callable(self._after_change):
             self._after_change()

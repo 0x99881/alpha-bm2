@@ -17,7 +17,6 @@ from ..constants import (
     INITIAL_SCORE_HEADER_COUNT,
     NAME_HEADER,
     OLD_SCORE_COLUMN_FILL,
-    OLD_SCORE_PREFIX,
     PROFIT_HEADER,
     SCORE_SHEET,
     SCORE_SHEET_ALIASES,
@@ -56,33 +55,17 @@ class ScoreSheet:
         score_sheet.cell(1, INITIAL_SCORE_HEADER_COUNT + 1, TOTAL_HEADER)
         score_sheet.cell(1, INITIAL_SCORE_HEADER_COUNT + 2, NAME_HEADER)
 
-    def parse_legacy_header(self, value: Any) -> int | None:
-        if not isinstance(value, str):
-            return None
-        normalized = value.replace(f"{OLD_SCORE_PREFIX}-", "").replace(OLD_SCORE_PREFIX, "")
-        if not normalized.startswith("D"):
-            return None
-        suffix = normalized[1:]
-        return int(suffix) if suffix.isdigit() else None
-
     def is_date_header(self, value: Any) -> bool:
         return isinstance(value, str) and re.fullmatch(r"\d{2}-\d{2}", value) is not None
 
     def date_columns(self, sheet) -> list[tuple[int, int]]:
         total_col = find_column(sheet, TOTAL_HEADER)
-        if total_col is not None:
-            result = []
-            for number, col in enumerate(range(1, total_col), start=1):
-                if sheet.cell(1, col).value is not None:
-                    result.append((number, col))
-            return result
-
         result = []
-        for col in range(1, sheet.max_column + 1):
-            number = self.parse_legacy_header(sheet.cell(1, col).value)
-            if number is not None:
+        if total_col is None:
+            return result
+        for number, col in enumerate(range(1, total_col), start=1):
+            if sheet.cell(1, col).value is not None:
                 result.append((number, col))
-        result.sort(key=lambda item: item[0])
         return result
 
     def ensure_tail_columns(self, sheet) -> tuple[int, int, int, bool]:
@@ -118,30 +101,6 @@ class ScoreSheet:
         changed = True
         return insert_at, insert_at + 1, insert_at + 2, changed
 
-    def repair_headers(self, sheet, total_col: int, profit_col: int) -> bool:
-        score_columns = [col for _, col in self.date_columns(sheet)]
-        if not score_columns:
-            return False
-        headers = [sheet.cell(1, col).value for col in score_columns]
-        has_legacy_header = any(self.parse_legacy_header(value) is not None for value in headers)
-        if not has_legacy_header:
-            return False
-
-        end_date = datetime.now().date()
-        expected_headers = [
-            (end_date - timedelta(days=(len(score_columns) - index - 1))).strftime('%m-%d')
-            for index in range(len(score_columns))
-        ]
-        if headers == expected_headers:
-            return False
-
-        for header_value, col in zip(expected_headers, score_columns):
-            sheet.cell(1, col, header_value)
-        sheet.cell(1, total_col, TOTAL_HEADER)
-        sheet.cell(1, profit_col, PROFIT_HEADER)
-        sheet.cell(1, profit_col + 1, NAME_HEADER)
-        return True
-
     def ensure_structure(self, workbook) -> bool:
         sheet = self.sheet(workbook)
         changed = False
@@ -159,7 +118,6 @@ class ScoreSheet:
 
         total_col, profit_col, name_col, tail_changed = self.ensure_tail_columns(sheet)
         changed = changed or tail_changed
-        changed = self.repair_headers(sheet, total_col, profit_col) or changed
 
         changed = ensure_member_rows(
             sheet,

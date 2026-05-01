@@ -20,6 +20,7 @@ from ..constants import (
     WEAR_NAME_HEADER,
     WINDOW_SIZE,
 )
+from .number_utils import safe_float, sum_sheet_row_values
 from .profit_recalculator import recalculate_score_profits
 
 
@@ -55,9 +56,6 @@ class StoreStructureMixin:
     def _ensure_score_sheet_structure(self, workbook) -> bool:
         return self.score_sheet.ensure_structure(workbook)
 
-    def _repair_score_headers(self, sheet, total_col: int, profit_col: int) -> bool:
-        return self.score_sheet.repair_headers(sheet, total_col, profit_col)
-
     def _recalculate_score_profits(self, workbook, score_sheet, profit_col: int) -> None:
         recalculate_score_profits(workbook, score_sheet, profit_col, self.income_sheet, self.wear_sheet)
 
@@ -76,14 +74,8 @@ class StoreStructureMixin:
     def _ensure_expense_sheet_structure(self, workbook) -> bool:
         return self.expense_sheet.ensure_structure(workbook)
 
-    def _safe_float(self, value) -> float:
-        try:
-            return float(value or 0)
-        except (TypeError, ValueError):
-            return 0.0
-
     def _sum_sheet_row_values(self, sheet, row: int, columns: list[int]) -> float:
-        return sum(self._safe_float(sheet.cell(row, col).value) for col in columns)
+        return sum_sheet_row_values(sheet, row, columns)
 
     def _sort_profit_rows(self, sheet, *, name_col: int, profit_col: int) -> None:
         rows = []
@@ -91,7 +83,7 @@ class StoreStructureMixin:
             values = [sheet.cell(row, col).value for col in range(1, sheet.max_column + 1)]
             if values[name_col - 1]:
                 rows.append(values)
-        rows.sort(key=lambda row: (-self._safe_float(row[profit_col - 1]), str(row[name_col - 1])))
+        rows.sort(key=lambda row: (-safe_float(row[profit_col - 1]), str(row[name_col - 1])))
         for row_index, values in enumerate(rows, start=2):
             for col_index, value in enumerate(values, start=1):
                 sheet.cell(row_index, col_index, value)
@@ -191,20 +183,6 @@ class StoreStructureMixin:
 
     def _append_value_meta(self, workbook, sheet_type: str, date_text: str, col_name: str) -> None:
         workbook[self._value_sheet_spec(sheet_type)['meta_sheet']].append([date_text, col_name])
-
-    def _read_sheet_meta(self, workbook, sheet_name: str) -> list[tuple[str, str]]:
-        if sheet_name not in workbook.sheetnames:
-            return []
-        rows = []
-        for row in workbook[sheet_name].iter_rows(min_row=2, values_only=True):
-            if row[0] and row[1]:
-                rows.append((str(row[0]), str(row[1])))
-        return rows
-
-    def _normalize_wear_date_text(self, value: str, year: int) -> str:
-        if len(value) == 4 and value.isdigit():
-            return f"{year:04d}-{value[:2]}-{value[2:]}"
-        return value
 
     def _recalculate_totals(self, sheet, total_col: int) -> None:
         self.score_sheet.recalculate_totals(sheet, total_col)

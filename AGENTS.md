@@ -38,23 +38,16 @@ system_config.json
 
 ## Layer Responsibilities
 
-`bm2/web.py`
+`bm2/web*.py`
 
 - HTTP request parsing.
-- Calls store facade or service methods.
+- Calls explicit application or service methods.
 - Returns response.
 - Must not import or directly operate SQLite, Supabase SDK, Excel, or JSON sync files.
 
-`bm2/store.py`
-
-- Thin facade only.
-- Keeps historical `ExcelStore` compatibility.
-- Must stay under 120 lines.
-- Must not import repositories, Excel modules, Supabase SDK, or SQLite internals.
-
 `bm2/services/store_application.py`
 
-- Thin coordinator only.
+- Explicit application entry and thin coordinator.
 - Must stay under 100 lines.
 - Delegates to focused services.
 - Must not become another business center.
@@ -94,7 +87,7 @@ system_config.json
 ## Current Application Services
 
 - `StoreBootstrapService`: app startup, object wiring, startup migration.
-- `StoreCommandService`: write commands, sync commands, member commands.
+- `StoreCommandService`: configuration, import/export, and sync commands.
 - `StoreQueryService`: read/query methods.
 - `ExcelExportService`: SQLite-to-Excel export.
 - `SyncService`: SQLite/Supabase push, pull, sync.
@@ -111,7 +104,7 @@ Do not:
 - Add a new wrapper just to hide old logic.
 - Reconnect Excel as the main database.
 - Reconnect JSON/blob/cloud sync.
-- Put business logic back into `store.py`.
+- Restore `bm2/store.py` or the old `ExcelStore` entry point.
 - Put repository logic into services.
 - Put service logic into repositories.
 - Restore quarantined or retired files into active runtime.

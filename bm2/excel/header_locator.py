@@ -23,3 +23,13 @@ def parse_numeric_header(value: Any) -> int | None:
     if not value.isdigit():
         return None
     return int(value)
+
+
+def numeric_header_columns(sheet) -> list[tuple[int, int]]:
+    result = []
+    for col in range(1, sheet.max_column + 1):
+        number = parse_numeric_header(sheet.cell(1, col).value)
+        if number is not None:
+            result.append((number, col))
+    result.sort(key=lambda item: item[0])
+    return result

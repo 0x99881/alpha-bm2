@@ -13,6 +13,6 @@ scripts
 *.db
 *.db-shm
 *.db-wal
-BM2记录_*.xlsx
+BM2*.xlsx
 ~$*.xlsx
 system_config.json

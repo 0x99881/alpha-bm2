@@ -1,0 +1,155 @@
+from __future__ import annotations
+
+from datetime import datetime
+import os
+import subprocess
+import sys
+from typing import Any, Callable
+
+from flask import abort, flash, jsonify, redirect, render_template, request, url_for
+
+from .ui_text import MESSAGES
+
+
+def register_score_routes(
+    app,
+    store,
+    *,
+    read_only_mode: bool,
+    flash_remote_sync_needed: Callable[[], None],
+) -> None:
+    def _build_score_page_members(entries: list[dict[str, str]] | None = None) -> list[dict[str, str]]:
+        base_members = store.get_online_active_members() if read_only_mode else store.get_active_members()
+        active_members = [dict(member) for member in base_members]
+        entry_map = {item["name"]: item for item in (entries or [])}
+        for member in active_members:
+            saved_entry = entry_map.get(member["name"], {})
+            member["score"] = saved_entry.get("score", "")
+            member["before_balance"] = saved_entry.get("before_balance", "")
+            member["after_balance"] = saved_entry.get("after_balance", "")
+            member["manual_wear"] = saved_entry.get("manual_wear", "")
+            member["income"] = saved_entry.get("income", "")
+            member["other_expense"] = saved_entry.get("other_expense", "")
+        return active_members
+
+    def _render_score_entry(
+        *,
+        selected_date: str,
+        entries: list[dict[str, str]] | None = None,
+        overwrite_prompt: dict[str, Any] | None = None,
+    ):
+        template_name = "mobile_scores.html" if read_only_mode else "scores.html"
+        return render_template(
+            template_name,
+            active_members=_build_score_page_members(entries),
+            score_summary=store.get_online_score_summary() if read_only_mode else store.get_score_summary(),
+            selected_date=selected_date,
+            overwrite_prompt=overwrite_prompt,
+        )
+
+    def _get_requested_score_date() -> str:
+        raw_date = request.args.get("date", "").strip()
+        if raw_date:
+            return raw_date
+        return store.get_online_next_score_date() if read_only_mode else store.get_next_score_date()
+
+    def _get_selected_date_from_form() -> str:
+        return request.form.get("date", "").strip() or datetime.now().strftime("%Y-%m-%d")
+
+    def _flash_save_score_result(selected_date: str, result: dict[str, Any]) -> None:
+        if result["saved_date"] != selected_date:
+            flash(MESSAGES["score_saved_shifted"].format(selected_date=selected_date, **result), "success")
+        else:
+            flash(MESSAGES["score_saved"].format(**result), "success")
+
+    @app.route("/")
+    def index():
+        return redirect(url_for("score_entry"))
+
+    @app.route("/scores")
+    def score_entry():
+        return _render_score_entry(selected_date=_get_requested_score_date())
+
+    @app.route("/score-overview")
+    def score_overview():
+        if read_only_mode:
+            data = store.get_mobile_overview()
+            return render_template(
+                "mobile_score_overview.html",
+                score_sheet=data["score_sheet_view"],
+                score_summary=data["score_summary"],
+            )
+        return render_template(
+            "score_overview.html",
+            score_sheet=store.get_score_sheet_view(),
+            score_summary=store.get_score_summary(),
+        )
+
+    @app.route("/api/score-overview")
+    def score_overview_api():
+        if not read_only_mode:
+            data = {
+                "score_sheet_view": store.get_score_sheet_view(),
+                "score_summary": store.get_score_summary(),
+                "next_score_date": store.get_next_score_date(),
+                "active_members": store.get_active_members(),
+            }
+        else:
+            data = store.get_mobile_overview()
+        return jsonify(data)
+
+    @app.post("/scores/open-excel")
+    def open_excel_file():
+        if read_only_mode:
+            abort(403)
+        workbook_path = store.workbook_path
+        try:
+            if os.name == "nt" and hasattr(os, "startfile"):
+                os.startfile(workbook_path)
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", str(workbook_path)])
+            else:
+                subprocess.Popen(["xdg-open", str(workbook_path)])
+            flash(MESSAGES["excel_opened"].format(filename=workbook_path.name), "success")
+        except OSError:
+            app.logger.exception("Failed to open workbook: %s", workbook_path)
+            flash(MESSAGES["excel_open_failed"].format(filename=workbook_path.name), "error")
+        return redirect(url_for("score_entry"))
+
+    @app.post("/scores/save")
+    def save_scores():
+        selected_date = _get_selected_date_from_form()
+        active_members = store.get_online_active_members() if read_only_mode else store.get_active_members()
+        submission = store.daily_entry_service.process_submission(active_members, request.form, selected_date)
+        if not submission["ok"]:
+            flash(submission["error"], "error")
+            return _render_score_entry(selected_date=selected_date, entries=submission["entries"])
+        _flash_save_score_result(selected_date, submission["result"])
+        if not read_only_mode:
+            flash_remote_sync_needed()
+        return redirect(url_for("score_overview" if read_only_mode else "score_entry"))
+
+    @app.post("/scores/refresh-from-excel")
+    def refresh_from_excel():
+        if read_only_mode:
+            abort(403)
+        result = store.refresh_local_database()
+        if result.get("changed"):
+            flash(MESSAGES["excel_refresh_changed"], "warning")
+        else:
+            flash(MESSAGES["excel_refresh_unchanged"], "success")
+        return redirect(url_for("score_entry"))
+
+    @app.post("/cycles/new")
+    def create_new_cycle():
+        if read_only_mode:
+            abort(403)
+        date_text = request.form.get("start_date", "").strip()
+        try:
+            new_filename = store.create_new_cycle(date_text)
+            flash(MESSAGES["new_cycle_created"].format(filename=new_filename), "success")
+            flash_remote_sync_needed()
+            return redirect(url_for("score_entry", date=date_text))
+        except ValueError as exc:
+            flash(str(exc), "error")
+        return _render_score_entry(selected_date=date_text or store.get_next_score_date())

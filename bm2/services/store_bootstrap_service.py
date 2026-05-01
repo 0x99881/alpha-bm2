@@ -4,18 +4,18 @@ from datetime import datetime
 from pathlib import Path
 
 from ..excel import ExpenseSheet, IncomeSheet, ScoreSheet, WearSheet
+from ..excel.workbook_reader import ExcelWorkbookReader
+from ..excel.workbook_writer import ExcelWorkbookWriter
 from ..excel.workbook_repository import WorkbookRepository
 from ..local_database import LocalDatabase
 from ..presenters import ProfitCalendarPresenter, ScorePresenter, WearPresenter
 from ..repositories import ConfigRepository, SupabaseClient
 from ..sqlite_to_excel_exporter import SQLiteToExcelExporter
-from ..store_reader_facade import StoreReaderFacade
-from ..store_writer_facade import StoreWriterFacade
 from .application_service import ApplicationService
 from .daily_entry_service import DailyEntryService
 from .excel_export_service import ExcelExportService
 from .member_service import MemberService
-from .migration_service import LocalDataMigrationService
+from .excel_import_service import ExcelImportService
 from .sqlite_entry_writer import SQLiteEntryWriter
 from .store_command_service import StoreCommandService
 from .store_context import StoreContext
@@ -31,6 +31,8 @@ class StoreBootstrapService:
     def create_context(self, base_dir, *, read_only: bool = False) -> StoreContext:
         context = StoreContext()
         context.base_dir = Path(base_dir)
+        if not read_only:
+            context.base_dir.mkdir(parents=True, exist_ok=True)
         context.read_only = read_only
         context.bootstrap_service = self
         context.config_repository = ConfigRepository(context.base_dir / "system_config.json", read_only=read_only)
@@ -41,15 +43,15 @@ class StoreBootstrapService:
         context.wear_sheet = WearSheet(context)
         context.income_sheet = IncomeSheet(context)
         context.expense_sheet = ExpenseSheet(context)
-        context._reader = StoreReaderFacade(context)
-        context._writer = StoreWriterFacade(context)
+        context._reader = ExcelWorkbookReader(context)
+        context._writer = ExcelWorkbookWriter(context)
         context.query_service = StoreQueryService(context)
         context.supabase = SupabaseClient(context.base_dir)
         if read_only:
             context.local_db = None
             context.excel_exporter = None
             context.export_service = ExcelExportService(context)
-            context.migration_service = None
+            context.excel_import_service = None
             context.sync_service = SyncService(context.local_db, context.supabase)
             context.application_service = ApplicationService(
                 context.local_db,
@@ -63,14 +65,14 @@ class StoreBootstrapService:
             context.local_db = LocalDatabase(context.base_dir, read_only=read_only)
             context.excel_exporter = SQLiteToExcelExporter(context.local_db, context._writer)
             context.export_service = ExcelExportService(context)
-            context.migration_service = LocalDataMigrationService(
+            context.excel_import_service = ExcelImportService(
                 context.local_db,
                 context,
-                context.query_service.legacy_config_members,
+                context.query_service.config_members,
                 context.excel_exporter,
             )
-            context.migration_service.bootstrap_from_legacy_sources()
-            context.sync_service = SyncService(context.local_db, context.supabase, after_pull=context.migration_service.after_supabase_pull)
+            context.excel_import_service.bootstrap_from_excel_if_empty()
+            context.sync_service = SyncService(context.local_db, context.supabase, after_pull=context.excel_import_service.after_supabase_pull)
             context.application_service = self.create_online_application_service(context)
             context._sqlite_writer = SQLiteEntryWriter(context.local_db)
             entry_writer = context._sqlite_writer

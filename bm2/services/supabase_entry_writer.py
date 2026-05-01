@@ -4,26 +4,18 @@ from datetime import datetime
 from typing import Any
 
 from ..constants import WINDOW_SIZE
+from ..entry_helpers import count_wear_entries, member_id, score_entry_id
 from ..source_metadata import parse_source_profit, with_source_profit
 
 
 class SupabaseEntryWriter:
     """Entry writer used by the deployed/mobile app.
 
-    Online submissions go directly to Supabase; the legacy JSON blob path is
-    intentionally bypassed.
+    Online submissions go directly to Supabase.
     """
 
     def __init__(self, supabase_sync) -> None:
         self._supabase = supabase_sync
-
-    @staticmethod
-    def _member_id(name: str) -> str:
-        return f"member:{name.strip()}"
-
-    @staticmethod
-    def _score_entry_id(member_name: str, score_date: str) -> str:
-        return f"score:{score_date}:{member_name.strip()}"
 
     @staticmethod
     def _now_text() -> str:
@@ -33,17 +25,6 @@ class SupabaseEntryWriter:
     def _score_value(entry: dict[str, str]) -> int:
         raw_value = str(entry.get("score", "") or "0").strip()
         return int(raw_value or 0)
-
-    @staticmethod
-    def _count_wear_entries(entries: list[dict[str, str]]) -> int:
-        count = 0
-        for entry in entries:
-            has_manual = str(entry.get("manual_wear", "")).strip()
-            has_before = str(entry.get("before_balance", "")).strip()
-            has_after = str(entry.get("after_balance", "")).strip()
-            if has_manual or (has_before and has_after):
-                count += 1
-        return count
 
     def save_scores_and_wear(
         self,
@@ -56,7 +37,7 @@ class SupabaseEntryWriter:
         saved_date = datetime.strptime(date_text.strip(), "%Y-%m-%d").strftime("%Y-%m-%d")
         now_text = self._now_text()
         ids = [
-            self._score_entry_id(str(entry.get("name", "")).strip(), saved_date)
+            score_entry_id(str(entry.get("name", "")).strip(), saved_date)
             for entry in entries
             if str(entry.get("name", "")).strip()
         ]
@@ -73,14 +54,14 @@ class SupabaseEntryWriter:
             member_name = str(entry.get("name", "")).strip()
             if not member_name:
                 continue
-            row_id = self._score_entry_id(member_name, saved_date)
+            row_id = score_entry_id(member_name, saved_date)
             previous = existing.get(row_id) or {}
             previous_profit = parse_source_profit(previous.get("source", ""))
             source = "online" if previous_profit is None else with_source_profit("online", previous_profit)
             rows.append(
                 {
                     "id": row_id,
-                    "member_id": self._member_id(member_name),
+                    "member_id": member_id(member_name),
                     "member_name": member_name,
                     "score_date": saved_date,
                     "score": self._score_value(entry),
@@ -98,7 +79,7 @@ class SupabaseEntryWriter:
         return {
             "target_column": saved_date[5:],
             "wear_column": saved_date[5:].replace("-", ""),
-            "wear_rows_added": self._count_wear_entries(entries),
+            "wear_rows_added": count_wear_entries(entries),
             "window_size": WINDOW_SIZE,
             "saved_date": saved_date,
         }

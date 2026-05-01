@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from .header_locator import find_column
 from .member_rows import build_name_row_map
+from .number_utils import sum_sheet_row_values
 from .value_normalizer import normalize_income, normalize_wear
 from ..constants import INCOME_NAME_HEADER, NAME_HEADER, WEAR_NAME_HEADER
 
@@ -25,22 +26,11 @@ def recalculate_score_profits(workbook, score_sheet, profit_col: int, income_she
         if not member_name:
             continue
         income_total = normalize_income(
-            _sum_sheet_row_values(income_sheet, income_row_map[member_name], income_columns)
+            sum_sheet_row_values(income_sheet, income_row_map[member_name], income_columns)
             if member_name in income_row_map else 0
         )
         wear_total = normalize_wear(
-            _sum_sheet_row_values(wear_sheet, wear_row_map[member_name], wear_columns)
+            sum_sheet_row_values(wear_sheet, wear_row_map[member_name], wear_columns)
             if member_name in wear_row_map else 0
         )
         score_sheet.cell(row, profit_col, normalize_income(income_total - wear_total))
-
-
-def _sum_sheet_row_values(sheet, row: int, columns: list[int]) -> float:
-    return sum(_safe_float(sheet.cell(row, col).value) for col in columns)
-
-
-def _safe_float(value) -> float:
-    try:
-        return float(value or 0)
-    except (TypeError, ValueError):
-        return 0.0

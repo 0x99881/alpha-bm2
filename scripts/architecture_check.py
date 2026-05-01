@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-IGNORED_DIR_NAMES = {'.git', '.vercel'}
+IGNORED_DIR_NAMES = {'.git', '.vercel', '.pytest_cache', '.tmp_test_workspaces', '__pycache__'}
 
 
 def _is_ignored(path: Path) -> bool:
@@ -158,27 +158,32 @@ def check_services_boundaries() -> list[str]:
 
 def check_web_boundaries() -> list[str]:
     failures: list[str] = []
-    path = PROJECT_ROOT / 'bm2' / 'web.py'
-    if not path.exists():
-        return failures
-    imports = _python_imports(path)
+    web_paths = [
+        path for path in (PROJECT_ROOT / 'bm2').glob('web*.py')
+        if path.is_file() and not _is_ignored(path)
+    ]
     blocked_imports = ('sqlite3', 'openpyxl', 'supabase', 'json')
-    for imported in imports:
-        if imported in blocked_imports or any(imported.startswith(f'{item}.') for item in blocked_imports):
-            failures.append(f'bm2/web.py imports blocked dependency {imported}')
-    text = _read_text(path)
     blocked_calls = (
         r'\blocal_db\.',
         r'\bsupabase\.',
         r'\bstore\.supabase\b',
         r'\bSQLiteEntryWriter\b',
-        r'\bStoreWriterFacade\b',
+        r'\bExcelWorkbookWriter\b',
+        r'\bExcelWorkbookReader\b',
+        r'\bworkbook_repository\b',
         r'\bjson\.dump\b',
         r'\bjson\.load\b',
     )
-    for pattern in blocked_calls:
-        if re.search(pattern, text):
-            failures.append(f'bm2/web.py directly uses blocked data/write pattern: {pattern}')
+    for path in web_paths:
+        rel = path.relative_to(PROJECT_ROOT)
+        imports = _python_imports(path)
+        for imported in imports:
+            if imported in blocked_imports or any(imported.startswith(f'{item}.') for item in blocked_imports):
+                failures.append(f'{rel} imports blocked dependency {imported}')
+        text = _read_text(path)
+        for pattern in blocked_calls:
+            if re.search(pattern, text):
+                failures.append(f'{rel} directly uses blocked data/write pattern: {pattern}')
     return failures
 
 
@@ -204,18 +209,48 @@ def check_public_matches_static() -> list[str]:
 
 def check_retired_write_wrappers() -> list[str]:
     failures: list[str] = []
-    web_path = PROJECT_ROOT / 'bm2' / 'web.py'
-    if web_path.exists() and 'record_local_score_submission' in _read_text(web_path):
-        failures.append('bm2/web.py calls retired local score wrapper record_local_score_submission')
-    store_path = PROJECT_ROOT / 'bm2' / 'store.py'
-    if store_path.exists() and 'def record_local_score_submission' in _read_text(store_path):
-        failures.append('bm2/store.py defines retired local score wrapper record_local_score_submission')
+    for path in (PROJECT_ROOT / 'bm2').rglob('*.py'):
+        if _is_ignored(path):
+            continue
+        rel = path.relative_to(PROJECT_ROOT)
+        text = _read_text(path)
+        if 'record_local_score_submission' in text:
+            failures.append(f'{rel} references retired local score wrapper record_local_score_submission')
+        if 'write_entries_to_excel' in text:
+            failures.append(f'{rel} references retired score-save Excel side effect write_entries_to_excel')
+        if 'process_score_submission' in text:
+            failures.append(f'{rel} references retired score_service wrapper process_score_submission')
     member_service = PROJECT_ROOT / 'bm2' / 'services' / 'member_service.py'
     if member_service.exists():
         text = _read_text(member_service)
         for marker in ('sync_members_to_workbook', 'delete_member_from_workbook'):
             if marker in text:
                 failures.append(f'bm2/services/member_service.py still references Excel member write callback {marker}')
+    return failures
+
+
+def check_retired_application_entries() -> list[str]:
+    failures: list[str] = []
+    retired_files = (
+        PROJECT_ROOT / 'bm2' / 'store.py',
+        PROJECT_ROOT / 'bm2' / 'services' / 'score_service.py',
+        PROJECT_ROOT / 'bm2' / 'store_reader_facade.py',
+        PROJECT_ROOT / 'bm2' / 'store_writer_facade.py',
+    )
+    for path in retired_files:
+        if path.exists():
+            failures.append(f'{path.relative_to(PROJECT_ROOT)} is retired and must not return')
+    return failures
+
+
+def check_magic_forwarding_removed() -> list[str]:
+    failures: list[str] = []
+    for path in (PROJECT_ROOT / 'bm2').rglob('*.py'):
+        if _is_ignored(path):
+            continue
+        text = _read_text(path)
+        if '__getattr__' in text:
+            failures.append(f'{path.relative_to(PROJECT_ROOT)} uses __getattr__ magic forwarding')
     return failures
 
 
@@ -261,40 +296,11 @@ def check_local_database_is_composition_entry() -> list[str]:
     return failures
 
 
-def check_store_is_thin_facade() -> list[str]:
+def check_store_facade_removed() -> list[str]:
     failures: list[str] = []
     path = PROJECT_ROOT / 'bm2' / 'store.py'
-    if not path.exists():
-        return failures
-    text = _read_text(path)
-    lines = text.splitlines()
-    if len(lines) >= 120:
-        failures.append(f'bm2/store.py has {len(lines)} lines; store.py must stay under 120 lines')
-    forbidden_imports = (
-        'bm2.repositories',
-        'bm2.excel',
-        'bm2.local_database',
-        'bm2.sqlite_to_excel_exporter',
-        'supabase',
-        'openpyxl',
-    )
-    for imported in _python_imports(path):
-        if imported in forbidden_imports or any(imported.startswith(f'{item}.') for item in forbidden_imports):
-            failures.append(f'bm2/store.py imports forbidden active dependency {imported}')
-    forbidden_text = (
-        'ConfigRepository',
-        'SupabaseClient',
-        'LocalDatabase',
-        'WorkbookRepository',
-        'SQLiteToExcelExporter',
-        'StoreWriterFacade',
-        'StoreReaderFacade',
-        'local_db.',
-        'supabase.',
-    )
-    for marker in forbidden_text:
-        if marker in text:
-            failures.append(f'bm2/store.py contains forbidden facade marker: {marker}')
+    if path.exists():
+        failures.append('bm2/store.py is retired; use bm2/services/store_application.py')
     return failures
 
 
@@ -324,8 +330,8 @@ def check_store_application_is_thin_coordinator() -> list[str]:
         'LocalDatabase',
         'WorkbookRepository',
         'SQLiteToExcelExporter',
-        'StoreWriterFacade',
-        'StoreReaderFacade',
+        'ExcelWorkbookWriter',
+        'ExcelWorkbookReader',
         'local_db.',
         'supabase.',
     )
@@ -361,7 +367,7 @@ def check_excel_boundary() -> list[str]:
     blocked_files.extend(
         path
         for path in (PROJECT_ROOT / 'bm2' / 'services').rglob('*.py')
-        if path.name != 'migration_service.py'
+        if path.name != 'excel_import_service.py'
     )
     patterns = (
         r'\bopenpyxl\b',
@@ -439,9 +445,11 @@ def run_checks() -> list[str]:
     failures.extend(check_public_matches_static())
     failures.extend(check_docs_deprecate_json_sync())
     failures.extend(check_retired_write_wrappers())
+    failures.extend(check_retired_application_entries())
+    failures.extend(check_magic_forwarding_removed())
     failures.extend(check_store_base_retired())
     failures.extend(check_local_database_is_composition_entry())
-    failures.extend(check_store_is_thin_facade())
+    failures.extend(check_store_facade_removed())
     failures.extend(check_store_application_is_thin_coordinator())
     failures.extend(check_supabase_sdk_boundary())
     failures.extend(check_excel_boundary())

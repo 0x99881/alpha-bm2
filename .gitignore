@@ -11,12 +11,15 @@ __pycache__/
 *.db-wal
 
 # Generated Excel / local state
+~$*.xlsx
 BM2记录_*.xlsx
 system_config.json
 
 # Local temp and quarantine
 .tmp/
 .tmp_*/
+.tmp_test_workspaces/
+pytest-cache-files-*/
 _legacy_quarantine_*/
 vendor/
 _vendor/

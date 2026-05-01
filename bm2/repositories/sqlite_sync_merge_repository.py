@@ -55,6 +55,23 @@ class SQLiteSyncMergeRepositoryMixin:
         finally:
             connection.close()
 
+    def _deleted_remote_score_rows(self, remote_rows: list[dict[str, Any]], local_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        local_ids = {str(row.get("id", "")).strip() for row in local_rows if str(row.get("id", "")).strip()}
+        now_text = self._now_text()
+        deleted_rows: list[dict[str, Any]] = []
+        for row in remote_rows:
+            row_id = str(row.get("id", "")).strip()
+            if not row_id or row_id in local_ids:
+                continue
+            if int(row.get("deleted", 0) or 0) != 0:
+                continue
+            deleted = dict(row)
+            deleted["deleted"] = 1
+            deleted["updated_at"] = now_text
+            deleted["version"] = int(row.get("version", 0) or 0) + 1
+            deleted_rows.append(deleted)
+        return deleted_rows
+
     @staticmethod
     def _attach_score_profit_sources(
         rows: list[dict[str, Any]],
@@ -100,9 +117,17 @@ class SQLiteSyncMergeRepositoryMixin:
         )
         m_count = supabase_sync.push_members(members)
         s_count = supabase_sync.push_score_entries(scores)
+        deleted_count = 0
+        if force_full:
+            remote_scores = supabase_sync.pull_score_entries()
+            deleted_scores = self._deleted_remote_score_rows(remote_scores, scores)
+            deleted_count = supabase_sync.mark_score_entries_deleted(deleted_scores)
         self._set_sync_state("supabase_last_push", self._now_text())
-        LOGGER.info("Supabase push done: sent %d members, %d score_entries", m_count, s_count)
-        return {"members": m_count, "score_entries": s_count}
+        LOGGER.info(
+            "Supabase push done: sent %d members, %d score_entries, deleted %d remote extras",
+            m_count, s_count, deleted_count,
+        )
+        return {"members": m_count, "score_entries": s_count, "score_entries_deleted": deleted_count}
 
     def pull_from_supabase(self, supabase_sync) -> dict[str, int]:
         """Pull rows from Supabase (since last pull), merge into local SQLite with LWW.

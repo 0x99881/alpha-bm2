@@ -77,6 +77,13 @@ class SupabaseClient:
         result = self._client().table("score_entries").select("*").in_("id", ids).execute()
         return result.data or []
 
+    def mark_score_entries_deleted(self, rows: list[dict[str, Any]]) -> int:
+        if not rows:
+            return 0
+        LOGGER.info("Supabase mark_score_entries_deleted: upserting %d rows", len(rows))
+        self._client().table("score_entries").upsert(rows, on_conflict="id").execute()
+        return len(rows)
+
     def pull_members(self, since_updated_at: str | None = None) -> list[dict[str, Any]]:
         LOGGER.info("Supabase pull_members: since=%s", since_updated_at or "beginning")
         query = self._client().table("members").select("*")

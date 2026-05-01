@@ -1,6 +1,6 @@
 # Data Flow And Architecture Boundary
 
-Last updated: 2026-04-28
+Last updated: 2026-05-01
 
 This document describes the current architecture after cleanup.
 
@@ -25,38 +25,31 @@ Excel, JSON files, cloud blobs, `bm2_cloud`, and old cloud sync wrappers are not
 | Online/mobile score submit | `web.py -> DailyEntryService -> SupabaseEntryWriter -> SupabaseClient` | Supabase |
 | Member add/update/delete | `web.py -> MemberService -> SQLite member repository` | SQLite |
 | Member reorder | `web.py -> MemberService -> SQLite member repository` | SQLite |
-| Supabase push/pull/sync | `Store facade -> StoreCommandService -> SyncService -> SQLite/Supabase` | SQLite/Supabase |
+| Supabase push/pull/sync | `web_sync_routes -> StoreCommandService -> SyncService -> SQLite/Supabase` | SQLite/Supabase |
 | Excel export | `ExcelExportService -> SQLiteToExcelExporter` | Excel file |
-| Legacy Excel import | `StoreBootstrapService -> LocalDataMigrationService -> SQLite` | SQLite |
+| Excel import | `StoreCommandService/StoreBootstrapService -> ExcelImportService -> SQLite` | SQLite |
 
 ## Active Read Paths
 
 | Action | Active path | Source |
 |---|---|---|
 | Local rankings | `web.py -> StoreQueryService -> SQLite report repository` | SQLite |
-| Online rankings | `web.py -> StoreQueryService -> ApplicationService -> SupabaseClient` | Supabase, fallback SQLite |
+| Online rankings | `web.py -> StoreQueryService -> ApplicationService -> SupabaseClient` | Supabase |
 | Score overview | `web.py -> StoreQueryService -> presenter` | SQLite/Supabase |
-| Wear/profit calendar | `web.py -> StoreQueryService -> reader/presenter` | Excel compatibility data |
+| Wear/profit calendar | `web.py -> StoreQueryService -> presenter` | SQLite local data |
 
 ## Layer Boundaries
 
 `web.py`:
 
 - Parses request input.
-- Calls store facade or service methods.
+- Calls explicit application/service methods.
 - Returns HTML, JSON, redirect, or error.
 - Must not directly import or operate SQLite, Supabase SDK, Excel, or JSON sync files.
 
-`bm2/store.py`:
-
-- Thin facade only.
-- Keeps the historical `ExcelStore` entry point.
-- Must stay under 120 lines.
-- Must not import repositories, Excel modules, Supabase SDK, or SQLite internals.
-
 `bm2/services/store_application.py`:
 
-- Thin coordinator only.
+- Explicit application entry and thin coordinator.
 - Must stay under 100 lines.
 - Delegates to focused services.
 - Must not directly operate repositories, Excel, Supabase SDK, or SQLite.
@@ -79,7 +72,7 @@ Application services:
 
 `excel/`:
 
-- Own workbook structure, import/export helpers, and Excel compatibility code.
+- Own workbook structure and import/export helpers.
 - Excel is not a primary business write path.
 
 `static/` and `public/`:
@@ -119,6 +112,6 @@ python scripts/smoke_check.py
 ## Remaining Known Debt
 
 - `local_database.py` still owns the SQLite connection entry point.
-- Some Excel compatibility helpers are still needed for historical import/export and wear/profit calendar views.
+- Excel helpers are still needed for historical import/export and generated workbook structure.
 
 These are known boundaries, not active old cloud-sync routes.

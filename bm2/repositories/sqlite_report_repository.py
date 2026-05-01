@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Any
 
+from ..constants import NAME_HEADER, PROFIT_HEADER, TOTAL_HEADER
+
 
 class SQLiteReportRepositoryMixin:
     def _cycle_start_date(self) -> datetime.date | None:
@@ -40,6 +42,27 @@ class SQLiteReportRepositoryMixin:
         if cycle_start is not None:
             return cycle_start.strftime("%Y-%m-%d")
         return fallback_date
+
+    def get_score_date_count(self) -> int:
+        connection = self._connect()
+        try:
+            cycle_start = self._cycle_start_date()
+            if cycle_start is None:
+                row = connection.execute(
+                    "SELECT COUNT(DISTINCT score_date) AS count FROM score_entries WHERE deleted = 0"
+                ).fetchone()
+            else:
+                row = connection.execute(
+                    """
+                    SELECT COUNT(DISTINCT score_date) AS count
+                    FROM score_entries
+                    WHERE deleted = 0 AND score_date >= ?
+                    """,
+                    (cycle_start.strftime("%Y-%m-%d"),),
+                ).fetchone()
+            return int(row["count"] or 0)
+        finally:
+            connection.close()
 
     def _window_dates(self) -> list[str]:
         rows = self._filtered_score_rows()
@@ -83,7 +106,7 @@ class SQLiteReportRepositoryMixin:
             for row in rows
         }
         headers = [score_date[5:] for score_date in window_dates]
-        headers.extend(["总积分", "累计盈亏", "姓名"])
+        headers.extend([TOTAL_HEADER, PROFIT_HEADER, NAME_HEADER])
         raw_rows: list[list[Any]] = []
         for member in self.get_active_member_rows():
             member_name = str(member["name"]).strip()

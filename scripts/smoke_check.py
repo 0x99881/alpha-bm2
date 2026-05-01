@@ -16,8 +16,8 @@ TEST_TEMP_ROOT = PROJECT_ROOT / ".tmp_test_workspaces"
 
 
 MODULES_TO_IMPORT = [
-    "bm2.store",
-    "bm2.services.score_service",
+    "bm2.services.store_application",
+    "bm2.services.daily_entry_service",
     "bm2.presenters.score_presenter",
     "bm2.presenters.wear_presenter",
     "bm2.presenters.profit_calendar_presenter",
@@ -40,26 +40,26 @@ class SmokeCheckRunner:
     def build_store(self):
         if self._store is not None:
             return self._store
-        from bm2.store import ExcelStore
+        from bm2.services.store_application import StoreApplication
 
-        temp_dir = PROJECT_ROOT / ".smoke_tmp"
+        temp_dir = TEST_TEMP_ROOT / "smoke"
         if temp_dir.exists():
             shutil.rmtree(temp_dir)
-        temp_dir.mkdir()
+        temp_dir.mkdir(parents=True)
         self._temp_root = temp_dir
-        self._store = ExcelStore(temp_dir)
+        self._store = StoreApplication(temp_dir)
         return self._store
 
     def check_module_imports(self) -> None:
         for module_name in MODULES_TO_IMPORT:
             self.check(f"import {module_name}", lambda module_name=module_name: importlib.import_module(module_name).__name__)
 
-    def check_excel_store_init(self) -> None:
+    def check_application_init(self) -> None:
         def _run():
             store = self.build_store()
             return f"workbook={store.workbook_path.name}"
 
-        self.check("ExcelStore 初始化", _run)
+        self.check("StoreApplication 初始化", _run)
 
     def check_store_read_entry(self) -> None:
         def _run():
@@ -84,19 +84,17 @@ class SmokeCheckRunner:
 
     def check_service_entry(self) -> None:
         def _run():
-            from bm2.services.score_service import process_score_submission
-
             store = self.build_store()
             active_members = store.get_active_members()
             selected_date = store.get_next_score_date()
-            result = process_score_submission(store, active_members, {}, selected_date)
+            result = store.daily_entry_service.process_submission(active_members, {}, selected_date)
             if "ok" not in result:
                 raise ValueError("missing ok flag")
             return f"ok={result['ok']}"
 
         self.check("service 入口", _run)
 
-    def check_store_entry(self) -> None:
+    def check_application_entry(self) -> None:
         def _run():
             store = self.build_store()
             summary = store.get_score_summary()
@@ -107,7 +105,7 @@ class SmokeCheckRunner:
                 raise ValueError("wear view missing rows")
             return f"rankings={len(summary['rankings'])}, wear_rows={wear_view['row_count']}"
 
-        self.check("store 门面入口", _run)
+        self.check("application 入口", _run)
 
     def check_static_assets(self) -> None:
         def _run():
@@ -126,13 +124,13 @@ class SmokeCheckRunner:
         def _run():
             from flask import Flask
 
-            from bm2.store import ExcelStore
+            from bm2.services.store_application import StoreApplication
             from bm2.web import register_routes
 
-            temp_dir = PROJECT_ROOT / ".smoke_route_tmp"
+            temp_dir = TEST_TEMP_ROOT / "routes"
             if temp_dir.exists():
                 shutil.rmtree(temp_dir)
-            temp_dir.mkdir()
+            temp_dir.mkdir(parents=True)
             try:
                 app = Flask(
                     __name__,
@@ -140,7 +138,7 @@ class SmokeCheckRunner:
                     static_folder=str(PROJECT_ROOT / "static"),
                 )
                 app.secret_key = "smoke"
-                register_routes(app, ExcelStore(temp_dir))
+                register_routes(app, StoreApplication(temp_dir))
                 client = app.test_client()
                 routes = ["/scores", "/score-overview", "/wear", "/profit-calendar", "/members"]
                 failures = []
@@ -170,11 +168,11 @@ class SmokeCheckRunner:
     def run(self) -> int:
         try:
             self.check_module_imports()
-            self.check_excel_store_init()
+            self.check_application_init()
             self.check_store_read_entry()
             self.check_presenter_entry()
             self.check_service_entry()
-            self.check_store_entry()
+            self.check_application_entry()
             self.check_static_assets()
             self.check_page_routes()
             self.check_architecture_rules()

@@ -12,7 +12,7 @@ class StoreQueryService:
     def _load_config(self) -> dict:
         return self._context.config_repository.load()
 
-    def legacy_config_members(self) -> list[dict[str, str]]:
+    def config_members(self) -> list[dict[str, str]]:
         self._context.config_repository.ensure_member_config(self._context.bootstrap_service.timestamp)
         return self._context.config_repository.load_members(normalize_status)
 
@@ -33,7 +33,7 @@ class StoreQueryService:
             try:
                 return datetime.strptime(default_date, "%Y-%m-%d").strftime("%Y-%m-%d")
             except ValueError:
-                pass
+                return datetime.now().strftime("%Y-%m-%d")
         return datetime.now().strftime("%Y-%m-%d")
 
     def get_wear_abnormal_threshold(self) -> float:
@@ -118,7 +118,7 @@ class StoreQueryService:
 
     def get_members(self) -> list[dict[str, str]]:
         if self._context.read_only or not hasattr(self._context, "local_db"):
-            return self.legacy_config_members()
+            return self.config_members()
         return [self._member_row_to_dict(item) for item in self._context.local_db.get_member_rows()]
 
     def _member_row_to_dict(self, item) -> dict[str, str]:

@@ -34,13 +34,3 @@ class SyncService:
         if changed and self._after_pull is not None:
             self._after_pull()
         return result
-
-    def sync(self) -> dict[str, dict[str, int]]:
-        if not self.is_configured():
-            return {
-                "pull": {"members": 0, "score_entries": 0},
-                "push": {"members": 0, "score_entries": 0},
-            }
-        push = self.push()
-        pull = self.pull()
-        return {"pull": pull, "push": push}

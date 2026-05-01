@@ -5,7 +5,7 @@ from typing import Callable
 
 
 class IncompleteBalanceInput(ValueError):
-    pass
+    """Raised when only one side of a balance pair is provided."""
 
 
 DecimalParser = Callable[[str, str], Decimal]

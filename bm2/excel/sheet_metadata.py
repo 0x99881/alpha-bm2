@@ -32,4 +32,21 @@ def normalize_day_code_date_text(value: str, year: int) -> str:
 
 
 def append_sheet_meta(workbook, sheet_name: str, date_text: str, col_name: str) -> None:
-    workbook[sheet_name].append([date_text, col_name])
+    if sheet_name not in workbook.sheetnames:
+        sheet = workbook.create_sheet(sheet_name)
+        sheet.append(['日期', '列'])
+    else:
+        sheet = workbook[sheet_name]
+    sheet.append([date_text, col_name])
+
+
+def replace_sheet_meta(workbook, sheet_name: str, rows: list[tuple[str, str]]) -> None:
+    if sheet_name not in workbook.sheetnames:
+        sheet = workbook.create_sheet(sheet_name)
+    else:
+        sheet = workbook[sheet_name]
+        if sheet.max_row:
+            sheet.delete_rows(1, sheet.max_row)
+    sheet.append(['日期', '积分列'])
+    for date_text, col_name in rows:
+        sheet.append([date_text, col_name])

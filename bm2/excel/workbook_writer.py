@@ -1,40 +1,29 @@
 ﻿from __future__ import annotations
 
-# COMPATIBILITY LAYER - Excel is a derived artifact of SQLite.
-#
-# StoreWriterFacade writes score data into the Excel workbook.
-# It is NOT part of any business or sync flow; it is called only by:
-#   SQLiteToExcelExporter - the sole sanctioned SQLite to Excel export path
-#
-# Do not add new callers.
-
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
-from .constants import META_SHEET, WINDOW_SIZE, UNIQUE_DATE_SEARCH_LIMIT
-from .domain.rules.daily_entry import IncompleteBalanceInput, resolve_wear_value
-from .excel.daily_target import DailyTarget
-from .excel.header_locator import find_column
-from .excel.member_rows import ensure_member_rows_with_map, sort_named_rows, sort_rows_by_name
-from .excel.sheet_metadata import append_sheet_meta, read_sheet_meta
-from .excel.value_normalizer import normalize_expense, normalize_income, normalize_wear, parse_decimal
-from .excel.value_sheet_spec import get_value_sheet_spec
-from .ui_text import MESSAGES
+from ..constants import META_SHEET, WINDOW_SIZE, UNIQUE_DATE_SEARCH_LIMIT
+from ..domain.rules.daily_entry import IncompleteBalanceInput, resolve_wear_value
+from ..ui_text import MESSAGES
+from .daily_target import DailyTarget
+from .header_locator import find_column
+from .member_rows import ensure_member_rows_with_map, sort_named_rows, sort_rows_by_name
+from .sheet_metadata import append_sheet_meta, parse_saved_date, read_sheet_meta
+from .value_normalizer import normalize_expense, normalize_income, normalize_wear, parse_decimal
+from .value_sheet_spec import get_value_sheet_spec
 
 
-class StoreWriterFacade:
+class ExcelWorkbookWriter:
     def __init__(self, store) -> None:
         self._store = store
-
-    def __getattr__(self, name):
-        return getattr(self._store, name)
 
     def _daily_target_class(self):
         return DailyTarget
 
     def _prepare_score_target(self, score_sheet, effective_date_text: str) -> DailyTarget:
-        return self.score_sheet.prepare_target(score_sheet, effective_date_text)
+        return self._store.score_sheet.prepare_target(score_sheet, effective_date_text)
 
     def _prepare_value_target(self, sheet, *, total_header: str | None, name_header: str, header_value: str, invalid_message: str) -> DailyTarget:
         total_col = find_column(sheet, total_header) if total_header else None
@@ -55,10 +44,10 @@ class StoreWriterFacade:
 
     def _prepare_daily_targets(self, workbook, effective_date_text: str) -> dict[str, DailyTarget]:
         day_code = effective_date_text[5:].replace('-', '')
-        score_sheet = self._score_sheet(workbook)
+        score_sheet = self._store._score_sheet(workbook)
         targets = {'score': self._prepare_score_target(score_sheet, effective_date_text)}
         for sheet_type in ('wear', 'income', 'expense'):
-            helpers = self._value_sheet_helpers(sheet_type)
+            helpers = self._store._value_sheet_helpers(sheet_type)
             targets[sheet_type] = self._prepare_value_target(
                 helpers.sheet_getter(workbook),
                 total_header=helpers.spec['total_header'],
@@ -73,19 +62,19 @@ class StoreWriterFacade:
         row_maps = {
             'score': ensure_member_rows_with_map(
                 score_target.sheet,
-                members=self.get_members(),
+                members=self._store.get_members(),
                 name_col=score_target.name_col,
                 total_col=score_target.total_col,
-                value_columns=[col for _, col in self._score_date_columns(score_target.sheet)],
+                value_columns=[col for _, col in self._store._score_date_columns(score_target.sheet)],
                 extra_columns=[score_target.profit_col] if score_target.profit_col is not None else [],
             )[0],
         }
         for sheet_type in ('wear', 'income', 'expense'):
-            helpers = self._value_sheet_helpers(sheet_type)
+            helpers = self._store._value_sheet_helpers(sheet_type)
             target = targets[sheet_type]
             row_maps[sheet_type] = ensure_member_rows_with_map(
                 target.sheet,
-                members=self.get_members(),
+                members=self._store.get_members(),
                 name_col=target.name_col,
                 total_col=target.total_col,
                 value_columns=[col for _, col in helpers.columns_getter(target.sheet)],
@@ -95,11 +84,11 @@ class StoreWriterFacade:
     def _finalize_daily_save(self, workbook, *, effective_date_text: str, recent_numbers: list[int], targets: dict[str, DailyTarget]) -> None:
         score_target = targets['score']
         wear_target = targets['wear']
-        self._recalculate_totals(score_target.sheet, score_target.total_col)
-        self._recalculate_score_profits(workbook, score_target.sheet, score_target.profit_col)
+        self._store._recalculate_totals(score_target.sheet, score_target.total_col)
+        self._store._recalculate_score_profits(workbook, score_target.sheet, score_target.profit_col)
         sort_named_rows(score_target.sheet, score_target.total_col, score_target.name_col)
-        self._format_score_sheet(score_target.sheet, recent_numbers, score_target.total_col)
-        self._recalculate_wear_totals(wear_target.sheet, wear_target.total_col)
+        self._store._format_score_sheet(score_target.sheet, recent_numbers, score_target.total_col)
+        self._store._recalculate_wear_totals(wear_target.sheet, wear_target.total_col)
         sort_named_rows(wear_target.sheet, wear_target.total_col, wear_target.name_col)
         for sheet_type in ('income', 'expense'):
             target = targets[sheet_type]
@@ -107,7 +96,7 @@ class StoreWriterFacade:
         append_sheet_meta(workbook, META_SHEET, effective_date_text, f"D{score_target.next_number}")
         for sheet_type in ('wear', 'income', 'expense'):
             append_sheet_meta(workbook, get_value_sheet_spec(sheet_type)['meta_sheet'], effective_date_text, targets[sheet_type].header)
-        self._sync_member_visibility_in_workbook(workbook)
+        self._store._sync_member_visibility_in_workbook(workbook)
 
     def _normalize_entry_payload(self, entry: dict[str, str]) -> dict[str, str]:
         return {
@@ -177,7 +166,7 @@ class StoreWriterFacade:
         return False
 
     def _score_sheet_has_date(self, sheet, mmdd_text: str) -> bool:
-        return self.score_sheet.has_date(sheet, mmdd_text)
+        return self._store.score_sheet.has_date(sheet, mmdd_text)
 
     def _remove_meta_rows_for_date(self, workbook, sheet_name: str, date_text: str) -> None:
         if sheet_name not in workbook.sheetnames:
@@ -201,9 +190,9 @@ class StoreWriterFacade:
         mmdd_text = date_text[5:]
         day_code = mmdd_text.replace('-', '')
 
-        score_sheet = self._score_sheet(workbook)
+        score_sheet = self._store._score_sheet(workbook)
         score_numbers = self._score_column_numbers_for_date(workbook, date_text)
-        score_columns = self._score_date_columns(score_sheet)
+        score_columns = self._store._score_date_columns(score_sheet)
         for number, column_index in sorted(score_columns, key=lambda item: item[1], reverse=True):
             header_text = str(score_sheet.cell(1, column_index).value or '').strip()
             if number in score_numbers or header_text == mmdd_text:
@@ -211,7 +200,7 @@ class StoreWriterFacade:
         self._remove_meta_rows_for_date(workbook, META_SHEET, date_text)
 
         for sheet_type in ('wear', 'income', 'expense'):
-            helpers = self._value_sheet_helpers(sheet_type)
+            helpers = self._store._value_sheet_helpers(sheet_type)
             sheet = helpers.sheet_getter(workbook)
             meta_sheet = helpers.spec['meta_sheet']
             matching_headers = {
@@ -231,17 +220,17 @@ class StoreWriterFacade:
             self._remove_meta_rows_for_date(workbook, meta_sheet, date_text)
 
     def _parse_saved_date(self, date_text: str):
-        return datetime.strptime(str(date_text).strip(), '%Y-%m-%d').date()
+        return parse_saved_date(date_text)
 
     def _resolve_unique_daily_date(self, workbook, date_text: str) -> str:
         current = self._parse_saved_date(date_text)
-        score_sheet = self._score_sheet(workbook)
+        score_sheet = self._store._score_sheet(workbook)
         for _ in range(UNIQUE_DATE_SEARCH_LIMIT):
             score_header = current.strftime('%m-%d')
             day_code = current.strftime('%m%d')
             exists = self._score_sheet_has_date(score_sheet, score_header)
             for sheet_type in ('wear', 'income', 'expense'):
-                helpers = self._value_sheet_helpers(sheet_type)
+                helpers = self._store._value_sheet_helpers(sheet_type)
                 if self._sheet_has_day_code(helpers.sheet_getter(workbook), helpers.columns_getter, day_code):
                     exists = True
                     break
@@ -251,12 +240,12 @@ class StoreWriterFacade:
         raise ValueError(f'无法在 {date_text} 之后 {UNIQUE_DATE_SEARCH_LIMIT} 天内找到可用日期')
 
     def save_scores_and_wear(self, date_text: str, entries: list[dict[str, str]]) -> dict[str, Any]:
-        workbook = self.workbook_repository.open()
+        workbook = self._store.workbook_repository.open()
         try:
-            self._ensure_score_sheet_structure(workbook)
-            self._ensure_wear_sheet_structure(workbook)
-            self._ensure_income_sheet_structure(workbook)
-            self._ensure_expense_sheet_structure(workbook)
+            self._store._ensure_score_sheet_structure(workbook)
+            self._store._ensure_wear_sheet_structure(workbook)
+            self._store._ensure_income_sheet_structure(workbook)
+            self._store._ensure_expense_sheet_structure(workbook)
             effective_date_text = str(date_text).strip()
             self._remove_existing_daily_columns(workbook, effective_date_text)
             targets = self._prepare_daily_targets(workbook, effective_date_text)
@@ -269,9 +258,9 @@ class StoreWriterFacade:
                 wear_value = self._resolve_entry_wear_value(payload)
                 wear_rows_added += int(self._write_entry_wear(payload['name'], wear_value, targets=targets, row_maps=row_maps))
 
-            recent_numbers = [number for number, _ in self._score_date_columns(targets['score'].sheet)][-WINDOW_SIZE:]
+            recent_numbers = [number for number, _ in self._store._score_date_columns(targets['score'].sheet)][-WINDOW_SIZE:]
             self._finalize_daily_save(workbook, effective_date_text=effective_date_text, recent_numbers=recent_numbers, targets=targets)
-            self.workbook_repository.save(workbook)
+            self._store.workbook_repository.save(workbook)
             return {
                 'target_column': targets['score'].header,
                 'wear_column': targets['wear'].header,

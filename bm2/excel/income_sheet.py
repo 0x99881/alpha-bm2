@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .header_locator import find_column, find_sheet_by_alias, parse_numeric_header
+from .header_locator import find_column, find_sheet_by_alias, numeric_header_columns
 from .member_rows import ensure_member_rows, sort_rows_by_name
 from ..constants import INCOME_NAME_HEADER, INCOME_SHEET, INCOME_SHEET_ALIASES
 
@@ -18,13 +18,7 @@ class IncomeSheet:
         return workbook.create_sheet(title=INCOME_SHEET)
 
     def columns(self, sheet) -> list[tuple[int, int]]:
-        result = []
-        for col in range(1, sheet.max_column + 1):
-            number = parse_numeric_header(sheet.cell(1, col).value)
-            if number is not None:
-                result.append((number, col))
-        result.sort(key=lambda item: item[0])
-        return result
+        return numeric_header_columns(sheet)
 
     def ensure_structure(self, workbook) -> bool:
         sheet = self.sheet(workbook)

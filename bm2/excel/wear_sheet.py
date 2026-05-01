@@ -4,14 +4,12 @@ from typing import Any
 
 from openpyxl.styles import Font
 
-from .header_locator import find_column, find_sheet_by_alias, parse_numeric_header
+from .header_locator import find_column, find_sheet_by_alias, numeric_header_columns
 from .member_rows import ensure_member_rows, sort_named_rows
 from .summary_columns import ensure_summary_columns
 from .value_normalizer import normalize_wear
-from .value_sheet_spec import get_value_sheet_spec
 from ..constants import (
     DATA_START_ROW,
-    LEGACY_WEAR_HEADERS,
     WEAR_ABNORMAL_FONT_COLOR,
     WEAR_NAME_HEADER,
     WEAR_SHEET,
@@ -33,13 +31,7 @@ class WearSheet:
         return workbook.create_sheet(title=WEAR_SHEET)
 
     def columns(self, sheet) -> list[tuple[int, int]]:
-        result = []
-        for col in range(1, sheet.max_column + 1):
-            number = parse_numeric_header(sheet.cell(1, col).value)
-            if number is not None:
-                result.append((number, col))
-        result.sort(key=lambda item: item[0])
-        return result
+        return numeric_header_columns(sheet)
 
     def recalculate_totals(self, sheet, total_col: int) -> None:
         name_col = find_column(sheet, WEAR_NAME_HEADER)
@@ -77,63 +69,9 @@ class WearSheet:
         for row in range(DATA_START_ROW, sheet.max_row + 1):
             sheet.cell(row, total_col).font = normal_font
 
-    def migrate_legacy_rows(self, workbook, sheet) -> None:
-        legacy_rows = []
-        for row in sheet.iter_rows(min_row=2, values_only=True):
-            if not row[0] or not row[1]:
-                continue
-            legacy_rows.append(
-                {
-                    'date': str(row[0]),
-                    'name': str(row[1]),
-                    'wear': float(row[2] or 0),
-                }
-            )
-
-        sheet.delete_rows(1, sheet.max_row)
-        wear_spec = get_value_sheet_spec('wear')
-        meta_sheet = workbook[wear_spec['meta_sheet']]
-        meta_sheet.delete_rows(1, meta_sheet.max_row)
-        meta_sheet.append(wear_spec['meta_headers'])
-
-        date_order: list[str] = []
-        member_names: list[str] = []
-        data_map: dict[tuple[str, str], float] = {}
-        for item in legacy_rows:
-            date_text = item['date']
-            member_name = item['name']
-            if date_text not in date_order:
-                date_order.append(date_text)
-            if member_name not in member_names:
-                member_names.append(member_name)
-            data_map[(member_name, date_text)] = item['wear']
-
-        for index, date_text in enumerate(date_order, start=1):
-            sheet.cell(1, index, date_text[5:].replace('-', ''))
-            meta_sheet.append([date_text, str(index)])
-
-        total_col = len(date_order) + 1
-        name_col = total_col + 1
-        sheet.cell(1, total_col, WEAR_TOTAL_HEADER)
-        sheet.cell(1, name_col, WEAR_NAME_HEADER)
-        for member_name in member_names:
-            row = sheet.max_row + 1
-            running_total = 0.0
-            for index, date_text in enumerate(date_order, start=1):
-                wear = normalize_wear(data_map.get((member_name, date_text), 0.0))
-                sheet.cell(row, index, wear)
-                running_total += wear
-            sheet.cell(row, total_col, normalize_wear(running_total))
-            sheet.cell(row, name_col, member_name)
-
     def ensure_structure(self, workbook) -> bool:
         sheet = self.sheet(workbook)
         changed = False
-
-        current_headers = [sheet.cell(1, idx).value for idx in range(1, 4)]
-        if current_headers == LEGACY_WEAR_HEADERS:
-            self.migrate_legacy_rows(workbook, sheet)
-            changed = True
 
         total_col, name_col, tail_changed = ensure_summary_columns(sheet, WEAR_TOTAL_HEADER, WEAR_NAME_HEADER)
         changed = changed or tail_changed

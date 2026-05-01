@@ -7,33 +7,37 @@ from ..constants import META_SHEET, NAME_HEADER, TOTAL_HEADER, WORKBOOK_FILENAME
 from ..excel.sheet_metadata import read_sheet_meta
 
 
-class LocalDataMigrationService:
+class ExcelImportService:
     def __init__(
         self,
         local_database,
-        legacy_store,
-        legacy_members_provider: Callable[[], list[dict[str, str]]],
+        excel_store,
+        config_members_provider: Callable[[], list[dict[str, str]]],
         excel_exporter,
     ) -> None:
         self._local_database = local_database
-        self._legacy_store = legacy_store
-        self._legacy_members_provider = legacy_members_provider
+        self._excel_store = excel_store
+        self._config_members_provider = config_members_provider
         self._excel_exporter = excel_exporter
 
-    def bootstrap_from_legacy_sources(self) -> None:
+    def bootstrap_from_excel_if_empty(self) -> bool:
+        if self._local_database.get_member_rows(include_deleted=True):
+            return False
+        if self._local_database.get_score_rows(include_deleted=True):
+            return False
+        self.refresh_from_excel()
+        return True
+
+    def refresh_from_excel(self) -> None:
         score_rows = self._score_rows_from_workbook()
-        self._local_database.sync_members(self._legacy_members_provider())
+        self._local_database.sync_members(self._config_members_provider())
         self._local_database.replace_score_entries_from_snapshot(score_rows)
         cycle_start = self._score_rows_cycle_start(score_rows) or self._workbook_cycle_start()
         if cycle_start:
             self._local_database.set_sync_state("score_cycle_start_date", cycle_start)
 
-    def refresh_from_legacy_store(self) -> None:
-        self.bootstrap_from_legacy_sources()
-
     def after_supabase_pull(self) -> None:
-        self._excel_exporter.export_missing_dates(self._legacy_store)
-        self.refresh_from_legacy_store()
+        self._excel_exporter.export_missing_dates(self._excel_store)
 
     @staticmethod
     def _parse_score_header_date(header_text: str, year: int) -> date | None:
@@ -43,7 +47,7 @@ class LocalDataMigrationService:
             return None
 
     def _score_header_date_map(self, workbook, used_columns: list[tuple[int, int]]) -> dict[int, str]:
-        score_sheet = self._legacy_store._score_sheet(workbook)
+        score_sheet = self._excel_store._score_sheet(workbook)
         cycle_start = self._workbook_cycle_start()
         if cycle_start:
             year_hint = datetime.strptime(cycle_start, "%Y-%m-%d").year
@@ -54,7 +58,7 @@ class LocalDataMigrationService:
         previous: date | None = None
         for _, column_index in used_columns:
             header_text = str(score_sheet.cell(1, column_index).value or "").strip()
-            if not self._legacy_store.score_sheet.is_date_header(header_text):
+            if not self._excel_store.score_sheet.is_date_header(header_text):
                 continue
             current = self._parse_score_header_date(header_text, year_hint)
             if current is None:
@@ -66,7 +70,7 @@ class LocalDataMigrationService:
         return result
 
     def _score_date_map_from_workbook(self, workbook) -> dict[int, str]:
-        score_sheet = self._legacy_store._score_sheet(workbook)
+        score_sheet = self._excel_store._score_sheet(workbook)
         meta_by_number: dict[int, list[str]] = {}
         for saved_date, column_name in read_sheet_meta(workbook, META_SHEET):
             column_name = str(column_name).strip()
@@ -78,8 +82,8 @@ class LocalDataMigrationService:
 
         used_columns = [
             (number, col)
-            for number, col in self._legacy_store.score_sheet.date_columns(score_sheet)
-            if number in meta_by_number or self._legacy_store.score_sheet.column_has_data(score_sheet, col)
+            for number, col in self._excel_store.score_sheet.date_columns(score_sheet)
+            if number in meta_by_number or self._excel_store.score_sheet.column_has_data(score_sheet, col)
         ]
         if not used_columns:
             return {}
@@ -102,7 +106,7 @@ class LocalDataMigrationService:
         if not unresolved:
             return score_date_map
 
-        latest_date = self._legacy_store.score_sheet.latest_used_date(workbook)
+        latest_date = self._excel_store.score_sheet.latest_used_date(workbook)
         if latest_date is None:
             return score_date_map
 
@@ -116,12 +120,12 @@ class LocalDataMigrationService:
         return score_date_map
 
     def _score_rows_from_workbook(self) -> list[dict[str, object]]:
-        workbook = self._legacy_store.workbook_repository.open()
+        workbook = self._excel_store.workbook_repository.open()
         try:
-            self._legacy_store._ensure_score_sheet_structure(workbook)
-            sheet = self._legacy_store._score_sheet(workbook)
-            name_col = self._legacy_store._find_column(sheet, NAME_HEADER)
-            total_col = self._legacy_store._find_column(sheet, TOTAL_HEADER)
+            self._excel_store._ensure_score_sheet_structure(workbook)
+            sheet = self._excel_store._score_sheet(workbook)
+            name_col = self._excel_store._find_column(sheet, NAME_HEADER)
+            total_col = self._excel_store._find_column(sheet, TOTAL_HEADER)
             if name_col is None or total_col is None:
                 return []
 
@@ -143,14 +147,14 @@ class LocalDataMigrationService:
             workbook.close()
 
     def _workbook_cycle_start(self) -> str:
-        stem = self._legacy_store.workbook_path.stem
+        stem = self._excel_store.workbook_path.stem
         if stem.startswith(WORKBOOK_FILENAME_PREFIX):
             suffix = stem[len(WORKBOOK_FILENAME_PREFIX):]
             suffix = suffix.split("_", 1)[0].strip()
             try:
                 return datetime.strptime(suffix, "%Y-%m-%d").strftime("%Y-%m-%d")
             except ValueError:
-                pass
+                return ""
         return ""
 
     @staticmethod

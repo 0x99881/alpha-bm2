@@ -5,18 +5,26 @@ from ..store_sheet_utils import StoreSheetUtilsMixin
 
 
 class StoreContext(StoreSheetUtilsMixin, StoreStructureMixin):
-    def __getattr__(self, name):
-        for service_name in ("query_service", "command_service", "export_service"):
-            service = self.__dict__.get(service_name)
-            if service is not None and hasattr(service, name):
-                return getattr(service, name)
-        raise AttributeError(name)
-
     def get_members(self):
         return self.query_service.get_members()
 
     def get_active_members(self):
         return self.query_service.get_active_members()
+
+    def get_score_summary_data(self):
+        return self.query_service.get_score_summary_data()
+
+    def get_score_sheet_snapshot(self):
+        return self.query_service.get_score_sheet_snapshot()
+
+    def get_wear_sheet_snapshot(self):
+        return self.query_service.get_wear_sheet_snapshot()
+
+    def get_member_calendar_dataset(self, name: str, year: int, month: int, workbook=None):
+        return self.query_service.get_member_calendar_dataset(name, year, month, workbook=workbook)
+
+    def get_all_members_calendar_dataset(self, year: int, month: int):
+        return self.query_service.get_all_members_calendar_dataset(year, month)
 
     def get_wear_abnormal_threshold(self) -> float:
         return self.query_service.get_wear_abnormal_threshold()

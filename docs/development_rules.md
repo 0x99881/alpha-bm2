@@ -1,6 +1,6 @@
 # Development Rules
 
-Last updated: 2026-04-28
+Last updated: 2026-05-01
 
 This file explains how to extend BM2 without drifting back to the old mixed architecture.
 
@@ -62,24 +62,11 @@ New frontend source:
 - Add to `static/` and `templates/`.
 - Do not edit generated `public/` as source.
 
-## Store Boundary
-
-`bm2/store.py` is intentionally tiny.
-
-It should only expose the old `ExcelStore` entry point and forward to the application layer.
-
-Do not add:
-
-- Business rules.
-- Sync flows.
-- Excel operations.
-- SQLite calls.
-- Supabase calls.
-- Repository imports.
+## Application Boundary
 
 `bm2/services/store_application.py` is also intentionally tiny.
 
-It coordinates:
+It exposes explicit application methods and coordinates:
 
 - `StoreBootstrapService`
 - `StoreCommandService`
@@ -137,6 +124,6 @@ Choose the path that keeps:
 - SQLite local-first.
 - Supabase online-sync only.
 - Excel import/export only.
-- Store facade thin.
+- Application entry thin and explicit.
 - Services focused.
 - Repositories owning data access.

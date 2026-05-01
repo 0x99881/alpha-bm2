@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Any
 
 from ..constants import WINDOW_SIZE
+from ..entry_helpers import count_wear_entries
 
 LOGGER = logging.getLogger(__name__)
 
@@ -26,28 +27,16 @@ class SQLiteEntryWriter:
         except ValueError:
             return date_text
 
-    @staticmethod
-    def _count_wear_entries(entries: list[dict[str, str]]) -> int:
-        count = 0
-        for entry in entries:
-            has_manual = str(entry.get("manual_wear", "")).strip()
-            has_before = str(entry.get("before_balance", "")).strip()
-            has_after = str(entry.get("after_balance", "")).strip()
-            if has_manual or (has_before and has_after):
-                count += 1
-        return count
-
     def save_scores_and_wear(
         self, date_text: str, entries: list[dict[str, str]]
     ) -> dict[str, Any]:
         saved_date = self._resolve_save_date(date_text)
         self._local_db.record_score_entries(saved_date, entries, source="local")
 
-        summary = self._local_db.get_score_summary_data()
         return {
             "target_column": saved_date[5:],
             "wear_column": saved_date[5:].replace("-", ""),
-            "wear_rows_added": self._count_wear_entries(entries),
-            "window_size": min(WINDOW_SIZE, summary.get("column_count", WINDOW_SIZE)),
+            "wear_rows_added": count_wear_entries(entries),
+            "window_size": min(WINDOW_SIZE, self._local_db.get_score_date_count()),
             "saved_date": saved_date,
         }
