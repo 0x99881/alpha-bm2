@@ -36,6 +36,37 @@ system_config.json
 .env.local
 ```
 
+## Daily Entry Data Safety
+
+The daily entry form is user-entered business data. If a field is visible on
+the entry page, it must not be treated as temporary UI-only state.
+
+Required fields for daily entry persistence:
+
+```text
+score
+before_balance
+after_balance
+manual_wear
+income
+other_expense
+```
+
+Hard rule: do not save only `score` while leaving the other visible entry
+fields out of the durable save/read path. This already caused real user data
+loss after the SQLite refactor: score values survived, but wear/income inputs
+were not persisted and could not be recovered after refresh/upload.
+
+Any change touching daily entry, score submission, SQLite schema, Supabase sync,
+Excel import/export, or the score entry page must verify:
+
+- Save all visible daily entry fields.
+- Reopen the same date and confirm all fields are populated.
+- Do not clear entered values when redirecting after save.
+- Do not claim upload/sync protects fields that are not actually persisted.
+- When touching this flow, manually verify save and reload for score,
+  balances, manual wear, income, and other expense.
+
 ## Layer Responsibilities
 
 `bm2/web*.py`

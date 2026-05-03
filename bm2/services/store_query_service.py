@@ -99,6 +99,11 @@ class StoreQueryService:
             return bool(self.online_score_rows_for_date(score_date))
         return bool(self._context.local_db.get_score_rows_for_date(score_date))
 
+    def get_score_rows_for_date(self, score_date: str) -> list[dict]:
+        if self._context.read_only:
+            return self.online_score_rows_for_date(score_date)
+        return self._context.local_db.get_score_rows_for_date(score_date)
+
     def get_score_summary(self):
         return self._context.score_presenter.build_score_summary()
 

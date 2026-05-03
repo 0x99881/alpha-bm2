@@ -32,6 +32,25 @@ def register_score_routes(
             member["other_expense"] = saved_entry.get("other_expense", "")
         return active_members
 
+    def _score_rows_to_entries(rows: list[dict[str, Any]]) -> list[dict[str, str]]:
+        entries = []
+        for row in rows:
+            member_name = str(row.get("member_name", "")).strip()
+            if not member_name:
+                continue
+            entries.append(
+                {
+                    "name": member_name,
+                    "score": str(row.get("score", "") or ""),
+                    "before_balance": str(row.get("before_balance", "") or ""),
+                    "after_balance": str(row.get("after_balance", "") or ""),
+                    "manual_wear": str(row.get("manual_wear", "") or ""),
+                    "income": str(row.get("income", "") or ""),
+                    "other_expense": str(row.get("other_expense", "") or ""),
+                }
+            )
+        return entries
+
     def _render_score_entry(
         *,
         selected_date: str,
@@ -39,9 +58,12 @@ def register_score_routes(
         overwrite_prompt: dict[str, Any] | None = None,
     ):
         template_name = "mobile_scores.html" if read_only_mode else "scores.html"
+        page_entries = entries
+        if page_entries is None:
+            page_entries = _score_rows_to_entries(store.get_score_rows_for_date(selected_date))
         return render_template(
             template_name,
-            active_members=_build_score_page_members(entries),
+            active_members=_build_score_page_members(page_entries),
             score_summary=store.get_online_score_summary() if read_only_mode else store.get_score_summary(),
             selected_date=selected_date,
             overwrite_prompt=overwrite_prompt,
@@ -126,8 +148,34 @@ def register_score_routes(
             return _render_score_entry(selected_date=selected_date, entries=submission["entries"])
         _flash_save_score_result(selected_date, submission["result"])
         if not read_only_mode:
+            try:
+                store.export_to_excel(submission["result"]["saved_date"])
+            except (OSError, ValueError):
+                app.logger.exception("Failed to update workbook after score save")
+                flash(MESSAGES["excel_save_failed"].format(filename=store.workbook_path.name), "error")
             flash_remote_sync_needed()
-        return redirect(url_for("score_overview" if read_only_mode else "score_entry"))
+        return redirect(url_for("score_entry", date=submission["result"]["saved_date"], draft_saved="1"))
+
+    @app.post("/scores/delete-date")
+    def delete_score_date():
+        if read_only_mode:
+            abort(403)
+        selected_date = _get_selected_date_from_form()
+        date_error = store.daily_entry_service.validate_selected_date(selected_date)
+        if date_error is not None:
+            flash(date_error, "error")
+            return redirect(url_for("score_entry", date=selected_date))
+        try:
+            result = store.delete_score_date(selected_date)
+        except ValueError as exc:
+            flash(str(exc), "error")
+            return redirect(url_for("score_entry", date=selected_date))
+        if result.get("deleted_rows", 0):
+            flash(MESSAGES["score_date_deleted"].format(date=selected_date), "success")
+            flash_remote_sync_needed()
+        else:
+            flash(MESSAGES["score_date_delete_empty"].format(date=selected_date), "success")
+        return redirect(url_for("score_entry", date=selected_date))
 
     @app.post("/scores/refresh-from-excel")
     def refresh_from_excel():

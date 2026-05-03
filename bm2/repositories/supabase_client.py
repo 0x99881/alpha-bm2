@@ -9,6 +9,26 @@ LOGGER = logging.getLogger(__name__)
 
 _SUPABASE_URL_KEY = "SUPABASE_URL"
 _SUPABASE_KEY_KEY = "SUPABASE_SERVICE_ROLE_KEY"
+_SCORE_ENTRY_UPLOAD_COLUMNS = (
+    "id",
+    "member_id",
+    "member_name",
+    "score_date",
+    "score",
+    "before_balance",
+    "after_balance",
+    "manual_wear",
+    "income",
+    "other_expense",
+    "updated_at",
+    "version",
+    "deleted",
+    "source",
+)
+
+
+class SupabaseSchemaError(RuntimeError):
+    pass
 
 
 class SupabaseClient:
@@ -50,6 +70,15 @@ class SupabaseClient:
         if self._client_cache is None:
             self._client_cache = create_client(self._url(), self._key())
         return self._client_cache
+
+    def ensure_score_entries_schema(self) -> None:
+        try:
+            self._client().table("score_entries").select(",".join(_SCORE_ENTRY_UPLOAD_COLUMNS)).limit(1).execute()
+        except Exception as exc:
+            message = str(exc)
+            if "score_entries." in message and "does not exist" in message:
+                raise SupabaseSchemaError(message) from exc
+            raise
 
     def push_members(self, rows: list[dict[str, Any]]) -> int:
         if not rows:

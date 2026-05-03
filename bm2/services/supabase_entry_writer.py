@@ -26,6 +26,10 @@ class SupabaseEntryWriter:
         raw_value = str(entry.get("score", "") or "0").strip()
         return int(raw_value or 0)
 
+    @staticmethod
+    def _entry_text(entry: dict[str, str], key: str) -> str:
+        return str(entry.get(key, "") or "").strip()
+
     def save_scores_and_wear(
         self,
         date_text: str,
@@ -65,6 +69,11 @@ class SupabaseEntryWriter:
                     "member_name": member_name,
                     "score_date": saved_date,
                     "score": self._score_value(entry),
+                    "before_balance": self._entry_text(entry, "before_balance"),
+                    "after_balance": self._entry_text(entry, "after_balance"),
+                    "manual_wear": self._entry_text(entry, "manual_wear"),
+                    "income": self._entry_text(entry, "income"),
+                    "other_expense": self._entry_text(entry, "other_expense"),
                     "updated_at": now_text,
                     "version": int(previous.get("version", 0) or 0) + 1,
                     "deleted": 0,

@@ -54,6 +54,9 @@ class StoreApplication:
     def get_next_score_date(self):
         return self._context.query_service.get_next_score_date()
 
+    def get_score_rows_for_date(self, score_date: str):
+        return self._context.query_service.get_score_rows_for_date(score_date)
+
     def get_online_active_members(self):
         return self._context.query_service.get_online_active_members()
 
@@ -72,8 +75,14 @@ class StoreApplication:
     def refresh_local_database(self) -> dict[str, object]:
         return self._context.command_service.refresh_local_database()
 
+    def export_to_excel(self, date_text: str | None = None) -> int:
+        return self._context.export_service.export_to_excel(date_text)
+
     def create_new_cycle(self, start_date_text: str) -> str:
         return self._context.command_service.create_new_cycle(start_date_text)
+
+    def delete_score_date(self, date_text: str) -> dict[str, int]:
+        return self._context.command_service.delete_score_date(date_text)
 
     def is_supabase_configured(self) -> bool:
         return self._context.command_service.is_supabase_configured()

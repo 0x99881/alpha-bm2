@@ -23,7 +23,9 @@ class SQLiteSyncMergeRepositoryMixin:
         connection = self._connect()
         try:
             rows = connection.execute(
-                "SELECT id, member_id, member_name, score_date, score, updated_at, version, deleted, source FROM score_entries"
+                "SELECT id, member_id, member_name, score_date, score, "
+                "before_balance, after_balance, manual_wear, income, other_expense, "
+                "updated_at, version, deleted, source FROM score_entries"
             ).fetchall()
             return [dict(row) for row in rows]
         finally:
@@ -47,13 +49,22 @@ class SQLiteSyncMergeRepositoryMixin:
         connection = self._connect()
         try:
             rows = connection.execute(
-                "SELECT id, member_id, member_name, score_date, score, updated_at, version, deleted, source "
+                "SELECT id, member_id, member_name, score_date, score, "
+                "before_balance, after_balance, manual_wear, income, other_expense, "
+                "updated_at, version, deleted, source "
                 "FROM score_entries WHERE updated_at > ?",
                 (since_ts,),
             ).fetchall()
             return [dict(row) for row in rows]
         finally:
             connection.close()
+
+    @staticmethod
+    def _score_row_with_detail_defaults(row: dict[str, Any]) -> dict[str, Any]:
+        normalized = dict(row)
+        for key in ("before_balance", "after_balance", "manual_wear", "income", "other_expense"):
+            normalized[key] = str(normalized.get(key, "") or "")
+        return normalized
 
     def _deleted_remote_score_rows(self, remote_rows: list[dict[str, Any]], local_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         local_ids = {str(row.get("id", "")).strip() for row in local_rows if str(row.get("id", "")).strip()}
@@ -111,6 +122,8 @@ class SQLiteSyncMergeRepositoryMixin:
             members = self._get_all_member_rows_for_push()
             scores = self._get_all_score_rows_for_push()
         scores = self._attach_score_profit_sources(scores, score_profit_map)
+        if scores:
+            supabase_sync.ensure_score_entries_schema()
         LOGGER.info(
             "Supabase push (%s): %d members, %d score_entries queued",
             mode, len(members), len(scores),
@@ -232,19 +245,26 @@ class SQLiteSyncMergeRepositoryMixin:
             }
             inserted = updated = skipped = 0
             for row in rows:
+                row = self._score_row_with_detail_defaults(row)
                 local = existing.get(row["id"])
                 if local is None:
                     connection.execute(
                         "INSERT INTO score_entries "
-                        "(id, member_id, member_name, score_date, score, updated_at, version, deleted, source) "
-                        "VALUES (:id, :member_id, :member_name, :score_date, :score, :updated_at, :version, :deleted, :source)",
+                        "(id, member_id, member_name, score_date, score, "
+                        "before_balance, after_balance, manual_wear, income, other_expense, "
+                        "updated_at, version, deleted, source) "
+                        "VALUES (:id, :member_id, :member_name, :score_date, :score, "
+                        ":before_balance, :after_balance, :manual_wear, :income, :other_expense, "
+                        ":updated_at, :version, :deleted, :source)",
                         row,
                     )
                     inserted += 1
                 elif self._remote_wins(row, local):
                     connection.execute(
                         "UPDATE score_entries SET score=:score, member_id=:member_id, member_name=:member_name, "
-                        "score_date=:score_date, updated_at=:updated_at, version=:version, "
+                        "score_date=:score_date, before_balance=:before_balance, after_balance=:after_balance, "
+                        "manual_wear=:manual_wear, income=:income, other_expense=:other_expense, "
+                        "updated_at=:updated_at, version=:version, "
                         "deleted=:deleted, source=:source WHERE id=:id",
                         row,
                     )

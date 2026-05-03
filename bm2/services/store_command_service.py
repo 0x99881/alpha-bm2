@@ -1,4 +1,9 @@
 from __future__ import annotations
+
+from ..repositories.supabase_client import SupabaseSchemaError
+from ..ui_text import MESSAGES
+
+
 class StoreCommandService:
     def __init__(self, context) -> None:
         self._context = context
@@ -41,12 +46,24 @@ class StoreCommandService:
         self.refresh_local_database()
         return filename
 
+    def delete_score_date(self, date_text: str) -> dict[str, int]:
+        changed_ids = self._context.local_db.delete_score_entries_for_date(date_text, source="local")
+        try:
+            exported_dates = self._context.export_service.export_to_excel(date_text)
+        except Exception:
+            self._context.local_db.restore_score_entries_by_ids(changed_ids, source="local")
+            raise
+        return {"deleted_rows": len(changed_ids), "exported_dates": exported_dates}
+
     def is_supabase_configured(self) -> bool:
         return self._context.sync_service.is_configured()
 
     def supabase_push(self, *, force_full: bool = True) -> dict[str, int]:
         score_profit_map = self._context.query_service.get_active_member_profit_map()
-        return self._context.sync_service.push(force_full=force_full, score_profit_map=score_profit_map)
+        try:
+            return self._context.sync_service.push(force_full=force_full, score_profit_map=score_profit_map)
+        except SupabaseSchemaError as exc:
+            raise ValueError(MESSAGES["supabase_schema_missing_columns"]) from exc
 
     def supabase_pull(self) -> dict[str, int]:
         return self._context.sync_service.pull()

@@ -28,6 +28,11 @@ class SQLiteSchemaMixin:
                     member_name TEXT NOT NULL,
                     score_date TEXT NOT NULL,
                     score INTEGER NOT NULL,
+                    before_balance TEXT NOT NULL DEFAULT '',
+                    after_balance TEXT NOT NULL DEFAULT '',
+                    manual_wear TEXT NOT NULL DEFAULT '',
+                    income TEXT NOT NULL DEFAULT '',
+                    other_expense TEXT NOT NULL DEFAULT '',
                     updated_at TEXT NOT NULL,
                     version INTEGER NOT NULL DEFAULT 1,
                     deleted INTEGER NOT NULL DEFAULT 0,
@@ -44,6 +49,21 @@ class SQLiteSchemaMixin:
                 ON score_entries(score_date);
                 """
             )
+            existing_columns = {
+                row["name"]
+                for row in connection.execute("PRAGMA table_info(score_entries)").fetchall()
+            }
+            for column_name in (
+                "before_balance",
+                "after_balance",
+                "manual_wear",
+                "income",
+                "other_expense",
+            ):
+                if column_name not in existing_columns:
+                    connection.execute(
+                        f"ALTER TABLE score_entries ADD COLUMN {column_name} TEXT NOT NULL DEFAULT ''"
+                    )
             connection.commit()
         finally:
             connection.close()

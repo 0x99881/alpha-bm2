@@ -16,3 +16,50 @@
     gap: 0.35rem;
     margin: 0 0 1rem;
 }
+
+.draft-panel {
+    align-items: center;
+    background: #fff8e6;
+    border: 1px solid #f0c66a;
+    border-radius: 8px;
+    color: #5f4100;
+    display: flex;
+    gap: 1rem;
+    justify-content: space-between;
+    margin: 0 0 0.75rem;
+    padding: 0.75rem 0.9rem;
+}
+
+.draft-panel[hidden] {
+    display: none;
+}
+
+.draft-panel strong,
+.draft-panel span {
+    display: block;
+}
+
+.draft-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    justify-content: flex-end;
+}
+
+.draft-status {
+    color: #5d6b7a;
+    font-size: 0.88rem;
+    min-height: 1.25rem;
+    margin: 0 0 0.35rem;
+}
+
+@media (max-width: 760px) {
+    .draft-panel {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .draft-actions {
+        justify-content: flex-start;
+    }
+}

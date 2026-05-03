@@ -12,7 +12,7 @@
 </section>
 
 <section class="panel compact-panel">
-    <form method="post" action="{{ url_for('save_scores') }}">
+    <form method="post" action="{{ url_for('save_scores') }}" data-score-draft-form="true" data-draft-scope="mobile">
         <input type="hidden" name="overwrite_step" value="{{ overwrite_prompt.next_step if overwrite_prompt else 0 }}">
         <div class="toolbar compact-toolbar">
             <div class="date-tools">
@@ -37,6 +37,18 @@
             <span>{{ overwrite_prompt.confirm_label }}</span>
         </div>
         {% endif %}
+
+        <div class="draft-panel" data-draft-panel hidden>
+            <div>
+                <strong data-draft-title></strong>
+                <span data-draft-message></span>
+            </div>
+            <div class="draft-actions">
+                <button type="button" class="secondary-btn" data-draft-restore></button>
+                <button type="button" class="secondary-btn" data-draft-discard></button>
+            </div>
+        </div>
+        <div class="draft-status" data-draft-status></div>
 
         <div class="table-wrap compact-wrap">
             <table class="score-table">

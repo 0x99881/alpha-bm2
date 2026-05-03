@@ -3,8 +3,11 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 from typing import Callable
 
-from ..constants import META_SHEET, NAME_HEADER, TOTAL_HEADER, WORKBOOK_FILENAME_PREFIX
-from ..excel.sheet_metadata import read_sheet_meta
+from ..constants import DATA_START_ROW, META_SHEET, NAME_HEADER, TOTAL_HEADER, WORKBOOK_FILENAME_PREFIX
+from ..excel.header_locator import find_column
+from ..excel.sheet_metadata import meta_to_date_map, normalize_day_code_date_text, read_sheet_meta
+from ..excel.value_normalizer import normalize_expense, normalize_income, normalize_wear
+from ..excel.value_sheet_spec import get_value_sheet_spec
 
 
 class ExcelImportService:
@@ -142,9 +145,77 @@ class ExcelImportService:
                     except (TypeError, ValueError):
                         score_value = 0
                     rows.append({"member_name": member_name, "score_date": score_date, "score": score_value})
+            self._attach_value_sheet_fields(workbook, rows)
             return rows
         finally:
             workbook.close()
+
+    def _value_sheet_date_map(self, workbook, sheet_type: str, sheet) -> dict[int, str]:
+        spec = get_value_sheet_spec(sheet_type)
+        by_number = meta_to_date_map(workbook, spec["meta_sheet"])
+        cycle_start = self._workbook_cycle_start()
+        year_hint = datetime.strptime(cycle_start, "%Y-%m-%d").year if cycle_start else datetime.now().year
+        result: dict[int, str] = {}
+        helpers = self._excel_store._value_sheet_helpers(sheet_type)
+        for number, col in helpers.columns_getter(sheet):
+            if number in by_number:
+                result[col] = by_number[number]
+                continue
+            header_text = str(sheet.cell(1, col).value or "").strip()
+            result[col] = normalize_day_code_date_text(header_text.zfill(4) if header_text.isdigit() else header_text, year_hint)
+        return result
+
+    def _read_value_sheet_fields(self, workbook, sheet_type: str) -> dict[tuple[str, str], str]:
+        helpers = self._excel_store._value_sheet_helpers(sheet_type)
+        sheet = helpers.sheet_getter(workbook)
+        helpers.ensure_structure(workbook)
+        spec = get_value_sheet_spec(sheet_type)
+        name_col = find_column(sheet, spec["name_header"])
+        if name_col is None:
+            return {}
+        date_by_col = self._value_sheet_date_map(workbook, sheet_type, sheet)
+        normalizer = {
+            "wear": normalize_wear,
+            "income": normalize_income,
+            "expense": normalize_expense,
+        }[sheet_type]
+        values: dict[tuple[str, str], str] = {}
+        for row_index in range(DATA_START_ROW, sheet.max_row + 1):
+            member_name = str(sheet.cell(row_index, name_col).value or "").strip()
+            if not member_name:
+                continue
+            for col, score_date in date_by_col.items():
+                raw_value = sheet.cell(row_index, col).value
+                if raw_value in (None, ""):
+                    continue
+                try:
+                    numeric = normalizer(raw_value)
+                except (TypeError, ValueError):
+                    continue
+                if numeric == 0:
+                    continue
+                values[(member_name, score_date)] = str(numeric)
+        return values
+
+    def _attach_value_sheet_fields(self, workbook, rows: list[dict[str, object]]) -> None:
+        rows_by_key = {
+            (str(row.get("member_name", "")).strip(), str(row.get("score_date", "")).strip()): row
+            for row in rows
+        }
+        field_map = {
+            "wear": "manual_wear",
+            "income": "income",
+            "expense": "other_expense",
+        }
+        for sheet_type, field_name in field_map.items():
+            for key, value in self._read_value_sheet_fields(workbook, sheet_type).items():
+                row = rows_by_key.get(key)
+                if row is None:
+                    member_name, score_date = key
+                    row = {"member_name": member_name, "score_date": score_date, "score": 0}
+                    rows.append(row)
+                    rows_by_key[key] = row
+                row[field_name] = value
 
     def _workbook_cycle_start(self) -> str:
         stem = self._excel_store.workbook_path.stem

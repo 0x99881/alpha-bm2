@@ -28,6 +28,16 @@ class DailyEntryService:
             )
         return entries
 
+    @staticmethod
+    def entry_has_input(entry: dict[str, str]) -> bool:
+        return any(
+            str(entry.get(key, "") or "").strip() != ""
+            for key in ("score", "before_balance", "after_balance", "manual_wear", "income", "other_expense")
+        )
+
+    def entries_have_input(self, entries: list[dict[str, str]]) -> bool:
+        return any(self.entry_has_input(entry) for entry in entries)
+
     def validate_selected_date(self, selected_date: str) -> str | None:
         raw_date = str(selected_date or "").strip()
         if not raw_date:
@@ -76,6 +86,8 @@ class DailyEntryService:
         member_error = self.validate_member_fields(active_members, form_data)
         if member_error is not None:
             return member_error
+        if not self.entries_have_input(entries):
+            return MESSAGES["score_empty_submission"]
         return self.validate_entries(entries)
 
     def process_submission(self, active_members: list[dict[str, Any]], form_data: Any, selected_date: str) -> dict[str, Any]:

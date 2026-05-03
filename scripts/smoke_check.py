@@ -90,6 +90,10 @@ class SmokeCheckRunner:
             result = store.daily_entry_service.process_submission(active_members, {}, selected_date)
             if "ok" not in result:
                 raise ValueError("missing ok flag")
+            if result["ok"]:
+                raise ValueError("empty submission should not save")
+            if store.get_score_rows_for_date(selected_date):
+                raise ValueError("empty submission created rows")
             return f"ok={result['ok']}"
 
         self.check("service 入口", _run)
@@ -146,6 +150,9 @@ class SmokeCheckRunner:
                     response = client.get(route)
                     if response.status_code != 200:
                         failures.append(f"{route}={response.status_code}")
+                    if route == "/scores":
+                        if response.data.count(b"data-risk-confirm") != 3:
+                            failures.append("/scores risk confirmation buttons missing")
                 if failures:
                     raise ValueError(", ".join(failures))
                 return f"routes={len(routes)}"
@@ -153,6 +160,51 @@ class SmokeCheckRunner:
                 shutil.rmtree(temp_dir, ignore_errors=True)
 
         self.check("页面路由", _run)
+
+    def check_delete_score_date(self) -> None:
+        def _run():
+            from openpyxl import load_workbook
+
+            from bm2.constants import EXPENSE_SHEET, INCOME_SHEET, SCORE_SHEET, WEAR_SHEET
+
+            store = self.build_store()
+            target_date = "2026-05-02"
+            active_members = store.get_active_members()
+            first_name = active_members[0]["name"]
+            form_data = {f"score_{member['name']}": "1" for member in active_members}
+            form_data[f"manual_wear_{first_name}"] = "9"
+            form_data[f"income_{first_name}"] = "30"
+            form_data[f"other_expense_{first_name}"] = "4"
+            result = store.daily_entry_service.process_submission(active_members, form_data, target_date)
+            if not result.get("ok"):
+                raise ValueError(result.get("error"))
+            store.export_to_excel(target_date)
+            deleted = store.delete_score_date(target_date)
+            if not deleted.get("deleted_rows"):
+                raise ValueError("no rows deleted")
+            if store.get_score_rows_for_date(target_date):
+                raise ValueError("database rows still visible")
+
+            workbook = load_workbook(store.workbook_path)
+            try:
+                score_headers = [
+                    str(workbook[SCORE_SHEET].cell(1, col).value or "")
+                    for col in range(1, workbook[SCORE_SHEET].max_column + 1)
+                ]
+                if "05-02" in score_headers:
+                    raise ValueError("score date still in workbook")
+                for sheet_name in (WEAR_SHEET, INCOME_SHEET, EXPENSE_SHEET):
+                    headers = [
+                        str(workbook[sheet_name].cell(1, col).value or "").zfill(4)
+                        for col in range(1, workbook[sheet_name].max_column + 1)
+                    ]
+                    if "0502" in headers:
+                        raise ValueError(f"{sheet_name} date still in workbook")
+            finally:
+                workbook.close()
+            return f"deleted_rows={deleted['deleted_rows']}"
+
+        self.check("delete score date", _run)
 
     def check_architecture_rules(self) -> None:
         def _run():
@@ -175,6 +227,7 @@ class SmokeCheckRunner:
             self.check_application_entry()
             self.check_static_assets()
             self.check_page_routes()
+            self.check_delete_score_date()
             self.check_architecture_rules()
         finally:
             if self._temp_root and self._temp_root.exists():

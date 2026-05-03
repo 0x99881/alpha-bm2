@@ -36,6 +36,11 @@ CREATE TABLE IF NOT EXISTS public.score_entries (
     member_name TEXT NOT NULL,
     score_date  TEXT NOT NULL,
     score       INTEGER NOT NULL,
+    before_balance TEXT NOT NULL DEFAULT '',
+    after_balance  TEXT NOT NULL DEFAULT '',
+    manual_wear    TEXT NOT NULL DEFAULT '',
+    income         TEXT NOT NULL DEFAULT '',
+    other_expense  TEXT NOT NULL DEFAULT '',
     updated_at  TEXT NOT NULL,
     version     INTEGER NOT NULL DEFAULT 1,
     deleted     INTEGER NOT NULL DEFAULT 0,
@@ -44,6 +49,12 @@ CREATE TABLE IF NOT EXISTS public.score_entries (
 );
 
 CREATE INDEX IF NOT EXISTS idx_score_entries_date ON public.score_entries (score_date);
+
+ALTER TABLE public.score_entries ADD COLUMN IF NOT EXISTS before_balance TEXT NOT NULL DEFAULT '';
+ALTER TABLE public.score_entries ADD COLUMN IF NOT EXISTS after_balance  TEXT NOT NULL DEFAULT '';
+ALTER TABLE public.score_entries ADD COLUMN IF NOT EXISTS manual_wear    TEXT NOT NULL DEFAULT '';
+ALTER TABLE public.score_entries ADD COLUMN IF NOT EXISTS income         TEXT NOT NULL DEFAULT '';
+ALTER TABLE public.score_entries ADD COLUMN IF NOT EXISTS other_expense  TEXT NOT NULL DEFAULT '';
 
 -- ============================================================
 -- Row Level Security
