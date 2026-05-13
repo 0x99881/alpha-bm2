@@ -4,6 +4,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ title or ui.app_title }}</title>
+    <script>
+        (() => {
+            try {
+                const theme = window.localStorage.getItem("bm2-theme") || "light";
+                document.documentElement.dataset.theme = theme;
+                document.documentElement.style.colorScheme = theme === "dark" ? "dark" : "light";
+            } catch (error) {
+                document.documentElement.dataset.theme = "light";
+            }
+        })();
+    </script>
     <link rel="stylesheet" href="{{ url_for('asset_file', filename='style.css', v=asset_version) }}">
     {% block head_extra %}{% endblock %}
 </head>
@@ -18,14 +29,13 @@
                 {% if read_only_mode %}
                 <a href="{{ url_for('score_entry') }}" class="{% if request.endpoint == 'score_entry' %}active{% endif %}">{{ ui.nav_scores }}</a>
                 <a href="{{ url_for('score_overview') }}" class="{% if request.endpoint == 'score_overview' %}active{% endif %}">{{ ui.nav_score_overview }}</a>
-                <a href="{{ url_for('help_page') }}" class="{% if request.endpoint == 'help_page' %}active{% endif %}">{{ ui.nav_help }}</a>
+                <a href="{{ url_for('wear_entry') }}" class="{% if request.endpoint == 'wear_entry' %}active{% endif %}">{{ ui.nav_wear }}</a>
                 {% else %}
                 <a href="{{ url_for('score_entry') }}" class="{% if request.endpoint == 'score_entry' %}active{% endif %}">{{ ui.nav_scores }}</a>
                 <a href="{{ url_for('score_overview') }}" class="{% if request.endpoint == 'score_overview' %}active{% endif %}">{{ ui.nav_score_overview }}</a>
                 <a href="{{ url_for('wear_entry') }}" class="{% if request.endpoint == 'wear_entry' %}active{% endif %}">{{ ui.nav_wear }}</a>
                 <a href="{{ url_for('profit_calendar') }}" class="{% if request.endpoint in ['profit_calendar', 'member_detail'] %}active{% endif %}">{{ ui.nav_calendar }}</a>
                 <a href="{{ url_for('members') }}" class="{% if request.endpoint == 'members' %}active{% endif %}">{{ ui.nav_members }}</a>
-                <a href="{{ url_for('help_page') }}" class="{% if request.endpoint == 'help_page' %}active{% endif %}">{{ ui.nav_help }}</a>
                 {% endif %}
             </nav>
             <div class="theme-switch-card">

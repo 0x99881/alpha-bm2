@@ -48,7 +48,7 @@ class SQLiteReportRepositoryMixin:
                 filtered[score_date] = values
         return filtered
 
-    def get_next_score_date(self, fallback_date: str) -> str:
+    def get_next_score_date(self, default_date: str) -> str:
         rows = self._filtered_score_rows()
         if rows:
             latest = max(datetime.strptime(str(row["score_date"]).strip(), "%Y-%m-%d").date() for row in rows)
@@ -56,7 +56,7 @@ class SQLiteReportRepositoryMixin:
         cycle_start = self._cycle_start_date()
         if cycle_start is not None:
             return cycle_start.strftime("%Y-%m-%d")
-        return fallback_date
+        return default_date
 
     def get_score_date_count(self) -> int:
         connection = self._connect()
@@ -132,7 +132,7 @@ class SQLiteReportRepositoryMixin:
             raw_rows.append([*date_scores, total, profit, member_name])
         visible_notes = {score_date: notes_map.get(score_date, []) for score_date in window_dates}
         if any(visible_notes.values()):
-            for note_index in range(2):
+            for note_index in range(3):
                 note_row = [
                     visible_notes.get(score_date, [])[note_index]
                     if len(visible_notes.get(score_date, [])) > note_index

@@ -145,6 +145,16 @@
     text-align: center;
 }
 
+.excel-sheet-table .excel-low-score {
+    color: #dc2626;
+    font-weight: 800;
+}
+
+.excel-sheet-table .excel-abnormal-cell {
+    color: #dc2626;
+    font-weight: 800;
+}
+
 .excel-sheet-table .excel-col-total,
 .excel-sheet-table .excel-col-profit {
     width: 94px;
@@ -201,92 +211,100 @@
     border-bottom-color: #ffffff;
 }
 
-body[data-theme="dark"] .excel-sheet-wrap {
-    border-color: #324154;
-    background: linear-gradient(180deg, #111827 0%, #16202f 100%);
+html[data-theme="dark"] .excel-sheet-wrap {
+    border-color: #3a3a3a;
+    background: #101010;
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
-body[data-theme="dark"] .excel-workbook {
-    border-color: #334155;
-    background: #111827;
+html[data-theme="dark"] .excel-workbook {
+    border-color: #3a3a3a;
+    background: #161616;
 }
 
-body[data-theme="dark"] .excel-toolbar,
-body[data-theme="dark"] .excel-formula-bar,
-body[data-theme="dark"] .excel-sheet-tabs {
-    background: #182234;
-    border-color: #334155;
+html[data-theme="dark"] .excel-toolbar,
+html[data-theme="dark"] .excel-formula-bar,
+html[data-theme="dark"] .excel-sheet-tabs {
+    background: #202020;
+    border-color: #3a3a3a;
 }
 
-body[data-theme="dark"] .excel-toolbar-chip,
-body[data-theme="dark"] .excel-name-box,
-body[data-theme="dark"] .excel-formula-input {
-    border-color: #3b4758;
-    background: #0f172a;
-    color: #dbe7f6;
+html[data-theme="dark"] .excel-toolbar-chip,
+html[data-theme="dark"] .excel-name-box,
+html[data-theme="dark"] .excel-formula-input {
+    border-color: #454545;
+    background: #151515;
+    color: #f5f5f5;
 }
 
-body[data-theme="dark"] .excel-sheet-table {
-    background: #0f172a;
+html[data-theme="dark"] .excel-sheet-table {
+    background: #121212;
 }
 
-body[data-theme="dark"] .excel-sheet-table th,
-body[data-theme="dark"] .excel-sheet-table td {
-    border-color: #334155;
+html[data-theme="dark"] .excel-sheet-table th,
+html[data-theme="dark"] .excel-sheet-table td {
+    border-color: #3a3a3a;
 }
 
-body[data-theme="dark"] .excel-letter-row th,
-body[data-theme="dark"] .excel-row-head,
-body[data-theme="dark"] .excel-corner-cell {
-    background: #1e293b;
-    color: #cbd5e1;
+html[data-theme="dark"] .excel-letter-row th,
+html[data-theme="dark"] .excel-row-head,
+html[data-theme="dark"] .excel-corner-cell {
+    background: #242424;
+    color: #e0e0e0;
 }
 
-body[data-theme="dark"] .excel-sheet-table thead tr:last-child th {
-    background: linear-gradient(180deg, #243246 0%, #1a2638 100%);
-    color: #e2e8f0;
+html[data-theme="dark"] .excel-sheet-table thead tr:last-child th {
+    background: #2a2a2a;
+    color: #f5f5f5;
 }
 
-body[data-theme="dark"] .excel-sheet-table tbody tr:nth-child(even) td {
-    background: #101b2d;
+html[data-theme="dark"] .excel-sheet-table tbody tr:nth-child(even) td {
+    background: #1a1a1a;
 }
 
-body[data-theme="dark"] .excel-sheet-table tbody tr:hover td,
-body[data-theme="dark"] .excel-sheet-table tbody tr:hover .excel-row-head {
-    background: #16243a;
+html[data-theme="dark"] .excel-sheet-table tbody tr:hover td,
+html[data-theme="dark"] .excel-sheet-table tbody tr:hover .excel-row-head {
+    background: #262626;
 }
 
-body[data-theme="dark"] .excel-sheet-table .excel-col-total,
-body[data-theme="dark"] .excel-sheet-table .excel-col-profit {
-    background: #152818;
+html[data-theme="dark"] .excel-sheet-table .excel-low-score {
+    color: #ff6b6b;
 }
 
-body[data-theme="dark"] .excel-sheet-table th.excel-col-total,
-body[data-theme="dark"] .excel-sheet-table th.excel-col-profit {
-    background: linear-gradient(180deg, #214429 0%, #18351f 100%);
-    color: #c9f0d0;
+html[data-theme="dark"] .excel-sheet-table .excel-abnormal-cell {
+    color: #ff6b6b;
 }
 
-body[data-theme="dark"] .excel-sheet-table .excel-col-name {
-    background: #2b2110;
+html[data-theme="dark"] .excel-sheet-table .excel-col-total,
+html[data-theme="dark"] .excel-sheet-table .excel-col-profit {
+    background: #1d1d1d;
 }
 
-body[data-theme="dark"] .excel-sheet-table th.excel-col-name {
-    background: linear-gradient(180deg, #5b4311 0%, #4a350d 100%);
-    color: #ffe8b3;
+html[data-theme="dark"] .excel-sheet-table th.excel-col-total,
+html[data-theme="dark"] .excel-sheet-table th.excel-col-profit {
+    background: #303030;
+    color: #f5f5f5;
 }
 
-body[data-theme="dark"] .excel-tab {
-    border-color: #3a4758;
-    background: #223045;
-    color: #cbd5e1;
+html[data-theme="dark"] .excel-sheet-table .excel-col-name {
+    background: #1d1d1d;
 }
 
-body[data-theme="dark"] .excel-tab.active {
-    background: #0f172a;
-    color: #93c5fd;
-    border-bottom-color: #0f172a;
+html[data-theme="dark"] .excel-sheet-table th.excel-col-name {
+    background: #303030;
+    color: #f5f5f5;
+}
+
+html[data-theme="dark"] .excel-tab {
+    border-color: #4a4a4a;
+    background: #242424;
+    color: #e0e0e0;
+}
+
+html[data-theme="dark"] .excel-tab.active {
+    background: #161616;
+    color: #f5f5f5;
+    border-bottom-color: #161616;
 }
 
 @media (max-width: 960px) {

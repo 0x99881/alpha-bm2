@@ -40,7 +40,7 @@ class SQLiteEntryWriter:
             self._local_db.record_score_entries(saved_date, entries, source="local")
         if notes is not None:
             self._local_db.record_score_date_notes(saved_date, notes, source="local")
-        note_has_input = any(str((notes or {}).get(key, "") or "").strip() for key in ("note1", "note2"))
+        note_has_input = any(str((notes or {}).get(key, "") or "").strip() for key in ("note1", "note2", "note3"))
         date_count = self._local_db.get_score_date_count()
         if note_has_input:
             date_count = max(date_count, 1)

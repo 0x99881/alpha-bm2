@@ -1,16 +1,15 @@
 ﻿from __future__ import annotations
 
-from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
-from ..constants import META_SHEET, WINDOW_SIZE, UNIQUE_DATE_SEARCH_LIMIT
+from ..constants import META_SHEET, WINDOW_SIZE
 from ..domain.rules.daily_entry import IncompleteBalanceInput, resolve_wear_value
 from ..ui_text import MESSAGES
 from .daily_target import DailyTarget
 from .header_locator import find_column
 from .member_rows import ensure_member_rows_with_map, sort_named_rows, sort_rows_by_name
-from .sheet_metadata import append_sheet_meta, parse_saved_date, read_sheet_meta
+from .sheet_metadata import append_sheet_meta, read_sheet_meta
 from .value_normalizer import normalize_expense, normalize_income, normalize_wear, parse_decimal
 from .value_sheet_spec import get_value_sheet_spec
 
@@ -18,9 +17,6 @@ from .value_sheet_spec import get_value_sheet_spec
 class ExcelWorkbookWriter:
     def __init__(self, store) -> None:
         self._store = store
-
-    def _daily_target_class(self):
-        return DailyTarget
 
     def _prepare_score_target(self, score_sheet, effective_date_text: str) -> DailyTarget:
         return self._store.score_sheet.prepare_target(score_sheet, effective_date_text)
@@ -44,10 +40,10 @@ class ExcelWorkbookWriter:
 
     def _prepare_daily_targets(self, workbook, effective_date_text: str) -> dict[str, DailyTarget]:
         day_code = effective_date_text[5:].replace('-', '')
-        score_sheet = self._store._score_sheet(workbook)
+        score_sheet = self._store.score_sheet_for(workbook)
         targets = {'score': self._prepare_score_target(score_sheet, effective_date_text)}
         for sheet_type in ('wear', 'income', 'expense'):
-            helpers = self._store._value_sheet_helpers(sheet_type)
+            helpers = self._store.value_sheet_helpers_for(sheet_type)
             targets[sheet_type] = self._prepare_value_target(
                 helpers.sheet_getter(workbook),
                 total_header=helpers.spec['total_header'],
@@ -65,12 +61,12 @@ class ExcelWorkbookWriter:
                 members=self._store.get_members(),
                 name_col=score_target.name_col,
                 total_col=score_target.total_col,
-                value_columns=[col for _, col in self._store._score_date_columns(score_target.sheet)],
+                value_columns=[col for _, col in self._store.score_date_columns_for(score_target.sheet)],
                 extra_columns=[score_target.profit_col] if score_target.profit_col is not None else [],
             )[0],
         }
         for sheet_type in ('wear', 'income', 'expense'):
-            helpers = self._store._value_sheet_helpers(sheet_type)
+            helpers = self._store.value_sheet_helpers_for(sheet_type)
             target = targets[sheet_type]
             row_maps[sheet_type] = ensure_member_rows_with_map(
                 target.sheet,
@@ -84,11 +80,11 @@ class ExcelWorkbookWriter:
     def _finalize_daily_save(self, workbook, *, effective_date_text: str, recent_numbers: list[int], targets: dict[str, DailyTarget]) -> None:
         score_target = targets['score']
         wear_target = targets['wear']
-        self._store._recalculate_totals(score_target.sheet, score_target.total_col)
-        self._store._recalculate_score_profits(workbook, score_target.sheet, score_target.profit_col)
+        self._store.recalculate_score_totals(score_target.sheet, score_target.total_col)
+        self._store.recalculate_score_profits(workbook, score_target.sheet, score_target.profit_col)
         sort_named_rows(score_target.sheet, score_target.total_col, score_target.name_col)
-        self._store._format_score_sheet(score_target.sheet, recent_numbers, score_target.total_col)
-        self._store._recalculate_wear_totals(wear_target.sheet, wear_target.total_col)
+        self._store.format_score_sheet(score_target.sheet, recent_numbers, score_target.total_col)
+        self._store.recalculate_wear_totals(wear_target.sheet, wear_target.total_col)
         sort_named_rows(wear_target.sheet, wear_target.total_col, wear_target.name_col)
         for sheet_type in ('income', 'expense'):
             target = targets[sheet_type]
@@ -96,7 +92,7 @@ class ExcelWorkbookWriter:
         append_sheet_meta(workbook, META_SHEET, effective_date_text, f"D{score_target.next_number}")
         for sheet_type in ('wear', 'income', 'expense'):
             append_sheet_meta(workbook, get_value_sheet_spec(sheet_type)['meta_sheet'], effective_date_text, targets[sheet_type].header)
-        self._store._sync_member_visibility_in_workbook(workbook)
+        self._store.sync_member_visibility_in_workbook(workbook)
 
     def _normalize_entry_payload(self, entry: dict[str, str]) -> dict[str, str]:
         return {
@@ -147,26 +143,14 @@ class ExcelWorkbookWriter:
         targets['wear'].sheet.cell(row_maps['wear'][name], targets['wear'].target_col, normalize_wear(wear_value))
         return True
 
-    def _parse_decimal(self, value: str, field_name: str) -> Decimal:
-        return parse_decimal(value, field_name)
-
-    def _round_wear(self, value: Decimal | float | int) -> float:
+    def format_wear_value(self, value: Decimal | float | int) -> float:
         return normalize_wear(value)
 
-    def _round_income(self, value: Decimal | float | int) -> float:
+    def format_income_value(self, value: Decimal | float | int) -> float:
         return normalize_income(value)
 
-    def _round_expense(self, value: Decimal | float | int) -> float:
+    def format_expense_value(self, value: Decimal | float | int) -> float:
         return normalize_expense(value)
-
-    def _sheet_has_day_code(self, sheet, columns_getter, day_code: str) -> bool:
-        for number, _ in columns_getter(sheet):
-            if f'{number:04d}' == day_code:
-                return True
-        return False
-
-    def _score_sheet_has_date(self, sheet, mmdd_text: str) -> bool:
-        return self._store.score_sheet.has_date(sheet, mmdd_text)
 
     def _remove_meta_rows_for_date(self, workbook, sheet_name: str, date_text: str) -> None:
         if sheet_name not in workbook.sheetnames:
@@ -190,9 +174,9 @@ class ExcelWorkbookWriter:
         mmdd_text = date_text[5:]
         day_code = mmdd_text.replace('-', '')
 
-        score_sheet = self._store._score_sheet(workbook)
+        score_sheet = self._store.score_sheet_for(workbook)
         score_numbers = self._score_column_numbers_for_date(workbook, date_text)
-        score_columns = self._store._score_date_columns(score_sheet)
+        score_columns = self._store.score_date_columns_for(score_sheet)
         for number, column_index in sorted(score_columns, key=lambda item: item[1], reverse=True):
             header_text = str(score_sheet.cell(1, column_index).value or '').strip()
             if number in score_numbers or header_text == mmdd_text:
@@ -200,7 +184,7 @@ class ExcelWorkbookWriter:
         self._remove_meta_rows_for_date(workbook, META_SHEET, date_text)
 
         for sheet_type in ('wear', 'income', 'expense'):
-            helpers = self._store._value_sheet_helpers(sheet_type)
+            helpers = self._store.value_sheet_helpers_for(sheet_type)
             sheet = helpers.sheet_getter(workbook)
             meta_sheet = helpers.spec['meta_sheet']
             matching_headers = {
@@ -219,33 +203,13 @@ class ExcelWorkbookWriter:
                 sheet.delete_cols(column_index, 1)
             self._remove_meta_rows_for_date(workbook, meta_sheet, date_text)
 
-    def _parse_saved_date(self, date_text: str):
-        return parse_saved_date(date_text)
-
-    def _resolve_unique_daily_date(self, workbook, date_text: str) -> str:
-        current = self._parse_saved_date(date_text)
-        score_sheet = self._store._score_sheet(workbook)
-        for _ in range(UNIQUE_DATE_SEARCH_LIMIT):
-            score_header = current.strftime('%m-%d')
-            day_code = current.strftime('%m%d')
-            exists = self._score_sheet_has_date(score_sheet, score_header)
-            for sheet_type in ('wear', 'income', 'expense'):
-                helpers = self._store._value_sheet_helpers(sheet_type)
-                if self._sheet_has_day_code(helpers.sheet_getter(workbook), helpers.columns_getter, day_code):
-                    exists = True
-                    break
-            if not exists:
-                return current.strftime('%Y-%m-%d')
-            current += timedelta(days=1)
-        raise ValueError(f'无法在 {date_text} 之后 {UNIQUE_DATE_SEARCH_LIMIT} 天内找到可用日期')
-
     def save_scores_and_wear(self, date_text: str, entries: list[dict[str, str]]) -> dict[str, Any]:
         workbook = self._store.workbook_repository.open()
         try:
-            self._store._ensure_score_sheet_structure(workbook)
-            self._store._ensure_wear_sheet_structure(workbook)
-            self._store._ensure_income_sheet_structure(workbook)
-            self._store._ensure_expense_sheet_structure(workbook)
+            self._store.ensure_score_sheet_structure(workbook)
+            self._store.ensure_wear_sheet_structure(workbook)
+            self._store.ensure_income_sheet_structure(workbook)
+            self._store.ensure_expense_sheet_structure(workbook)
             effective_date_text = str(date_text).strip()
             self._remove_existing_daily_columns(workbook, effective_date_text)
             targets = self._prepare_daily_targets(workbook, effective_date_text)
@@ -258,7 +222,7 @@ class ExcelWorkbookWriter:
                 wear_value = self._resolve_entry_wear_value(payload)
                 wear_rows_added += int(self._write_entry_wear(payload['name'], wear_value, targets=targets, row_maps=row_maps))
 
-            recent_numbers = [number for number, _ in self._store._score_date_columns(targets['score'].sheet)][-WINDOW_SIZE:]
+            recent_numbers = [number for number, _ in self._store.score_date_columns_for(targets['score'].sheet)][-WINDOW_SIZE:]
             self._finalize_daily_save(workbook, effective_date_text=effective_date_text, recent_numbers=recent_numbers, targets=targets)
             self._store.workbook_repository.save(workbook)
             return {

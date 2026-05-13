@@ -2,15 +2,12 @@ from __future__ import annotations
 
 from flask import abort, flash, redirect, request, url_for
 
+from .repositories.supabase_client import SUPABASE_REQUEST_ERRORS
 from .ui_text import MESSAGES
 
 
 def _is_transient_network_error(exc: BaseException) -> bool:
-    try:
-        import httpx
-    except ImportError:
-        return False
-    return isinstance(exc, (httpx.TimeoutException, httpx.TransportError))
+    return exc.__class__.__module__.startswith("httpx")
 
 
 def register_sync_routes(app, store, *, read_only_mode: bool) -> None:
@@ -23,7 +20,15 @@ def register_sync_routes(app, store, *, read_only_mode: bool) -> None:
     def _looks_like_score_form_post() -> bool:
         if not _posted_score_form_date():
             return False
-        prefixes = ("score_", "before_", "after_", "manual_wear_", "income_", "other_expense_")
+        prefixes = (
+            "score_",
+            "before_",
+            "after_",
+            "manual_wear_",
+            "income_",
+            "other_expense_",
+            "date_note_",
+        )
         return any(
             str(key).startswith(prefixes) and str(request.form.get(key, "") or "").strip() != ""
             for key in request.form.keys()
@@ -33,8 +38,7 @@ def register_sync_routes(app, store, *, read_only_mode: bool) -> None:
         if not _looks_like_score_form_post():
             return True, ""
         selected_date = _posted_score_form_date()
-        submission = store.daily_entry_service.process_submission(
-            store.get_active_members(),
+        submission = store.save_daily_entry(
             request.form,
             selected_date,
         )
@@ -42,10 +46,8 @@ def register_sync_routes(app, store, *, read_only_mode: bool) -> None:
             flash(submission["error"], "error")
             return False, selected_date
         saved_date = submission["result"]["saved_date"]
-        try:
-            store.export_to_excel(saved_date)
-        except (OSError, ValueError):
-            app.logger.exception("Failed to update workbook before Supabase push")
+        if submission.get("export_error") is not None:
+            app.logger.error("Failed to update workbook before Supabase push: %s", submission["export_error"])
             flash(MESSAGES["excel_save_failed"].format(filename=store.workbook_path.name), "error")
         return True, saved_date
 
@@ -69,7 +71,7 @@ def register_sync_routes(app, store, *, read_only_mode: bool) -> None:
         except ValueError as exc:
             flash(str(exc), "error")
             return _redirect_back_to_score_entry()
-        except Exception as exc:
+        except SUPABASE_REQUEST_ERRORS as exc:
             app.logger.exception("Supabase push failed")
             if _is_transient_network_error(exc):
                 flash(MESSAGES["supabase_upload_failed_timeout"], "error")
@@ -93,7 +95,7 @@ def register_sync_routes(app, store, *, read_only_mode: bool) -> None:
             return _redirect_back_to_score_entry()
         try:
             pull = store.supabase_pull()
-        except Exception:
+        except SUPABASE_REQUEST_ERRORS:
             app.logger.exception("Supabase pull failed")
             flash(MESSAGES["supabase_download_failed"], "error")
             return _redirect_back_to_score_entry()

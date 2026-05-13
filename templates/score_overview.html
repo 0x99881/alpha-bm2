@@ -50,7 +50,7 @@
                     <tr>
                         <th class="excel-row-head">{{ loop.index + 1 }}</th>
                         {% for cell in row %}
-                        <td class="excel-col-{{ cell.kind }}">{{ '' if cell.value is none else cell.value }}</td>
+                        <td class="excel-col-{{ cell.kind }}{% if cell.is_low_score %} excel-low-score{% endif %}">{{ '' if cell.value is none else cell.value }}</td>
                         {% endfor %}
                     </tr>
                     {% else %}

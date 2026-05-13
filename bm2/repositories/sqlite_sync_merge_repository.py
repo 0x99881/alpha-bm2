@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
-
-from ..source_metadata import with_source_profit
 
 LOGGER = logging.getLogger(__name__)
 
@@ -24,12 +23,19 @@ class SQLiteSyncMergeRepositoryMixin:
         try:
             rows = connection.execute(
                 "SELECT id, member_id, member_name, score_date, score, "
-                "before_balance, after_balance, manual_wear, income, other_expense, "
+                "before_balance, after_balance, manual_wear, income, other_expense, profit, "
                 "updated_at, version, deleted, source FROM score_entries"
             ).fetchall()
             return [dict(row) for row in rows]
         finally:
             connection.close()
+
+    def get_change_detection_snapshot(self) -> dict[str, object]:
+        return {
+            "members": self._get_all_member_rows_for_push(),
+            "score_entries": self._get_all_score_rows_for_push(),
+            "date_notes": self.get_score_date_notes_map(),
+        }
 
     def _get_unsynced_member_rows_for_push(self, since_ts: str) -> list[dict[str, Any]]:
         """Return member rows updated after *since_ts* (incremental push)."""
@@ -50,7 +56,7 @@ class SQLiteSyncMergeRepositoryMixin:
         try:
             rows = connection.execute(
                 "SELECT id, member_id, member_name, score_date, score, "
-                "before_balance, after_balance, manual_wear, income, other_expense, "
+                "before_balance, after_balance, manual_wear, income, other_expense, profit, "
                 "updated_at, version, deleted, source "
                 "FROM score_entries WHERE updated_at > ?",
                 (since_ts,),
@@ -62,7 +68,7 @@ class SQLiteSyncMergeRepositoryMixin:
     @staticmethod
     def _score_row_with_detail_defaults(row: dict[str, Any]) -> dict[str, Any]:
         normalized = dict(row)
-        for key in ("before_balance", "after_balance", "manual_wear", "income", "other_expense"):
+        for key in ("before_balance", "after_balance", "manual_wear", "income", "other_expense", "profit"):
             normalized[key] = str(normalized.get(key, "") or "")
         return normalized
 
@@ -84,7 +90,7 @@ class SQLiteSyncMergeRepositoryMixin:
         return deleted_rows
 
     @staticmethod
-    def _attach_score_profit_sources(
+    def _attach_score_profit_values(
         rows: list[dict[str, Any]],
         score_profit_map: dict[str, float] | None,
     ) -> list[dict[str, Any]]:
@@ -97,9 +103,18 @@ class SQLiteSyncMergeRepositoryMixin:
                 enriched_rows.append(row)
                 continue
             enriched = dict(row)
-            enriched["source"] = with_source_profit(enriched.get("source", "local"), score_profit_map[member_name])
+            enriched["profit"] = str(round(float(score_profit_map[member_name]), 1))
             enriched_rows.append(enriched)
         return enriched_rows
+
+    @staticmethod
+    def _push_members_and_scores(supabase_sync, members: list[dict[str, Any]], scores: list[dict[str, Any]]) -> tuple[int, int]:
+        if members and scores:
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                member_future = executor.submit(supabase_sync.push_members, members)
+                score_future = executor.submit(supabase_sync.push_score_entries, scores)
+                return member_future.result(), score_future.result()
+        return supabase_sync.push_members(members), supabase_sync.push_score_entries(scores)
 
     def push_to_supabase(
         self,
@@ -121,15 +136,14 @@ class SQLiteSyncMergeRepositoryMixin:
         else:
             members = self._get_all_member_rows_for_push()
             scores = self._get_all_score_rows_for_push()
-        scores = self._attach_score_profit_sources(scores, score_profit_map)
+        scores = self._attach_score_profit_values(scores, score_profit_map)
         if scores:
             supabase_sync.ensure_score_entries_schema()
         LOGGER.info(
             "Supabase push (%s): %d members, %d score_entries queued",
             mode, len(members), len(scores),
         )
-        m_count = supabase_sync.push_members(members)
-        s_count = supabase_sync.push_score_entries(scores)
+        m_count, s_count = self._push_members_and_scores(supabase_sync, members, scores)
         deleted_count = 0
         if force_full:
             remote_scores = supabase_sync.pull_score_entries()
@@ -251,10 +265,10 @@ class SQLiteSyncMergeRepositoryMixin:
                     connection.execute(
                         "INSERT INTO score_entries "
                         "(id, member_id, member_name, score_date, score, "
-                        "before_balance, after_balance, manual_wear, income, other_expense, "
+                        "before_balance, after_balance, manual_wear, income, other_expense, profit, "
                         "updated_at, version, deleted, source) "
                         "VALUES (:id, :member_id, :member_name, :score_date, :score, "
-                        ":before_balance, :after_balance, :manual_wear, :income, :other_expense, "
+                        ":before_balance, :after_balance, :manual_wear, :income, :other_expense, :profit, "
                         ":updated_at, :version, :deleted, :source)",
                         row,
                     )
@@ -263,7 +277,7 @@ class SQLiteSyncMergeRepositoryMixin:
                     connection.execute(
                         "UPDATE score_entries SET score=:score, member_id=:member_id, member_name=:member_name, "
                         "score_date=:score_date, before_balance=:before_balance, after_balance=:after_balance, "
-                        "manual_wear=:manual_wear, income=:income, other_expense=:other_expense, "
+                        "manual_wear=:manual_wear, income=:income, other_expense=:other_expense, profit=:profit, "
                         "updated_at=:updated_at, version=:version, "
                         "deleted=:deleted, source=:source WHERE id=:id",
                         row,

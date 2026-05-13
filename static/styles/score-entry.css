@@ -220,7 +220,7 @@ th {
 
 .date-notes-fields {
     display: grid;
-    grid-template-columns: repeat(2, minmax(160px, 1fr));
+    grid-template-columns: repeat(3, minmax(140px, 1fr));
     gap: 8px;
 }
 
@@ -282,6 +282,15 @@ th {
     display: flex;
     flex-direction: column;
     gap: 6px;
+}
+
+html[data-theme="dark"] .status-tag.disabled {
+    background: #222222;
+    color: #a3a3a3;
+}
+
+html[data-theme="dark"] .sortable-member-row.dragging {
+    background: #252525;
 }
 
 @media (max-width: 760px) {

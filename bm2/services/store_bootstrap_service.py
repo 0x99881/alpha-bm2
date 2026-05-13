@@ -43,8 +43,8 @@ class StoreBootstrapService:
         context.wear_sheet = WearSheet(context)
         context.income_sheet = IncomeSheet(context)
         context.expense_sheet = ExpenseSheet(context)
-        context._reader = ExcelWorkbookReader(context)
-        context._writer = ExcelWorkbookWriter(context)
+        context.workbook_reader = ExcelWorkbookReader(context)
+        context.workbook_writer = ExcelWorkbookWriter(context)
         context.query_service = StoreQueryService(context)
         context.supabase = SupabaseClient(context.base_dir)
         if read_only:
@@ -59,11 +59,11 @@ class StoreBootstrapService:
                 lambda: datetime.now().strftime("%Y-%m-%d"),
             )
             entry_writer = SupabaseEntryWriter(context.supabase)
-            context._sqlite_writer = None
+            context.sqlite_entry_writer = None
         else:
-            context._ensure_workbook()
             context.local_db = LocalDatabase(context.base_dir, read_only=read_only)
-            context.excel_exporter = SQLiteToExcelExporter(context.local_db, context._writer)
+            context.ensure_workbook()
+            context.excel_exporter = SQLiteToExcelExporter(context.local_db, context.workbook_writer)
             context.export_service = ExcelExportService(context)
             context.excel_import_service = ExcelImportService(
                 context.local_db,
@@ -74,10 +74,11 @@ class StoreBootstrapService:
             context.excel_import_service.bootstrap_from_excel_if_empty()
             context.sync_service = SyncService(context.local_db, context.supabase, after_pull=context.excel_import_service.after_supabase_pull)
             context.application_service = self.create_online_application_service(context)
-            context._sqlite_writer = SQLiteEntryWriter(context.local_db)
-            entry_writer = context._sqlite_writer
+            context.sqlite_entry_writer = SQLiteEntryWriter(context.local_db)
+            entry_writer = context.sqlite_entry_writer
         context.daily_entry_service = DailyEntryService(entry_writer)
-        context.member_service = MemberService(context.get_members, context.local_db)
+        member_after_change = None if read_only else context.export_service.sync_member_visibility
+        context.member_service = MemberService(context.get_members, context.local_db, after_change=member_after_change)
         context.command_service = StoreCommandService(context)
         context.score_presenter = ScorePresenter(context)
         context.wear_presenter = WearPresenter(context)

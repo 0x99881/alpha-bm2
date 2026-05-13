@@ -3,9 +3,11 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 from typing import Callable
 
-from ..constants import ENABLED, NAME_HEADER, PROFIT_HEADER, TOTAL_HEADER
+from ..constants import ENABLED, NAME_HEADER, PROFIT_HEADER, TOTAL_HEADER, WEAR_ABNORMAL_THRESHOLD, WEAR_TOTAL_HEADER
+from ..excel.value_normalizer import normalize_wear
 from ..presenters.score_view_formatter import build_score_sheet_view, build_score_summary_view
-from ..source_metadata import parse_source_profit
+from ..ui_text import UI_TEXT
+from ..value_utils import to_float_or_none
 
 
 class ApplicationService:
@@ -13,6 +15,9 @@ class ApplicationService:
         self._local_database = local_database
         self._supabase_client = supabase_client
         self._local_next_score_date = local_next_score_date
+
+    def uses_supabase_client(self, supabase_client) -> bool:
+        return self._supabase_client is supabase_client
 
     def _online_member_rows(self) -> list[dict]:
         if not self._supabase_client.is_configured():
@@ -75,10 +80,22 @@ class ApplicationService:
             member_name = str(row.get("member_name", "")).strip()
             if not member_name:
                 continue
-            profit = parse_source_profit(row.get("source", ""))
-            if profit is not None:
-                profit_map[member_name] = profit
+            try:
+                profit = round(float(row.get("profit", 0) or 0), 1)
+            except (TypeError, ValueError):
+                profit = 0.0
+            profit_map[member_name] = profit
         return profit_map
+
+    def _score_wear_value(self, row: dict) -> float | None:
+        manual_wear = to_float_or_none(row.get("manual_wear"))
+        if manual_wear is not None:
+            return normalize_wear(manual_wear)
+        before_balance = to_float_or_none(row.get("before_balance"))
+        after_balance = to_float_or_none(row.get("after_balance"))
+        if before_balance is None or after_balance is None:
+            return None
+        return normalize_wear(before_balance - after_balance)
 
     def online_score_rows_for_date(self, score_date: str) -> list[dict]:
         return [
@@ -127,6 +144,50 @@ class ApplicationService:
         raw_rows.sort(key=lambda row: (-int(row[-3]), str(row[-1])))
         return build_score_sheet_view(headers, raw_rows)
 
+    def _wear_sheet_view(self, members: list[dict[str, str]], score_rows: list[dict]) -> dict:
+        window_dates = self._online_window_dates(score_rows)
+        wear_map: dict[tuple[str, str], float] = {}
+        for row in self._live_score_rows(score_rows):
+            member_name = str(row.get("member_name", "")).strip()
+            score_date = str(row.get("score_date", "")).strip()
+            if not member_name or score_date not in window_dates:
+                continue
+            wear_value = self._score_wear_value(row)
+            if wear_value is not None:
+                wear_map[(member_name, score_date)] = wear_value
+
+        headers = [score_date[5:] for score_date in window_dates]
+        headers.extend([WEAR_TOTAL_HEADER, NAME_HEADER, UI_TEXT["wear_member_avg"]])
+        wear_values = list(wear_map.values())
+        threshold = float(WEAR_ABNORMAL_THRESHOLD)
+        rows = []
+        for member in members:
+            name = str(member["name"])
+            date_values = [wear_map.get((name, score_date), 0.0) for score_date in window_dates]
+            entered_values = [wear_map[(name, score_date)] for score_date in window_dates if (name, score_date) in wear_map]
+            total = normalize_wear(sum(date_values))
+            average = normalize_wear(sum(entered_values) / len(entered_values)) if entered_values else 0.0
+            row_values = [*date_values, total, name, average]
+            rows.append(
+                [
+                    {
+                        "value": value,
+                        "is_abnormal": index < len(window_dates) and isinstance(value, (int, float)) and float(value) > threshold,
+                    }
+                    for index, value in enumerate(row_values)
+                ]
+            )
+        rows.sort(key=lambda row: (-(float(row[-3]["value"]) if isinstance(row[-3]["value"], (int, float)) else 0.0), str(row[-2]["value"])))
+        return {
+            "headers": headers,
+            "rows": rows,
+            "row_count": len(rows),
+            "column_count": len(headers),
+            "avg_daily_wear": normalize_wear(sum(wear_values) / len(wear_values)) if wear_values else 0.0,
+            "abnormal_threshold": threshold,
+            "abnormal_count": sum(1 for value in wear_values if value > threshold),
+        }
+
     def _next_score_date(self, score_rows: list[dict]) -> str:
         latest = self._latest_score_date(score_rows)
         if latest is not None:
@@ -139,8 +200,8 @@ class ApplicationService:
     def online_score_summary(self):
         return self._score_summary(self.online_score_summary_data())
 
-    def online_score_sheet_view(self):
-        return self._score_sheet_view(self.online_active_members(), self._online_score_rows())
+    def online_wear_sheet_view(self) -> dict:
+        return self._wear_sheet_view(self._active_members_from_rows(self._online_member_rows()), self._online_score_rows())
 
     def online_next_score_date(self) -> str:
         return self._next_score_date(self._online_score_rows())

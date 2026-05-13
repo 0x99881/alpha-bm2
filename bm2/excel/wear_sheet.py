@@ -96,6 +96,8 @@ class WearSheet:
         raw_rows = []
         name_col = find_column(sheet, WEAR_NAME_HEADER)
         for row in range(DATA_START_ROW, sheet.max_row + 1):
+            if bool(sheet.row_dimensions[row].hidden):
+                continue
             values = [sheet.cell(row, col).value for col in range(1, sheet.max_column + 1)]
             if name_col is not None and not values[name_col - 1]:
                 continue

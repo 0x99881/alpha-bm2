@@ -46,7 +46,6 @@ class ConfigRepository:
             changed = True
         else:
             next_sort_order = 1
-            known_names = {str(item.get('name', '')).strip() for item in members if isinstance(item, dict)}
             for item in members:
                 if not isinstance(item, dict):
                     continue
@@ -58,20 +57,6 @@ class ConfigRepository:
                 if item.get('sort_order') != original_sort_order:
                     changed = True
                 next_sort_order = max(next_sort_order, int(item['sort_order']) + 1)
-            for name in DEFAULT_MEMBERS:
-                if name not in known_names:
-                    members.append(
-                        {
-                            'name': name,
-                            'status': ENABLED,
-                            'note': '',
-                            'created_at': timestamp_factory(),
-                            'disabled_at': '',
-                            'sort_order': next_sort_order,
-                        }
-                    )
-                    next_sort_order += 1
-                    changed = True
             config['members'] = members
         if 'quick_scores' not in config:
             config['quick_scores'] = DEFAULT_QUICK_SCORES

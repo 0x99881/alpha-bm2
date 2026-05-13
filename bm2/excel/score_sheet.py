@@ -142,6 +142,8 @@ class ScoreSheet:
         rows = []
         if total_col and name_col:
             for row in range(DATA_START_ROW, sheet.max_row + 1):
+                if bool(sheet.row_dimensions[row].hidden):
+                    continue
                 name = sheet.cell(row, name_col).value
                 total = sheet.cell(row, total_col).value
                 if name:
@@ -171,6 +173,8 @@ class ScoreSheet:
         headers = [sheet.cell(1, col).value for col in visible_columns]
         raw_rows = []
         for row in range(DATA_START_ROW, sheet.max_row + 1):
+            if bool(sheet.row_dimensions[row].hidden):
+                continue
             if name_col is not None and not sheet.cell(row, name_col).value:
                 continue
             values = [sheet.cell(row, col).value for col in visible_columns]
@@ -299,15 +303,6 @@ class ScoreSheet:
             header=score_header,
             next_number=next_number,
         )
-
-    def has_date(self, sheet, mmdd_text: str) -> bool:
-        total_col = find_column(sheet, TOTAL_HEADER)
-        if total_col is None:
-            return False
-        for col in range(1, total_col):
-            if str(sheet.cell(1, col).value or '').strip() == mmdd_text and self.column_has_data(sheet, col):
-                return True
-        return False
 
     def column_has_data(self, sheet, col: int) -> bool:
         for row in range(DATA_START_ROW, sheet.max_row + 1):

@@ -64,7 +64,7 @@ def register_score_routes(
             page_entries = _score_rows_to_entries(store.get_score_rows_for_date(selected_date))
         page_notes = date_notes
         if page_notes is None:
-            page_notes = {"note1": "", "note2": ""} if read_only_mode else store.get_score_date_notes(selected_date)
+            page_notes = {"note1": "", "note2": "", "note3": ""} if read_only_mode else store.get_score_date_notes(selected_date)
         return render_template(
             template_name,
             active_members=_build_score_page_members(page_entries),
@@ -72,6 +72,7 @@ def register_score_routes(
             selected_date=selected_date,
             date_notes=page_notes,
             overwrite_prompt=overwrite_prompt,
+            quick_wear_values=[1, 2, 3, 4, 5],
         )
 
     def _get_requested_score_date() -> str:
@@ -146,10 +147,8 @@ def register_score_routes(
     @app.post("/scores/save")
     def save_scores():
         selected_date = _get_selected_date_from_form()
-        active_members = store.get_online_active_members() if read_only_mode else store.get_active_members()
-        existing_notes = {"note1": "", "note2": ""} if read_only_mode else store.get_score_date_notes(selected_date)
-        submission = store.daily_entry_service.process_submission(
-            active_members,
+        existing_notes = {"note1": "", "note2": "", "note3": ""} if read_only_mode else store.get_score_date_notes(selected_date)
+        submission = store.save_daily_entry(
             request.form,
             selected_date,
             existing_notes=existing_notes,
@@ -163,10 +162,8 @@ def register_score_routes(
             )
         _flash_save_score_result(selected_date, submission["result"])
         if not read_only_mode:
-            try:
-                store.export_to_excel(submission["result"]["saved_date"])
-            except (OSError, ValueError):
-                app.logger.exception("Failed to update workbook after score save")
+            if submission.get("export_error") is not None:
+                app.logger.error("Failed to update workbook after score save: %s", submission["export_error"])
                 flash(MESSAGES["excel_save_failed"].format(filename=store.workbook_path.name), "error")
             flash_remote_sync_needed()
         return redirect(url_for("score_entry", date=submission["result"]["saved_date"], draft_saved="1"))
@@ -196,7 +193,11 @@ def register_score_routes(
     def refresh_from_excel():
         if read_only_mode:
             abort(403)
-        result = store.refresh_local_database()
+        try:
+            result = store.refresh_local_database()
+        except ValueError as exc:
+            flash(str(exc), "error")
+            return redirect(url_for("score_entry"))
         if result.get("changed"):
             flash(MESSAGES["excel_refresh_changed"], "warning")
         else:

@@ -6,6 +6,9 @@ import time
 from pathlib import Path
 from typing import Any, Callable, TypeVar
 
+import httpx
+from postgrest.exceptions import APIError
+
 LOGGER = logging.getLogger(__name__)
 
 _T = TypeVar("_T")
@@ -14,8 +17,6 @@ _RETRY_DELAY_SECONDS = 1.5
 
 
 def _retry_on_transient(call: Callable[[], _T], *, label: str) -> _T:
-    import httpx
-
     last_exc: Exception | None = None
     for attempt in range(1, _RETRY_ATTEMPTS + 1):
         try:
@@ -48,6 +49,7 @@ _SCORE_ENTRY_UPLOAD_COLUMNS = (
     "manual_wear",
     "income",
     "other_expense",
+    "profit",
     "updated_at",
     "version",
     "deleted",
@@ -56,7 +58,10 @@ _SCORE_ENTRY_UPLOAD_COLUMNS = (
 
 
 class SupabaseSchemaError(RuntimeError):
-    pass
+    """Raised when the online score table is missing required columns."""
+
+
+SUPABASE_REQUEST_ERRORS = (APIError, httpx.TimeoutException, httpx.TransportError)
 
 
 class SupabaseClient:
@@ -64,6 +69,7 @@ class SupabaseClient:
         self.base_dir = Path(base_dir)
         self._env_cache: dict[str, str] | None = None
         self._client_cache = None
+        self._schema_ok = False
 
     def _load_env_file(self) -> dict[str, str]:
         if self._env_cache is not None:
@@ -100,12 +106,16 @@ class SupabaseClient:
         return self._client_cache
 
     def ensure_score_entries_schema(self) -> None:
+        if self._schema_ok:
+            return
+
         def _run() -> None:
             self._client().table("score_entries").select(",".join(_SCORE_ENTRY_UPLOAD_COLUMNS)).limit(1).execute()
 
         try:
             _retry_on_transient(_run, label="ensure_score_entries_schema")
-        except Exception as exc:
+            self._schema_ok = True
+        except APIError as exc:
             message = str(exc)
             if "score_entries." in message and "does not exist" in message:
                 raise SupabaseSchemaError(message) from exc

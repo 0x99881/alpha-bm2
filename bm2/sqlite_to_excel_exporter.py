@@ -112,9 +112,10 @@ class SQLiteToExcelExporter:
         for _, column_index in date_columns:
             sheet.cell(note_start_row, column_index, "")
             sheet.cell(note_start_row + 1, column_index, "")
+            sheet.cell(note_start_row + 2, column_index, "")
         for date_text, column_index in date_columns:
             notes = notes_map.get(date_text, [])
-            for note_index, note_text in enumerate(notes[:2]):
+            for note_index, note_text in enumerate(notes[:3]):
                 sheet.cell(note_start_row + note_index, column_index, note_text)
 
     @staticmethod
@@ -126,7 +127,7 @@ class SQLiteToExcelExporter:
         }
 
     def _remove_existing_value_column(self, workbook, store: Any, sheet_type: str, date_text: str) -> None:
-        helpers = store._value_sheet_helpers(sheet_type)
+        helpers = store.value_sheet_helpers_for(sheet_type)
         sheet = helpers.sheet_getter(workbook)
         meta_sheet = helpers.spec["meta_sheet"]
         day_code = date_text[5:].replace("-", "")
@@ -170,7 +171,7 @@ class SQLiteToExcelExporter:
         member_names: list[str],
         values: dict[str, float],
     ) -> None:
-        helpers = store._value_sheet_helpers(sheet_type)
+        helpers = store.value_sheet_helpers_for(sheet_type)
         sheet = helpers.sheet_getter(workbook)
         spec = get_value_sheet_spec(sheet_type)
         day_code = date_text[5:].replace("-", "")
@@ -278,10 +279,10 @@ class SQLiteToExcelExporter:
 
         workbook = store.workbook_repository.open()
         try:
-            store._ensure_wear_sheet_structure(workbook)
-            store._ensure_income_sheet_structure(workbook)
-            store._ensure_expense_sheet_structure(workbook)
-            score_sheet = store._score_sheet(workbook)
+            store.ensure_wear_sheet_structure(workbook)
+            store.ensure_income_sheet_structure(workbook)
+            store.ensure_expense_sheet_structure(workbook)
+            score_sheet = store.score_sheet_for(workbook)
             if score_sheet.max_column:
                 score_sheet.delete_cols(1, score_sheet.max_column)
             for column_index, date_text in enumerate(dates, start=1):
@@ -311,11 +312,11 @@ class SQLiteToExcelExporter:
                     score_sheet.cell(row, column_index, int(score_map.get((name, date_text), 0)))
             replace_dates = {detail_date_text.strip()} if detail_date_text and detail_date_text.strip() else None
             self._write_detail_sheets(workbook, store, rows, member_names=member_names, replace_dates=replace_dates)
-            store._ensure_wear_sheet_structure(workbook)
-            store._ensure_income_sheet_structure(workbook)
-            store._ensure_expense_sheet_structure(workbook)
+            store.ensure_wear_sheet_structure(workbook)
+            store.ensure_income_sheet_structure(workbook)
+            store.ensure_expense_sheet_structure(workbook)
             store.score_sheet.ensure_structure(workbook)
-            score_sheet = store._score_sheet(workbook)
+            score_sheet = store.score_sheet_for(workbook)
             total_col = find_column(score_sheet, TOTAL_HEADER)
             profit_col = find_column(score_sheet, PROFIT_HEADER)
             if total_col is not None and profit_col is not None:
@@ -328,9 +329,17 @@ class SQLiteToExcelExporter:
                     name_col=name_col,
                     notes_map=notes_map,
                 )
-            store._sync_member_visibility_in_workbook(workbook)
+            store.sync_member_visibility_in_workbook(workbook)
             store.workbook_repository.save(workbook)
             return len(dates)
+        finally:
+            workbook.close()
+
+    def sync_member_visibility(self, store: Any) -> None:
+        workbook = store.workbook_repository.open()
+        try:
+            store.sync_member_visibility_in_workbook(workbook)
+            store.workbook_repository.save(workbook)
         finally:
             workbook.close()
 

@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS public.score_entries (
     manual_wear    TEXT NOT NULL DEFAULT '',
     income         TEXT NOT NULL DEFAULT '',
     other_expense  TEXT NOT NULL DEFAULT '',
+    profit         TEXT NOT NULL DEFAULT '0',
     updated_at  TEXT NOT NULL,
     version     INTEGER NOT NULL DEFAULT 1,
     deleted     INTEGER NOT NULL DEFAULT 0,
@@ -55,6 +56,7 @@ ALTER TABLE public.score_entries ADD COLUMN IF NOT EXISTS after_balance  TEXT NO
 ALTER TABLE public.score_entries ADD COLUMN IF NOT EXISTS manual_wear    TEXT NOT NULL DEFAULT '';
 ALTER TABLE public.score_entries ADD COLUMN IF NOT EXISTS income         TEXT NOT NULL DEFAULT '';
 ALTER TABLE public.score_entries ADD COLUMN IF NOT EXISTS other_expense  TEXT NOT NULL DEFAULT '';
+ALTER TABLE public.score_entries ADD COLUMN IF NOT EXISTS profit         TEXT NOT NULL DEFAULT '0';
 
 -- ============================================================
 -- Row Level Security

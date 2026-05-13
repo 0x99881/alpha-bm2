@@ -595,3 +595,57 @@
     }
 }
 
+html[data-theme="dark"] .profit-stat-card,
+html[data-theme="dark"] .profit-stat-card.wear-card,
+html[data-theme="dark"] .profit-stat-card.average-card,
+html[data-theme="dark"] .profit-stat-card.wear-average-card,
+html[data-theme="dark"] .profit-status-card,
+html[data-theme="dark"] .profit-positive-card,
+html[data-theme="dark"] .profit-negative-card,
+html[data-theme="dark"] .profit-panel,
+html[data-theme="dark"] .profit-board-panel,
+html[data-theme="dark"] .profit-range-panel,
+html[data-theme="dark"] .profit-range-card,
+html[data-theme="dark"] .wear-range-card,
+html[data-theme="dark"] .calendar-modal-card,
+html[data-theme="dark"] .calendar-breakdown-row,
+html[data-theme="dark"] .profit-board-item {
+    background: #161616;
+    border: 1px solid #3a3a3a;
+    box-shadow: none;
+}
+
+html[data-theme="dark"] .profit-day {
+    background: #1a1a1a;
+    border-color: #3a3a3a;
+    box-shadow: inset 0 0 0 999px rgba(255, 255, 255, calc(var(--profit-intensity) * 0.07));
+}
+
+html[data-theme="dark"] .profit-day.today {
+    border-color: #f5f5f5;
+    box-shadow: inset 0 0 0 1px #f5f5f5, inset 0 0 0 999px rgba(255, 255, 255, calc(var(--profit-intensity) * 0.07));
+}
+
+html[data-theme="dark"] .profit-day.has-data:hover,
+html[data-theme="dark"] .month-arrow:hover {
+    background: #252525;
+    border-color: #555555;
+}
+
+html[data-theme="dark"] .month-arrow,
+html[data-theme="dark"] .modal-close {
+    background: #222222;
+    color: #f5f5f5;
+    border: 1px solid #454545;
+}
+
+html[data-theme="dark"] .calendar-modal-backdrop {
+    background: rgba(0, 0, 0, 0.78);
+}
+
+html[data-theme="dark"] .profit-board-kicker,
+html[data-theme="dark"] .profit-day-income,
+html[data-theme="dark"] .profit-day-hint {
+    color: #d4d4d4;
+}
+

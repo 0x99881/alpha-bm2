@@ -20,8 +20,6 @@ WINDOW_SIZE = 15
 WEAR_ABNORMAL_THRESHOLD = 2.5
 DATA_START_ROW = 2
 INITIAL_SCORE_HEADER_COUNT = 41
-UNIQUE_DATE_SEARCH_LIMIT = 400
-
 OLD_SCORE_COLUMN_FILL = 'DDDDDD'
 WEAR_ABNORMAL_FONT_COLOR = 'FF0000'
 SCORE_TOTAL_FLAT_FILL = '99FF99'
@@ -40,7 +38,6 @@ SCORE_SHEET_ALIASES = [SCORE_SHEET]
 WEAR_SHEET_ALIASES = [WEAR_SHEET]
 INCOME_SHEET_ALIASES = [INCOME_SHEET]
 EXPENSE_SHEET_ALIASES = [EXPENSE_SHEET]
-PROFIT_SHEET_ALIASES = [PROFIT_SHEET]
 META_SHEET_ALIASES = [META_SHEET]
 
 TOTAL_HEADER = '\u603b\u79ef\u5206'
@@ -60,7 +57,6 @@ EXPENSE_META_SHEET = '_\u652f\u51fa\u5217\u65e5\u671f'
 EXPENSE_META_SHEET_ALIASES = [EXPENSE_META_SHEET]
 EXPENSE_META_HEADERS = ['\u65e5\u671f', '\u652f\u51fa\u5217']
 META_HEADERS = ['\u65e5\u671f', '\u79ef\u5206\u5217']
-PROFIT_HEADERS = ['\u59d3\u540d', '\u6536\u5165', '\u78e8\u635f', '\u76c8\u4e8f']
 
 VALUE_SHEET_SPECS = {
     'wear': {
@@ -72,10 +68,10 @@ VALUE_SHEET_SPECS = {
         'meta_headers': WEAR_META_HEADERS,
         'total_header': WEAR_TOTAL_HEADER,
         'value_key': 'wear',
-        'sheet_method': '_wear_sheet',
-        'columns_method': '_wear_columns',
-        'ensure_method': '_ensure_wear_sheet_structure',
-        'round_method': '_round_wear',
+        'sheet_method': 'wear_sheet_for',
+        'columns_method': 'wear_columns_for',
+        'ensure_method': 'ensure_wear_sheet_structure',
+        'round_method': 'format_wear_value',
         'invalid_message_key': 'wear_sheet_invalid',
     },
     'income': {
@@ -87,10 +83,10 @@ VALUE_SHEET_SPECS = {
         'meta_headers': INCOME_META_HEADERS,
         'total_header': None,
         'value_key': 'income',
-        'sheet_method': '_income_sheet',
-        'columns_method': '_income_columns',
-        'ensure_method': '_ensure_income_sheet_structure',
-        'round_method': '_round_income',
+        'sheet_method': 'income_sheet_for',
+        'columns_method': 'income_columns_for',
+        'ensure_method': 'ensure_income_sheet_structure',
+        'round_method': 'format_income_value',
         'invalid_message_key': 'income_sheet_invalid',
     },
     'expense': {
@@ -102,10 +98,10 @@ VALUE_SHEET_SPECS = {
         'meta_headers': EXPENSE_META_HEADERS,
         'total_header': None,
         'value_key': 'expense',
-        'sheet_method': '_expense_sheet',
-        'columns_method': '_expense_columns',
-        'ensure_method': '_ensure_expense_sheet_structure',
-        'round_method': '_round_expense',
+        'sheet_method': 'expense_sheet_for',
+        'columns_method': 'expense_columns_for',
+        'ensure_method': 'ensure_expense_sheet_structure',
+        'round_method': 'format_expense_value',
         'invalid_message_key': 'expense_sheet_invalid',
     },
 }

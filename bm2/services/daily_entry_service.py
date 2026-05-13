@@ -8,6 +8,8 @@ from ..ui_text import MESSAGES
 
 
 class DailyEntryService:
+    NOTE_KEYS = ("note1", "note2", "note3")
+
     def __init__(self, entry_writer) -> None:
         self._entry_writer = entry_writer
 
@@ -32,11 +34,13 @@ class DailyEntryService:
         notes = [
             str(form_data.get("date_note_1", "") or "").strip(),
             str(form_data.get("date_note_2", "") or "").strip(),
+            str(form_data.get("date_note_3", "") or "").strip(),
         ]
         compacted = [note for note in notes if note]
         return {
             "note1": compacted[0] if len(compacted) >= 1 else "",
             "note2": compacted[1] if len(compacted) >= 2 else "",
+            "note3": compacted[2] if len(compacted) >= 3 else "",
         }
 
     @staticmethod
@@ -50,7 +54,7 @@ class DailyEntryService:
     def notes_have_input(notes: dict[str, str] | None) -> bool:
         if not notes:
             return False
-        return any(str(notes.get(key, "") or "").strip() != "" for key in ("note1", "note2"))
+        return any(str(notes.get(key, "") or "").strip() != "" for key in DailyEntryService.NOTE_KEYS)
 
     def entries_have_input(self, entries: list[dict[str, str]]) -> bool:
         return any(self.entry_has_input(entry) for entry in entries)

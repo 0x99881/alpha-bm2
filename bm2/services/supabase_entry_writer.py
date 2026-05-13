@@ -5,7 +5,7 @@ from typing import Any
 
 from ..constants import WINDOW_SIZE
 from ..entry_helpers import count_wear_entries, member_id, score_entry_id
-from ..source_metadata import parse_source_profit, with_source_profit
+from ..repositories.supabase_client import SUPABASE_REQUEST_ERRORS
 
 
 class SupabaseEntryWriter:
@@ -61,7 +61,7 @@ class SupabaseEntryWriter:
                 str(row["id"]): row
                 for row in self._supabase.fetch_score_entries_by_ids(ids)
             }
-        except Exception as exc:
+        except SUPABASE_REQUEST_ERRORS as exc:
             raise ValueError("线上数据库暂时连接失败，请稍后再试。") from exc
 
         rows: list[dict[str, Any]] = []
@@ -71,8 +71,6 @@ class SupabaseEntryWriter:
                 continue
             row_id = score_entry_id(member_name, saved_date)
             previous = existing.get(row_id) or {}
-            previous_profit = parse_source_profit(previous.get("source", ""))
-            source = "online" if previous_profit is None else with_source_profit("online", previous_profit)
             rows.append(
                 {
                     "id": row_id,
@@ -85,16 +83,17 @@ class SupabaseEntryWriter:
                     "manual_wear": self._entry_text(entry, "manual_wear"),
                     "income": self._entry_text(entry, "income"),
                     "other_expense": self._entry_text(entry, "other_expense"),
+                    "profit": self._entry_text(previous, "profit") or "0",
                     "updated_at": now_text,
                     "version": int(previous.get("version", 0) or 0) + 1,
                     "deleted": 0,
-                    "source": source,
+                    "source": "online",
                 }
             )
 
         try:
             self._supabase.push_score_entries(rows)
-        except Exception as exc:
+        except SUPABASE_REQUEST_ERRORS as exc:
             raise ValueError("线上数据库暂时连接失败，请稍后再试。") from exc
         return {
             "target_column": saved_date[5:],

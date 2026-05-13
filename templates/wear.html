@@ -3,7 +3,7 @@
 <section class="page-head">
     <div>
         <h2>{{ ui.wear_page_title }}</h2>
-        <p>{{ ui.wear_page_hint }}</p>
+        <p>{{ ui.wear_page_hint_online if read_only_mode else ui.wear_page_hint }}</p>
     </div>
     <div class="page-head-stats">
         <div class="stat-card">
@@ -14,6 +14,7 @@
             <span>{{ ui.wear_abnormal_threshold }}</span>
             <strong>{{ ui.wear_abnormal_hint.format(threshold=wear_sheet.abnormal_threshold) }}</strong>
             <small>{{ ui.wear_abnormal_count.format(count=wear_sheet.abnormal_count) }}</small>
+            {% if not read_only_mode %}
             <form action="{{ url_for('save_wear_threshold') }}" method="post" class="stat-card-form">
                 <input
                     type="number"
@@ -25,6 +26,7 @@
                 >
                 <button type="submit" class="secondary-btn compact-btn">{{ ui.wear_threshold_apply }}</button>
             </form>
+            {% endif %}
         </div>
         <div class="stat-card">
             <span>{{ ui.wear_avg_daily }}</span>
@@ -36,31 +38,55 @@
 <section class="panel">
     <div class="section-title">
         <h3>{{ ui.excel_preview_title }}</h3>
-        <p>{{ ui.excel_preview_hint }}</p>
+        <p>{{ ui.wear_preview_hint_online if read_only_mode else ui.excel_preview_hint }}</p>
     </div>
-    <div class="table-wrap">
-        <table>
-            <thead>
-                <tr>
-                    {% for header in wear_sheet.headers %}
-                    <th>{{ header or '' }}</th>
+    {% set excel_letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ' %}
+    <div class="table-wrap excel-sheet-wrap">
+        <div class="excel-workbook">
+            <div class="excel-toolbar">
+                <span class="excel-toolbar-chip">{{ ui.online_view if read_only_mode else ui.excel_view }}</span>
+                <span class="excel-toolbar-chip">{{ ui.wear_abnormal_hint.format(threshold=wear_sheet.abnormal_threshold) }}</span>
+                <span class="excel-toolbar-chip">{{ ui.wear_abnormal_count.format(count=wear_sheet.abnormal_count) }}</span>
+            </div>
+            <div class="excel-formula-bar">
+                <span class="excel-name-box">A1</span>
+                <div class="excel-formula-input">{{ ui.wear_page_title }}</div>
+            </div>
+            <table class="excel-sheet-table wear-sheet-table">
+                <thead>
+                    <tr class="excel-letter-row">
+                        <th class="excel-corner-cell"></th>
+                        {% for header in wear_sheet.headers %}
+                        <th class="excel-letter-cell">{{ excel_letters[loop.index0] if loop.index0 < excel_letters|length else loop.index }}</th>
+                        {% endfor %}
+                    </tr>
+                    <tr>
+                        <th class="excel-row-head excel-header-index">1</th>
+                        {% for header in wear_sheet.headers %}
+                        <th class="{% if loop.first %}excel-col-name{% elif loop.last %}excel-col-total{% else %}excel-col-date{% endif %}">{{ header or '' }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in wear_sheet.rows %}
+                    <tr>
+                        <th class="excel-row-head">{{ loop.index + 1 }}</th>
+                        {% for cell in row %}
+                        <td class="{% if loop.first %}excel-col-name{% elif loop.last %}excel-col-total{% else %}excel-col-date{% endif %}{% if cell.is_abnormal %} excel-abnormal-cell{% endif %}">{{ '' if cell.value is none else cell.value }}</td>
+                        {% endfor %}
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <th class="excel-row-head">2</th>
+                        <td colspan="{{ wear_sheet.column_count or 1 }}" class="empty-cell">{{ ui.empty_wear_records }}</td>
+                    </tr>
                     {% endfor %}
-                </tr>
-            </thead>
-            <tbody>
-                {% for row in wear_sheet.rows %}
-                <tr>
-                    {% for cell in row %}
-                    <td{% if cell.is_abnormal %} class="abnormal-cell"{% endif %}>{{ '' if cell.value is none else cell.value }}</td>
-                    {% endfor %}
-                </tr>
-                {% else %}
-                <tr>
-                    <td colspan="{{ wear_sheet.column_count or 1 }}" class="empty-cell">{{ ui.empty_wear_records }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+                </tbody>
+            </table>
+            <div class="excel-sheet-tabs">
+                <span class="excel-tab active">{{ ui.wear_page_title }}</span>
+            </div>
+        </div>
     </div>
 </section>
 {% endblock %}

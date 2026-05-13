@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+import logging
 from pathlib import Path
 import re
 
@@ -15,6 +16,8 @@ from ..constants import (
     WORKBOOK_FILENAME_PREFIX,
 )
 from ..ui_text import MESSAGES
+
+LOGGER = logging.getLogger(__name__)
 
 
 class WorkbookRepository:
@@ -131,14 +134,14 @@ class WorkbookRepository:
         self.workbook_path = new_path
         try:
             structure_owner.workbook_path = new_path
-            structure_owner._ensure_workbook()
-        except Exception:
+            structure_owner.ensure_workbook()
+        except (OSError, ValueError, KeyError, RuntimeError):
             self.workbook_path = previous_path
             structure_owner.workbook_path = previous_path
             try:
                 new_path.unlink()
-            except OSError:
-                pass
+            except OSError as cleanup_error:
+                LOGGER.warning("Failed to remove incomplete workbook %s: %s", new_path, cleanup_error)
             raise
 
         config = self._config_repository.load()

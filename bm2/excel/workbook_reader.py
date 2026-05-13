@@ -4,7 +4,6 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from ..profit_calendar_utils import empty_member_day_record, sort_breakdown_rows
-from ..value_utils import build_threshold_abnormal_flags, to_float_or_none
 from .score_date_reader import latest_header_date, score_date_columns
 from .value_sheet_reader import read_member_value_records
 from .value_normalizer import normalize_income, normalize_wear
@@ -14,47 +13,14 @@ class ExcelWorkbookReader:
     def __init__(self, store) -> None:
         self._store = store
 
-    def get_score_rankings(self, limit: int = 999, workbook=None) -> list[dict[str, int | str]]:
-        own_workbook = workbook is None
-        if own_workbook:
-            workbook = self._store.workbook_repository.open()
-        rows = []
-        try:
-            self._store._ensure_score_sheet_structure(workbook)
-            sheet = self._store._score_sheet(workbook)
-            rows = self._read_score_rankings_from_sheet(sheet)
-        finally:
-            if own_workbook:
-                workbook.close()
-        rows.sort(key=lambda item: (-int(item['total']), str(item['name'])))
-        return rows[:limit]
-
     def _read_score_rankings_from_sheet(self, sheet) -> list[dict[str, int | str]]:
         return self._store.score_sheet.read_rankings(sheet)
-
-    def get_score_latest_column(self) -> str:
-        workbook = self._store.workbook_repository.open()
-        try:
-            self._store._ensure_score_sheet_structure(workbook)
-            sheet = self._store._score_sheet(workbook)
-            return self._store.score_sheet.latest_column(sheet)
-        finally:
-            workbook.close()
-
-    def get_score_column_count(self) -> int:
-        workbook = self._store.workbook_repository.open()
-        try:
-            self._store._ensure_score_sheet_structure(workbook)
-            sheet = self._store._score_sheet(workbook)
-            return self._store.score_sheet.column_count(sheet)
-        finally:
-            workbook.close()
 
     def get_active_member_profit_map(self) -> dict[str, float]:
         workbook = self._store.workbook_repository.open()
         try:
-            self._store._ensure_score_sheet_structure(workbook)
-            sheet = self._store._score_sheet(workbook)
+            self._store.ensure_score_sheet_structure(workbook)
+            sheet = self._store.score_sheet_for(workbook)
             return self._store.score_sheet.active_member_profit_map(sheet, self._store.get_active_members())
         finally:
             workbook.close()
@@ -62,8 +28,8 @@ class ExcelWorkbookReader:
     def get_score_summary_data(self) -> dict[str, Any]:
         workbook = self._store.workbook_repository.open()
         try:
-            self._store._ensure_score_sheet_structure(workbook)
-            sheet = self._store._score_sheet(workbook)
+            self._store.ensure_score_sheet_structure(workbook)
+            sheet = self._store.score_sheet_for(workbook)
             score_columns = score_date_columns(self._store.score_sheet, sheet)
             latest_column = self._store.score_sheet.latest_column(sheet)
             rankings = self._read_score_rankings_from_sheet(sheet)
@@ -105,20 +71,6 @@ class ExcelWorkbookReader:
 
     def get_member_income_records(self, name: str, year_hint: int | None = None, workbook=None) -> list[dict[str, Any]]:
         return self._get_member_value_records(name=name, year_hint=year_hint, sheet_type='income', workbook=workbook)
-
-    def _to_float_or_none(self, value: Any) -> float | None:
-        return to_float_or_none(value)
-
-    def _median(self, sorted_values: list[float]) -> float:
-        if not sorted_values:
-            return 0.0
-        middle = len(sorted_values) // 2
-        if len(sorted_values) % 2:
-            return sorted_values[middle]
-        return (sorted_values[middle - 1] + sorted_values[middle]) / 2
-
-    def _build_abnormal_flags(self, rows: list[list[Any]], target_cols: list[int], threshold: float) -> dict[tuple[int, int], bool]:
-        return build_threshold_abnormal_flags(rows, target_cols, threshold)
 
     def get_wear_sheet_snapshot(self) -> dict[str, Any]:
         workbook = self._store.workbook_repository.open()

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from typing import Callable
 
 from ..constants import DATA_START_ROW, META_SHEET, NAME_HEADER, TOTAL_HEADER, WORKBOOK_FILENAME_PREFIX
@@ -8,6 +8,7 @@ from ..excel.header_locator import find_column
 from ..excel.sheet_metadata import meta_to_date_map, normalize_day_code_date_text, read_sheet_meta
 from ..excel.value_normalizer import normalize_expense, normalize_income, normalize_wear
 from ..excel.value_sheet_spec import get_value_sheet_spec
+from ..ui_text import MESSAGES
 
 
 class ExcelImportService:
@@ -33,12 +34,31 @@ class ExcelImportService:
 
     def refresh_from_excel(self) -> None:
         score_rows, date_notes = self._score_rows_and_notes_from_workbook()
-        self._local_database.sync_members(self._config_members_provider())
+        self._seed_members_if_empty()
+        score_rows = self._known_member_score_rows(score_rows)
         self._local_database.replace_score_entries_from_snapshot(score_rows)
         self._sync_score_date_notes(date_notes)
         cycle_start = self._score_rows_cycle_start(score_rows) or self._workbook_cycle_start()
         if cycle_start:
             self._local_database.set_sync_state("score_cycle_start_date", cycle_start)
+
+    def _seed_members_if_empty(self) -> None:
+        if self._local_database.get_member_rows(include_deleted=True):
+            return
+        self._local_database.sync_members(self._config_members_provider())
+
+    def _known_member_score_rows(self, rows: list[dict[str, object]]) -> list[dict[str, object]]:
+        member_names = {
+            str(member.get("name", "")).strip()
+            for member in self._local_database.get_member_rows()
+        }
+        if not member_names:
+            return []
+        return [
+            row
+            for row in rows
+            if str(row.get("member_name", "")).strip() in member_names
+        ]
 
     def after_supabase_pull(self) -> None:
         self._excel_exporter.export_missing_dates(self._excel_store)
@@ -51,7 +71,7 @@ class ExcelImportService:
             return None
 
     def _score_header_date_map(self, workbook, used_columns: list[tuple[int, int]]) -> dict[int, str]:
-        score_sheet = self._excel_store._score_sheet(workbook)
+        score_sheet = self._excel_store.score_sheet_for(workbook)
         cycle_start = self._workbook_cycle_start()
         if cycle_start:
             year_hint = datetime.strptime(cycle_start, "%Y-%m-%d").year
@@ -74,7 +94,7 @@ class ExcelImportService:
         return result
 
     def _score_date_map_from_workbook(self, workbook) -> dict[int, str]:
-        score_sheet = self._excel_store._score_sheet(workbook)
+        score_sheet = self._excel_store.score_sheet_for(workbook)
         meta_by_number: dict[int, list[str]] = {}
         for saved_date, column_name in read_sheet_meta(workbook, META_SHEET):
             column_name = str(column_name).strip()
@@ -107,20 +127,9 @@ class ExcelImportService:
             else:
                 unresolved.append((number, column_index))
 
-        if not unresolved:
-            return score_date_map
-
-        latest_date = self._excel_store.score_sheet.latest_used_date(workbook)
-        if latest_date is None:
-            return score_date_map
-
-        total_used = len(used_columns)
-        fallback_by_number = {
-            number: (latest_date - timedelta(days=(total_used - index - 1))).strftime("%Y-%m-%d")
-            for index, (number, _) in enumerate(used_columns)
-        }
-        for number, column_index in unresolved:
-            score_date_map[column_index] = fallback_by_number[number]
+        if unresolved:
+            columns = ", ".join(f"D{number}" for number, _ in unresolved)
+            raise ValueError(MESSAGES["excel_score_date_unresolved"].format(columns=columns))
         return score_date_map
 
     @staticmethod
@@ -147,11 +156,13 @@ class ExcelImportService:
             values = [
                 self._note_text(sheet.cell(note_start_row, column_index).value),
                 self._note_text(sheet.cell(note_start_row + 1, column_index).value),
+                self._note_text(sheet.cell(note_start_row + 2, column_index).value),
             ]
             compacted = [value for value in values if value]
             notes[score_date] = {
                 "note1": compacted[0] if len(compacted) >= 1 else "",
                 "note2": compacted[1] if len(compacted) >= 2 else "",
+                "note3": compacted[2] if len(compacted) >= 3 else "",
             }
         return notes
 
@@ -162,10 +173,10 @@ class ExcelImportService:
     def _score_rows_and_notes_from_workbook(self) -> tuple[list[dict[str, object]], dict[str, dict[str, str]]]:
         workbook = self._excel_store.workbook_repository.open()
         try:
-            self._excel_store._ensure_score_sheet_structure(workbook)
-            sheet = self._excel_store._score_sheet(workbook)
-            name_col = self._excel_store._find_column(sheet, NAME_HEADER)
-            total_col = self._excel_store._find_column(sheet, TOTAL_HEADER)
+            self._excel_store.ensure_score_sheet_structure(workbook)
+            sheet = self._excel_store.score_sheet_for(workbook)
+            name_col = find_column(sheet, NAME_HEADER)
+            total_col = find_column(sheet, TOTAL_HEADER)
             if name_col is None or total_col is None:
                 return [], {}
 
@@ -198,7 +209,7 @@ class ExcelImportService:
         cycle_start = self._workbook_cycle_start()
         year_hint = datetime.strptime(cycle_start, "%Y-%m-%d").year if cycle_start else datetime.now().year
         result: dict[int, str] = {}
-        helpers = self._excel_store._value_sheet_helpers(sheet_type)
+        helpers = self._excel_store.value_sheet_helpers_for(sheet_type)
         for number, col in helpers.columns_getter(sheet):
             if number in by_number:
                 result[col] = by_number[number]
@@ -208,7 +219,7 @@ class ExcelImportService:
         return result
 
     def _read_value_sheet_fields(self, workbook, sheet_type: str) -> dict[tuple[str, str], str]:
-        helpers = self._excel_store._value_sheet_helpers(sheet_type)
+        helpers = self._excel_store.value_sheet_helpers_for(sheet_type)
         sheet = helpers.sheet_getter(workbook)
         helpers.ensure_structure(workbook)
         spec = get_value_sheet_spec(sheet_type)

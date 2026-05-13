@@ -33,6 +33,7 @@ class SQLiteSchemaMixin:
                     manual_wear TEXT NOT NULL DEFAULT '',
                     income TEXT NOT NULL DEFAULT '',
                     other_expense TEXT NOT NULL DEFAULT '',
+                    profit TEXT NOT NULL DEFAULT '0',
                     updated_at TEXT NOT NULL,
                     version INTEGER NOT NULL DEFAULT 1,
                     deleted INTEGER NOT NULL DEFAULT 0,
@@ -44,6 +45,7 @@ class SQLiteSchemaMixin:
                     score_date TEXT PRIMARY KEY,
                     note1 TEXT NOT NULL DEFAULT '',
                     note2 TEXT NOT NULL DEFAULT '',
+                    note3 TEXT NOT NULL DEFAULT '',
                     updated_at TEXT NOT NULL,
                     version INTEGER NOT NULL DEFAULT 1,
                     deleted INTEGER NOT NULL DEFAULT 0,
@@ -69,10 +71,20 @@ class SQLiteSchemaMixin:
                 "manual_wear",
                 "income",
                 "other_expense",
+                "profit",
             ):
                 if column_name not in existing_columns:
                     connection.execute(
                         f"ALTER TABLE score_entries ADD COLUMN {column_name} TEXT NOT NULL DEFAULT ''"
+                    )
+            existing_note_columns = {
+                row["name"]
+                for row in connection.execute("PRAGMA table_info(score_date_notes)").fetchall()
+            }
+            for column_name in ("note3",):
+                if column_name not in existing_note_columns:
+                    connection.execute(
+                        f"ALTER TABLE score_date_notes ADD COLUMN {column_name} TEXT NOT NULL DEFAULT ''"
                     )
             connection.commit()
         finally:

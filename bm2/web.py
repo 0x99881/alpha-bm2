@@ -8,7 +8,6 @@ from typing import Any
 from flask import abort, flash, redirect, render_template, request, Response, send_from_directory, url_for
 
 from .constants import DISABLED, ENABLED
-from .help_content import build_help_content
 from .ui_text import JS_UI_TEXT, MESSAGES, UI_TEXT
 from .web_member_routes import register_member_routes
 from .web_score_routes import register_score_routes
@@ -66,18 +65,10 @@ def register_routes(app, store) -> None:
             response.headers['Content-Type'] = 'text/html; charset=utf-8'
         return response
 
-    @app.route('/help')
-    def help_page():
-        return render_template(
-            'help.html',
-            title=UI_TEXT['nav_help'],
-            help_content=build_help_content(store.get_quick_scores()),
-        )
-
     @app.route('/wear')
     def wear_entry():
         if read_only_mode:
-            return redirect(url_for('score_overview'))
+            return render_template('wear.html', wear_sheet=store.get_online_wear_sheet_view())
         return render_template('wear.html', wear_sheet=store.get_wear_sheet_view())
 
     @app.post('/wear/threshold')
