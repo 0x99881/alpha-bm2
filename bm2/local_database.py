@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .repositories.sqlite_common_repository import SQLiteCommonRepositoryMixin
 from .repositories.sqlite_connection import connect_database
+from .repositories.sqlite_date_note_repository import SQLiteDateNoteRepositoryMixin
 from .repositories.sqlite_member_repository import SQLiteMemberRepositoryMixin
 from .repositories.sqlite_report_repository import SQLiteReportRepositoryMixin
 from .repositories.sqlite_schema import SQLiteSchemaMixin
@@ -19,6 +20,7 @@ from .repositories.sqlite_sync_state_repository import SQLiteSyncStateRepository
 class LocalDatabase(
     SQLiteSchemaMixin,
     SQLiteCommonRepositoryMixin,
+    SQLiteDateNoteRepositoryMixin,
     SQLiteSyncStateRepositoryMixin,
     SQLiteMemberRepositoryMixin,
     SQLiteScoreEntryRepositoryMixin,

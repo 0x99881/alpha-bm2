@@ -63,7 +63,7 @@
                     {% for member in active_members %}
                     <tr>
                         <td class="name-cell">{{ member.name }}</td>
-                        <td><input type="number" name="score_{{ member.name }}" class="score-input compact-input" value="{{ member.score }}"></td>
+                        <td><input type="number" name="score_{{ member.name }}" class="score-input compact-input" placeholder="{{ ui.label_score }}" value="{{ member.score }}"></td>
                         <td>
                             <div class="quick-score-group compact">
                                 {% for score in quick_scores %}

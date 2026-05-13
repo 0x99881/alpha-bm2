@@ -40,6 +40,16 @@ class SQLiteSchemaMixin:
                     UNIQUE(member_name, score_date)
                 );
 
+                CREATE TABLE IF NOT EXISTS score_date_notes (
+                    score_date TEXT PRIMARY KEY,
+                    note1 TEXT NOT NULL DEFAULT '',
+                    note2 TEXT NOT NULL DEFAULT '',
+                    updated_at TEXT NOT NULL,
+                    version INTEGER NOT NULL DEFAULT 1,
+                    deleted INTEGER NOT NULL DEFAULT 0,
+                    source TEXT NOT NULL DEFAULT 'local'
+                );
+
                 CREATE TABLE IF NOT EXISTS sync_state (
                     key TEXT PRIMARY KEY,
                     value TEXT NOT NULL DEFAULT ''

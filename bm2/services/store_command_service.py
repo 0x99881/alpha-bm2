@@ -48,12 +48,18 @@ class StoreCommandService:
 
     def delete_score_date(self, date_text: str) -> dict[str, int]:
         changed_ids = self._context.local_db.delete_score_entries_for_date(date_text, source="local")
+        previous_note = self._context.local_db.delete_score_date_notes(date_text, source="local")
         try:
             exported_dates = self._context.export_service.export_to_excel(date_text)
         except Exception:
             self._context.local_db.restore_score_entries_by_ids(changed_ids, source="local")
+            self._context.local_db.restore_score_date_note(previous_note, source="local")
             raise
-        return {"deleted_rows": len(changed_ids), "exported_dates": exported_dates}
+        return {
+            "deleted_rows": len(changed_ids),
+            "deleted_notes": int(previous_note is not None and int(previous_note.get("deleted", 0) or 0) == 0),
+            "exported_dates": exported_dates,
+        }
 
     def is_supabase_configured(self) -> bool:
         return self._context.sync_service.is_configured()

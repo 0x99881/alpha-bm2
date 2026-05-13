@@ -34,12 +34,23 @@ class SupabaseEntryWriter:
         self,
         date_text: str,
         entries: list[dict[str, str]],
+        *,
+        notes: dict[str, str] | None = None,
+        write_entries: bool = True,
     ) -> dict[str, Any]:
         if not self._supabase.is_configured():
             raise ValueError("线上数据库未配置，暂时不能保存。")
 
         saved_date = datetime.strptime(date_text.strip(), "%Y-%m-%d").strftime("%Y-%m-%d")
         now_text = self._now_text()
+        if not write_entries:
+            return {
+                "target_column": saved_date[5:],
+                "wear_column": saved_date[5:].replace("-", ""),
+                "wear_rows_added": 0,
+                "window_size": WINDOW_SIZE,
+                "saved_date": saved_date,
+            }
         ids = [
             score_entry_id(str(entry.get("name", "")).strip(), saved_date)
             for entry in entries

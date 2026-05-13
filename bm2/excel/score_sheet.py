@@ -4,7 +4,7 @@ import re
 from datetime import datetime, timedelta
 from typing import Any
 
-from openpyxl.styles import PatternFill
+from openpyxl.styles import Font, PatternFill
 
 from .daily_target import DailyTarget
 from .header_locator import find_column, find_sheet_by_alias
@@ -20,6 +20,7 @@ from ..constants import (
     PROFIT_HEADER,
     SCORE_SHEET,
     SCORE_SHEET_ALIASES,
+    SCORE_LOW_DAILY_FONT_COLOR,
     SCORE_TOTAL_DARK_RGB,
     SCORE_TOTAL_FLAT_FILL,
     SCORE_TOTAL_LIGHT_RGB,
@@ -210,22 +211,42 @@ class ScoreSheet:
             sheet.cell(row, total_col, total)
 
     def format_sheet(self, sheet, recent_numbers: list[int], total_col: int) -> None:
+        name_col = find_column(sheet, NAME_HEADER)
         old_fill = PatternFill(start_color=OLD_SCORE_COLUMN_FILL, end_color=OLD_SCORE_COLUMN_FILL, fill_type='solid')
+        normal_font = Font(color='000000', bold=False)
+        low_score_font = Font(color=SCORE_LOW_DAILY_FONT_COLOR, bold=True)
         recent_set = set(recent_numbers)
         for number, date_col in self.date_columns(sheet):
             is_recent = number in recent_set
             fill = PatternFill(fill_type=None) if is_recent else old_fill
             for row in range(DATA_START_ROW, sheet.max_row + 1):
-                sheet.cell(row, date_col).fill = fill
+                cell = sheet.cell(row, date_col)
+                cell.fill = fill
+                if not is_recent:
+                    cell.font = normal_font
+                    continue
+                try:
+                    numeric_value = float(cell.value or 0)
+                except (TypeError, ValueError):
+                    cell.font = normal_font
+                    continue
+                if numeric_value < 10:
+                    cell.font = low_score_font
+                else:
+                    cell.font = normal_font
 
         totals = []
         for row in range(DATA_START_ROW, sheet.max_row + 1):
+            if name_col is not None and not sheet.cell(row, name_col).value:
+                continue
             value = sheet.cell(row, total_col).value
             if isinstance(value, (int, float)):
                 totals.append(float(value))
         max_score = max(totals) if totals else 0.0
         min_score = min(totals) if totals else 0.0
         for row in range(DATA_START_ROW, sheet.max_row + 1):
+            if name_col is not None and not sheet.cell(row, name_col).value:
+                continue
             value = sheet.cell(row, total_col).value
             score = float(value) if isinstance(value, (int, float)) else 0.0
             if max_score == min_score:

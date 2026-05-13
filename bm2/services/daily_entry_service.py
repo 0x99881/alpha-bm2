@@ -28,12 +28,29 @@ class DailyEntryService:
             )
         return entries
 
+    def build_date_notes(self, form_data: Any) -> dict[str, str]:
+        notes = [
+            str(form_data.get("date_note_1", "") or "").strip(),
+            str(form_data.get("date_note_2", "") or "").strip(),
+        ]
+        compacted = [note for note in notes if note]
+        return {
+            "note1": compacted[0] if len(compacted) >= 1 else "",
+            "note2": compacted[1] if len(compacted) >= 2 else "",
+        }
+
     @staticmethod
     def entry_has_input(entry: dict[str, str]) -> bool:
         return any(
             str(entry.get(key, "") or "").strip() != ""
             for key in ("score", "before_balance", "after_balance", "manual_wear", "income", "other_expense")
         )
+
+    @staticmethod
+    def notes_have_input(notes: dict[str, str] | None) -> bool:
+        if not notes:
+            return False
+        return any(str(notes.get(key, "") or "").strip() != "" for key in ("note1", "note2"))
 
     def entries_have_input(self, entries: list[dict[str, str]]) -> bool:
         return any(self.entry_has_input(entry) for entry in entries)
@@ -79,6 +96,8 @@ class DailyEntryService:
         form_data: Any,
         selected_date: str,
         entries: list[dict[str, str]],
+        notes: dict[str, str] | None = None,
+        existing_notes: dict[str, str] | None = None,
     ) -> str | None:
         date_error = self.validate_selected_date(selected_date)
         if date_error is not None:
@@ -86,31 +105,58 @@ class DailyEntryService:
         member_error = self.validate_member_fields(active_members, form_data)
         if member_error is not None:
             return member_error
-        if not self.entries_have_input(entries):
+        if (
+            not self.entries_have_input(entries)
+            and not self.notes_have_input(notes)
+            and not self.notes_have_input(existing_notes)
+        ):
             return MESSAGES["score_empty_submission"]
         return self.validate_entries(entries)
 
-    def process_submission(self, active_members: list[dict[str, Any]], form_data: Any, selected_date: str) -> dict[str, Any]:
+    def process_submission(
+        self,
+        active_members: list[dict[str, Any]],
+        form_data: Any,
+        selected_date: str,
+        existing_notes: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
         entries = self.build_entries(active_members, form_data)
-        validation_error = self.validate_submission(active_members, form_data, selected_date, entries)
+        notes = self.build_date_notes(form_data)
+        entries_have_input = self.entries_have_input(entries)
+        validation_error = self.validate_submission(
+            active_members,
+            form_data,
+            selected_date,
+            entries,
+            notes=notes,
+            existing_notes=existing_notes,
+        )
         if validation_error is not None:
             return {
                 'ok': False,
                 'entries': entries,
+                'notes': notes,
                 'error': validation_error,
             }
 
         try:
-            result = self._entry_writer.save_scores_and_wear(selected_date, entries)
+            result = self._entry_writer.save_scores_and_wear(
+                selected_date,
+                entries,
+                notes=notes,
+                write_entries=entries_have_input,
+            )
         except ValueError as exc:
             return {
                 'ok': False,
                 'entries': entries,
+                'notes': notes,
                 'error': str(exc),
             }
 
         return {
             'ok': True,
             'entries': entries,
+            'notes': notes,
             'result': result,
         }

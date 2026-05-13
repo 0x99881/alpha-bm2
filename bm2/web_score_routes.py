@@ -55,17 +55,22 @@ def register_score_routes(
         *,
         selected_date: str,
         entries: list[dict[str, str]] | None = None,
+        date_notes: dict[str, str] | None = None,
         overwrite_prompt: dict[str, Any] | None = None,
     ):
         template_name = "mobile_scores.html" if read_only_mode else "scores.html"
         page_entries = entries
         if page_entries is None:
             page_entries = _score_rows_to_entries(store.get_score_rows_for_date(selected_date))
+        page_notes = date_notes
+        if page_notes is None:
+            page_notes = {"note1": "", "note2": ""} if read_only_mode else store.get_score_date_notes(selected_date)
         return render_template(
             template_name,
             active_members=_build_score_page_members(page_entries),
             score_summary=store.get_online_score_summary() if read_only_mode else store.get_score_summary(),
             selected_date=selected_date,
+            date_notes=page_notes,
             overwrite_prompt=overwrite_prompt,
         )
 
@@ -142,10 +147,20 @@ def register_score_routes(
     def save_scores():
         selected_date = _get_selected_date_from_form()
         active_members = store.get_online_active_members() if read_only_mode else store.get_active_members()
-        submission = store.daily_entry_service.process_submission(active_members, request.form, selected_date)
+        existing_notes = {"note1": "", "note2": ""} if read_only_mode else store.get_score_date_notes(selected_date)
+        submission = store.daily_entry_service.process_submission(
+            active_members,
+            request.form,
+            selected_date,
+            existing_notes=existing_notes,
+        )
         if not submission["ok"]:
             flash(submission["error"], "error")
-            return _render_score_entry(selected_date=selected_date, entries=submission["entries"])
+            return _render_score_entry(
+                selected_date=selected_date,
+                entries=submission["entries"],
+                date_notes=submission.get("notes"),
+            )
         _flash_save_score_result(selected_date, submission["result"])
         if not read_only_mode:
             try:
@@ -170,7 +185,7 @@ def register_score_routes(
         except ValueError as exc:
             flash(str(exc), "error")
             return redirect(url_for("score_entry", date=selected_date))
-        if result.get("deleted_rows", 0):
+        if result.get("deleted_rows", 0) or result.get("deleted_notes", 0):
             flash(MESSAGES["score_date_deleted"].format(date=selected_date), "success")
             flash_remote_sync_needed()
         else:

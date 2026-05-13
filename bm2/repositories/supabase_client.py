@@ -2,10 +2,38 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, TypeVar
 
 LOGGER = logging.getLogger(__name__)
+
+_T = TypeVar("_T")
+_RETRY_ATTEMPTS = 3
+_RETRY_DELAY_SECONDS = 1.5
+
+
+def _retry_on_transient(call: Callable[[], _T], *, label: str) -> _T:
+    import httpx
+
+    last_exc: Exception | None = None
+    for attempt in range(1, _RETRY_ATTEMPTS + 1):
+        try:
+            return call()
+        except (httpx.TimeoutException, httpx.TransportError) as exc:
+            last_exc = exc
+            LOGGER.warning(
+                "Supabase %s transient failure (attempt %d/%d): %s: %s",
+                label,
+                attempt,
+                _RETRY_ATTEMPTS,
+                type(exc).__name__,
+                exc,
+            )
+            if attempt < _RETRY_ATTEMPTS:
+                time.sleep(_RETRY_DELAY_SECONDS)
+    assert last_exc is not None
+    raise last_exc
 
 _SUPABASE_URL_KEY = "SUPABASE_URL"
 _SUPABASE_KEY_KEY = "SUPABASE_SERVICE_ROLE_KEY"
@@ -72,8 +100,11 @@ class SupabaseClient:
         return self._client_cache
 
     def ensure_score_entries_schema(self) -> None:
-        try:
+        def _run() -> None:
             self._client().table("score_entries").select(",".join(_SCORE_ENTRY_UPLOAD_COLUMNS)).limit(1).execute()
+
+        try:
+            _retry_on_transient(_run, label="ensure_score_entries_schema")
         except Exception as exc:
             message = str(exc)
             if "score_entries." in message and "does not exist" in message:
@@ -84,47 +115,70 @@ class SupabaseClient:
         if not rows:
             return 0
         LOGGER.info("Supabase push_members: upserting %d rows (on_conflict=id)", len(rows))
-        self._client().table("members").upsert(rows, on_conflict="id").execute()
+        _retry_on_transient(
+            lambda: self._client().table("members").upsert(rows, on_conflict="id").execute(),
+            label="push_members",
+        )
         return len(rows)
 
     def push_score_entries(self, rows: list[dict[str, Any]]) -> int:
         if not rows:
             return 0
         LOGGER.info("Supabase push_score_entries: upserting %d rows (on_conflict=id)", len(rows))
-        self._client().table("score_entries").upsert(rows, on_conflict="id").execute()
+        _retry_on_transient(
+            lambda: self._client().table("score_entries").upsert(rows, on_conflict="id").execute(),
+            label="push_score_entries",
+        )
         return len(rows)
 
     def fetch_members_by_ids(self, ids: list[str]) -> list[dict[str, Any]]:
         if not ids:
             return []
-        result = self._client().table("members").select("*").in_("id", ids).execute()
+        result = _retry_on_transient(
+            lambda: self._client().table("members").select("*").in_("id", ids).execute(),
+            label="fetch_members_by_ids",
+        )
         return result.data or []
 
     def fetch_score_entries_by_ids(self, ids: list[str]) -> list[dict[str, Any]]:
         if not ids:
             return []
-        result = self._client().table("score_entries").select("*").in_("id", ids).execute()
+        result = _retry_on_transient(
+            lambda: self._client().table("score_entries").select("*").in_("id", ids).execute(),
+            label="fetch_score_entries_by_ids",
+        )
         return result.data or []
 
     def mark_score_entries_deleted(self, rows: list[dict[str, Any]]) -> int:
         if not rows:
             return 0
         LOGGER.info("Supabase mark_score_entries_deleted: upserting %d rows", len(rows))
-        self._client().table("score_entries").upsert(rows, on_conflict="id").execute()
+        _retry_on_transient(
+            lambda: self._client().table("score_entries").upsert(rows, on_conflict="id").execute(),
+            label="mark_score_entries_deleted",
+        )
         return len(rows)
 
     def pull_members(self, since_updated_at: str | None = None) -> list[dict[str, Any]]:
         LOGGER.info("Supabase pull_members: since=%s", since_updated_at or "beginning")
-        query = self._client().table("members").select("*")
-        if since_updated_at:
-            query = query.gt("updated_at", since_updated_at)
-        result = query.order("updated_at").execute()
+
+        def _run():
+            query = self._client().table("members").select("*")
+            if since_updated_at:
+                query = query.gt("updated_at", since_updated_at)
+            return query.order("updated_at").execute()
+
+        result = _retry_on_transient(_run, label="pull_members")
         return result.data or []
 
     def pull_score_entries(self, since_updated_at: str | None = None) -> list[dict[str, Any]]:
         LOGGER.info("Supabase pull_score_entries: since=%s", since_updated_at or "beginning")
-        query = self._client().table("score_entries").select("*")
-        if since_updated_at:
-            query = query.gt("updated_at", since_updated_at)
-        result = query.order("updated_at").execute()
+
+        def _run():
+            query = self._client().table("score_entries").select("*")
+            if since_updated_at:
+                query = query.gt("updated_at", since_updated_at)
+            return query.order("updated_at").execute()
+
+        result = _retry_on_transient(_run, label="pull_score_entries")
         return result.data or []

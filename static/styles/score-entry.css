@@ -171,6 +171,10 @@ th {
     border: 1px solid var(--line);
 }
 
+.placeholder-result {
+    color: #94a3b8;
+}
+
 .compact-result {
     min-width: 68px;
     min-height: 32px;
@@ -187,6 +191,37 @@ th {
     margin: 0 0 10px;
     color: var(--muted);
     font-size: 13px;
+}
+
+.date-notes-panel {
+    display: grid;
+    grid-template-columns: minmax(180px, 260px) minmax(280px, 1fr);
+    gap: 12px;
+    align-items: center;
+    margin: 12px 0;
+    padding: 10px 0 12px;
+    border-bottom: 1px solid var(--line);
+}
+
+.date-notes-heading {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.date-notes-heading strong {
+    font-size: 14px;
+}
+
+.date-notes-heading span {
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.date-notes-fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(160px, 1fr));
+    gap: 8px;
 }
 
 .drag-sort-hint.is-saving {
@@ -247,4 +282,11 @@ th {
     display: flex;
     flex-direction: column;
     gap: 6px;
+}
+
+@media (max-width: 760px) {
+    .date-notes-panel,
+    .date-notes-fields {
+        grid-template-columns: 1fr;
+    }
 }

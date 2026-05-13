@@ -33,6 +33,21 @@ class SQLiteReportRepositoryMixin:
             rows.append(row)
         return rows
 
+    def get_filtered_score_date_notes(self) -> dict[str, list[str]]:
+        cycle_start = self._cycle_start_date()
+        notes = self.get_score_date_notes_map()
+        if cycle_start is None:
+            return notes
+        filtered: dict[str, list[str]] = {}
+        for score_date, values in notes.items():
+            try:
+                parsed_date = datetime.strptime(str(score_date).strip(), "%Y-%m-%d").date()
+            except ValueError:
+                continue
+            if parsed_date >= cycle_start:
+                filtered[score_date] = values
+        return filtered
+
     def get_next_score_date(self, fallback_date: str) -> str:
         rows = self._filtered_score_rows()
         if rows:
@@ -101,6 +116,7 @@ class SQLiteReportRepositoryMixin:
         profit_values = profit_map or {}
         window_dates = self._window_dates()
         rows = self._filtered_score_rows()
+        notes_map = self.get_filtered_score_date_notes()
         score_map = {
             (str(row["member_name"]).strip(), str(row["score_date"]).strip()): int(row["score"] or 0)
             for row in rows
@@ -114,6 +130,16 @@ class SQLiteReportRepositoryMixin:
             total = sum(date_scores)
             profit = float(profit_values.get(member_name, 0.0))
             raw_rows.append([*date_scores, total, profit, member_name])
+        visible_notes = {score_date: notes_map.get(score_date, []) for score_date in window_dates}
+        if any(visible_notes.values()):
+            for note_index in range(2):
+                note_row = [
+                    visible_notes.get(score_date, [])[note_index]
+                    if len(visible_notes.get(score_date, [])) > note_index
+                    else ""
+                    for score_date in window_dates
+                ]
+                raw_rows.append([*note_row, "", "", ""])
         return {
             "headers": headers,
             "raw_rows": raw_rows,

@@ -17,6 +17,7 @@
             ".manual-wear-input",
             ".income-input",
             ".expense-input",
+            ".date-note-input",
         ].join(", ");
         const draftInputs = Array.from(draftForm.querySelectorAll(draftFieldsSelector));
         const dateInput = draftForm.querySelector('input[name="date"]');
@@ -198,6 +199,17 @@
             });
         }
 
+        const setWearPlaceholder = (resultNode) => {
+            setText(resultNode, resultNode.dataset.emptyText || noRecordText);
+            resultNode.classList.remove("negative");
+            resultNode.classList.add("placeholder-result");
+        };
+
+        const setWearStatus = (resultNode, text) => {
+            setText(resultNode, text);
+            resultNode.classList.remove("placeholder-result");
+        };
+
         const clearAllButton = document.querySelector("[data-clear-all]");
         if (clearAllButton) {
             clearAllButton.addEventListener("click", () => {
@@ -206,8 +218,7 @@
                     input.dispatchEvent(new Event("input", { bubbles: true }));
                 });
                 document.querySelectorAll("[data-wear-result]").forEach((node) => {
-                    setText(node, noRecordText);
-                    node.classList.remove("negative");
+                    setWearPlaceholder(node);
                 });
             });
         }
@@ -226,11 +237,11 @@
             if (manualValue !== "") {
                 const manualNumber = Number(manualValue);
                 if (!Number.isFinite(manualNumber)) {
-                    setText(resultNode, incompleteText);
+                    setWearStatus(resultNode, incompleteText);
                     resultNode.classList.remove("negative");
                     return;
                 }
-                setText(resultNode, formatOneDecimal(manualNumber));
+                setWearStatus(resultNode, formatOneDecimal(manualNumber));
                 setNegativeClass(resultNode, manualNumber);
                 return;
             }
@@ -238,21 +249,20 @@
             const beforeValue = beforeInput.value.trim();
             const afterValue = afterInput.value.trim();
             if (!beforeValue && !afterValue) {
-                setText(resultNode, noRecordText);
-                resultNode.classList.remove("negative");
+                setWearPlaceholder(resultNode);
                 return;
             }
 
             const beforeNumber = Number(beforeValue);
             const afterNumber = Number(afterValue);
             if (!Number.isFinite(beforeNumber) || !Number.isFinite(afterNumber) || beforeValue === "" || afterValue === "") {
-                setText(resultNode, incompleteText);
+                setWearStatus(resultNode, incompleteText);
                 resultNode.classList.remove("negative");
                 return;
             }
 
             const wearValue = beforeNumber - afterNumber;
-            setText(resultNode, formatOneDecimal(wearValue));
+            setWearStatus(resultNode, formatOneDecimal(wearValue));
             setNegativeClass(resultNode, wearValue);
         };
 

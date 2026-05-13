@@ -91,6 +91,33 @@ class SQLiteToExcelExporter:
                 sheet.delete_rows(row_index, 1)
 
     @staticmethod
+    def _last_named_row(sheet, name_col: int) -> int:
+        last_row = 1
+        for row_index in range(2, sheet.max_row + 1):
+            if str(sheet.cell(row_index, name_col).value or "").strip():
+                last_row = row_index
+        return last_row
+
+    def _write_score_date_notes(
+        self,
+        sheet,
+        *,
+        date_columns: list[tuple[str, int]],
+        name_col: int,
+        notes_map: dict[str, list[str]],
+    ) -> None:
+        if not date_columns:
+            return
+        note_start_row = self._last_named_row(sheet, name_col) + 1
+        for _, column_index in date_columns:
+            sheet.cell(note_start_row, column_index, "")
+            sheet.cell(note_start_row + 1, column_index, "")
+        for date_text, column_index in date_columns:
+            notes = notes_map.get(date_text, [])
+            for note_index, note_text in enumerate(notes[:2]):
+                sheet.cell(note_start_row + note_index, column_index, note_text)
+
+    @staticmethod
     def _meta_headers_for_date(workbook, meta_sheet: str, date_text: str) -> set[str]:
         return {
             str(column_name).strip()
@@ -235,12 +262,14 @@ class SQLiteToExcelExporter:
 
     def export_missing_dates(self, store: Any, *, detail_date_text: str | None = None) -> int:
         rows = self._local_db.get_filtered_score_rows()
+        notes_map = self._local_db.get_filtered_score_date_notes()
 
         dates = sorted({
             str(row.get("score_date", "")).strip()
             for row in rows
             if str(row.get("score_date", "")).strip()
         })
+        dates = sorted({*dates, *notes_map.keys()})
         score_map: dict[tuple[str, str], int] = {
             (str(row["member_name"]).strip(), str(row["score_date"]).strip()): int(row["score"] or 0)
             for row in rows
@@ -291,6 +320,14 @@ class SQLiteToExcelExporter:
             profit_col = find_column(score_sheet, PROFIT_HEADER)
             if total_col is not None and profit_col is not None:
                 recalculate_score_profits(workbook, score_sheet, profit_col, store.income_sheet, store.wear_sheet)
+            name_col = find_column(score_sheet, NAME_HEADER)
+            if name_col is not None:
+                self._write_score_date_notes(
+                    score_sheet,
+                    date_columns=list(zip(dates, [col for _, col in store.score_sheet.date_columns(score_sheet)])),
+                    name_col=name_col,
+                    notes_map=notes_map,
+                )
             store._sync_member_visibility_in_workbook(workbook)
             store.workbook_repository.save(workbook)
             return len(dates)

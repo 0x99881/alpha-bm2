@@ -1,0 +1,8 @@
+Windows Registry Editor Version 5.00
+
+[HKEY_CURRENT_USER\Software\Classes\bm2]
+@="URL:BM2 Local Starter"
+"URL Protocol"=""
+
+[HKEY_CURRENT_USER\Software\Classes\bm2\shell\open\command]
+@="\"E:\\111debug\\alpha\\browser_start.bat\" \"%1\""

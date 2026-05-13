@@ -28,15 +28,27 @@ class SQLiteEntryWriter:
             return date_text
 
     def save_scores_and_wear(
-        self, date_text: str, entries: list[dict[str, str]]
+        self,
+        date_text: str,
+        entries: list[dict[str, str]],
+        *,
+        notes: dict[str, str] | None = None,
+        write_entries: bool = True,
     ) -> dict[str, Any]:
         saved_date = self._resolve_save_date(date_text)
-        self._local_db.record_score_entries(saved_date, entries, source="local")
+        if write_entries:
+            self._local_db.record_score_entries(saved_date, entries, source="local")
+        if notes is not None:
+            self._local_db.record_score_date_notes(saved_date, notes, source="local")
+        note_has_input = any(str((notes or {}).get(key, "") or "").strip() for key in ("note1", "note2"))
+        date_count = self._local_db.get_score_date_count()
+        if note_has_input:
+            date_count = max(date_count, 1)
 
         return {
             "target_column": saved_date[5:],
             "wear_column": saved_date[5:].replace("-", ""),
-            "wear_rows_added": count_wear_entries(entries),
-            "window_size": min(WINDOW_SIZE, self._local_db.get_score_date_count()),
+            "wear_rows_added": count_wear_entries(entries) if write_entries else 0,
+            "window_size": min(WINDOW_SIZE, date_count),
             "saved_date": saved_date,
         }

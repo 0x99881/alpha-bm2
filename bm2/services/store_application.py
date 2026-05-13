@@ -16,6 +16,10 @@ class StoreApplication:
         self._context.workbook_path = value
 
     @property
+    def read_only(self) -> bool:
+        return bool(self._context.read_only)
+
+    @property
     def daily_entry_service(self):
         return self._context.daily_entry_service
 
@@ -23,45 +27,40 @@ class StoreApplication:
     def member_service(self):
         return self._context.member_service
 
-    @property
-    def score_presenter(self):
-        return self._context.score_presenter
+    def get_quick_scores(self): return self._context.query_service.get_quick_scores()
 
-    def get_quick_scores(self):
-        return self._context.query_service.get_quick_scores()
+    def get_members(self): return self._context.query_service.get_members()
 
-    def get_members(self):
-        return self._context.query_service.get_members()
-
-    def get_active_members(self):
-        return self._context.query_service.get_active_members()
+    def get_active_members(self): return self._context.query_service.get_active_members()
 
     def get_member_wear_records(self, name: str, year_hint: int | None = None, workbook=None):
         return self._context.query_service.get_member_wear_records(name, year_hint=year_hint, workbook=workbook)
 
-    def get_score_summary(self):
-        return self._context.query_service.get_score_summary()
+    def get_score_summary(self): return self._context.query_service.get_score_summary()
 
-    def get_score_sheet_view(self):
-        return self._context.query_service.get_score_sheet_view()
+    def get_score_sheet_view(self): return self._context.query_service.get_score_sheet_view()
 
-    def get_wear_sheet_view(self):
-        return self._context.query_service.get_wear_sheet_view()
+    def get_wear_sheet_view(self): return self._context.query_service.get_wear_sheet_view()
 
     def get_member_profit_calendar(self, name: str, year: int, month: int):
         return self._context.query_service.get_member_profit_calendar(name, year, month)
 
-    def get_next_score_date(self):
-        return self._context.query_service.get_next_score_date()
+    def get_next_score_date(self): return self._context.query_service.get_next_score_date()
 
     def get_score_rows_for_date(self, score_date: str):
         return self._context.query_service.get_score_rows_for_date(score_date)
+
+    def get_score_date_notes(self, score_date: str):
+        return self._context.query_service.get_score_date_notes(score_date)
 
     def get_online_active_members(self):
         return self._context.query_service.get_online_active_members()
 
     def get_online_score_summary(self):
         return self._context.query_service.get_online_score_summary()
+
+    def get_online_wear_sheet_view(self):
+        return self._context.query_service.get_online_wear_sheet_view()
 
     def get_online_next_score_date(self):
         return self._context.query_service.get_online_next_score_date()
@@ -74,6 +73,9 @@ class StoreApplication:
 
     def refresh_local_database(self) -> dict[str, object]:
         return self._context.command_service.refresh_local_database()
+
+    def save_daily_entry(self, form_data, selected_date: str, *, existing_notes: dict[str, str] | None = None, export_to_excel: bool = True) -> dict:
+        return self._context.command_service.save_daily_entry(form_data, selected_date, existing_notes=existing_notes, export_to_excel=export_to_excel)
 
     def export_to_excel(self, date_text: str | None = None) -> int:
         return self._context.export_service.export_to_excel(date_text)

@@ -117,6 +117,130 @@ body {
     max-width: 980px;
 }
 
+.help-panel {
+    max-width: 980px;
+}
+
+.help-back-link,
+.help-entry-btn {
+    align-self: center;
+    white-space: nowrap;
+}
+
+.score-head-actions {
+    align-items: center;
+}
+
+.help-highlights {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(220px, 1fr));
+    gap: 10px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--line);
+}
+
+.help-highlights span {
+    min-height: 42px;
+    display: flex;
+    align-items: center;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    color: var(--text);
+    background: rgba(37, 99, 235, 0.05);
+}
+
+.help-section {
+    padding: 22px 0;
+    border-bottom: 1px solid var(--line);
+}
+
+.help-section:last-child {
+    border-bottom: 0;
+    padding-bottom: 0;
+}
+
+.help-section-head h3 {
+    margin: 0 0 12px;
+    font-size: 18px;
+}
+
+.help-section-head p {
+    margin: 0 0 14px;
+    color: var(--muted);
+    line-height: 1.7;
+}
+
+.help-card-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(220px, 1fr));
+    gap: 0 18px;
+}
+
+.help-card {
+    padding: 14px 0;
+    border-top: 1px solid var(--line);
+}
+
+.help-card h4 {
+    margin: 0 0 10px;
+    font-size: 16px;
+    color: var(--text);
+}
+
+.help-card dl {
+    margin: 0;
+    display: grid;
+    gap: 8px;
+}
+
+.help-card dl div {
+    display: grid;
+    grid-template-columns: 64px minmax(0, 1fr);
+    gap: 10px;
+}
+
+.help-card dt {
+    color: var(--text);
+    font-weight: 600;
+}
+
+.help-card dd {
+    margin: 0;
+    color: var(--muted);
+    line-height: 1.7;
+}
+
+.help-list {
+    margin: 0;
+    padding-left: 20px;
+    color: var(--muted);
+    line-height: 1.9;
+}
+
+.faq-list {
+    display: grid;
+    gap: 8px;
+}
+
+.faq-item {
+    border-top: 1px solid var(--line);
+    padding: 12px 0;
+}
+
+.faq-item summary {
+    cursor: pointer;
+    color: var(--text);
+    font-weight: 600;
+}
+
+.faq-item p {
+    margin: 0;
+    padding-top: 8px;
+    color: var(--muted);
+    line-height: 1.7;
+}
+
 .page-head-stats {
     display: flex;
     gap: 12px;
@@ -181,6 +305,11 @@ input[type="number"] {
     color: var(--text);
     background: #fff;
     width: 100%;
+}
+
+input::placeholder {
+    color: #94a3b8;
+    opacity: 1;
 }
 
 .compact-input {
@@ -272,6 +401,14 @@ body[data-theme="dark"] .member-select {
     border-color: var(--line);
 }
 
+body[data-theme="dark"] input::placeholder {
+    color: #73839d;
+}
+
+body[data-theme="dark"] .placeholder-result {
+    color: #73839d;
+}
+
 body[data-theme="dark"] .secondary-btn,
 body[data-theme="dark"] .modal-close {
     background: #1e293b;
@@ -287,4 +424,20 @@ body[data-theme="dark"] .wear-result,
 body[data-theme="dark"] .record-item {
     background: #0f172a;
     border-color: var(--line);
+}
+
+body[data-theme="dark"] .help-highlights span {
+    background: rgba(96, 165, 250, 0.08);
+}
+
+@media (max-width: 760px) {
+    .help-highlights,
+    .help-card-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .help-card dl div {
+        grid-template-columns: 1fr;
+        gap: 4px;
+    }
 }

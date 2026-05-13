@@ -32,9 +32,10 @@ class ExcelImportService:
         return True
 
     def refresh_from_excel(self) -> None:
-        score_rows = self._score_rows_from_workbook()
+        score_rows, date_notes = self._score_rows_and_notes_from_workbook()
         self._local_database.sync_members(self._config_members_provider())
         self._local_database.replace_score_entries_from_snapshot(score_rows)
+        self._sync_score_date_notes(date_notes)
         cycle_start = self._score_rows_cycle_start(score_rows) or self._workbook_cycle_start()
         if cycle_start:
             self._local_database.set_sync_state("score_cycle_start_date", cycle_start)
@@ -122,7 +123,43 @@ class ExcelImportService:
             score_date_map[column_index] = fallback_by_number[number]
         return score_date_map
 
-    def _score_rows_from_workbook(self) -> list[dict[str, object]]:
+    @staticmethod
+    def _note_text(value) -> str:
+        return str(value or "").strip()
+
+    def _last_member_row(self, sheet, name_col: int) -> int:
+        last_row = DATA_START_ROW - 1
+        for row_index in range(DATA_START_ROW, sheet.max_row + 1):
+            if self._note_text(sheet.cell(row_index, name_col).value):
+                last_row = row_index
+        return last_row
+
+    def _score_date_notes_from_sheet(
+        self,
+        sheet,
+        *,
+        score_date_map: dict[int, str],
+        name_col: int,
+    ) -> dict[str, dict[str, str]]:
+        note_start_row = self._last_member_row(sheet, name_col) + 1
+        notes: dict[str, dict[str, str]] = {}
+        for column_index, score_date in score_date_map.items():
+            values = [
+                self._note_text(sheet.cell(note_start_row, column_index).value),
+                self._note_text(sheet.cell(note_start_row + 1, column_index).value),
+            ]
+            compacted = [value for value in values if value]
+            notes[score_date] = {
+                "note1": compacted[0] if len(compacted) >= 1 else "",
+                "note2": compacted[1] if len(compacted) >= 2 else "",
+            }
+        return notes
+
+    def _sync_score_date_notes(self, date_notes: dict[str, dict[str, str]]) -> None:
+        for score_date, notes in date_notes.items():
+            self._local_database.record_score_date_notes(score_date, notes, source="local")
+
+    def _score_rows_and_notes_from_workbook(self) -> tuple[list[dict[str, object]], dict[str, dict[str, str]]]:
         workbook = self._excel_store.workbook_repository.open()
         try:
             self._excel_store._ensure_score_sheet_structure(workbook)
@@ -130,9 +167,14 @@ class ExcelImportService:
             name_col = self._excel_store._find_column(sheet, NAME_HEADER)
             total_col = self._excel_store._find_column(sheet, TOTAL_HEADER)
             if name_col is None or total_col is None:
-                return []
+                return [], {}
 
             score_date_map = self._score_date_map_from_workbook(workbook)
+            date_notes = self._score_date_notes_from_sheet(
+                sheet,
+                score_date_map=score_date_map,
+                name_col=name_col,
+            )
             rows: list[dict[str, object]] = []
             for row in range(2, sheet.max_row + 1):
                 member_name = str(sheet.cell(row, name_col).value or "").strip()
@@ -146,7 +188,7 @@ class ExcelImportService:
                         score_value = 0
                     rows.append({"member_name": member_name, "score_date": score_date, "score": score_value})
             self._attach_value_sheet_fields(workbook, rows)
-            return rows
+            return rows, date_notes
         finally:
             workbook.close()
 

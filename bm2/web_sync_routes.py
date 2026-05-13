@@ -5,6 +5,14 @@ from flask import abort, flash, redirect, request, url_for
 from .ui_text import MESSAGES
 
 
+def _is_transient_network_error(exc: BaseException) -> bool:
+    try:
+        import httpx
+    except ImportError:
+        return False
+    return isinstance(exc, (httpx.TimeoutException, httpx.TransportError))
+
+
 def register_sync_routes(app, store, *, read_only_mode: bool) -> None:
     def _redirect_back_to_score_entry():
         return redirect(request.referrer or url_for("score_entry"))
@@ -61,9 +69,12 @@ def register_sync_routes(app, store, *, read_only_mode: bool) -> None:
         except ValueError as exc:
             flash(str(exc), "error")
             return _redirect_back_to_score_entry()
-        except Exception:
+        except Exception as exc:
             app.logger.exception("Supabase push failed")
-            flash(MESSAGES["supabase_upload_failed"], "error")
+            if _is_transient_network_error(exc):
+                flash(MESSAGES["supabase_upload_failed_timeout"], "error")
+            else:
+                flash(MESSAGES["supabase_upload_failed"], "error")
             return _redirect_back_to_score_entry()
         flash(
             MESSAGES["supabase_upload_done"].format(
