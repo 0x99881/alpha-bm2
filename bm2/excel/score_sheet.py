@@ -130,7 +130,7 @@ class ScoreSheet:
         ) or changed
 
         self.recalculate_totals(sheet, total_col)
-        recalculate_score_profits(workbook, sheet, profit_col, self.store.income_sheet, self.store.wear_sheet)
+        recalculate_score_profits(workbook, sheet, profit_col, self.store.income_sheet, self.store.wear_sheet, self.store.expense_sheet)
         sort_named_rows(sheet, total_col, name_col)
         recent_numbers = [number for number, _ in self.date_columns(sheet)][-WINDOW_SIZE:]
         self.format_sheet(sheet, recent_numbers, total_col)

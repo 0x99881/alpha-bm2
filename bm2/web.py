@@ -9,6 +9,7 @@ from flask import abort, flash, redirect, render_template, request, Response, se
 
 from .constants import DISABLED, ENABLED
 from .ui_text import JS_UI_TEXT, MESSAGES, UI_TEXT
+from .web_cycle_routes import register_cycle_routes
 from .web_member_routes import register_member_routes
 from .web_score_routes import register_score_routes
 from .web_sync_routes import register_sync_routes
@@ -119,4 +120,5 @@ def register_routes(app, store) -> None:
         read_only_mode=read_only_mode,
         flash_remote_sync_needed=_flash_remote_sync_needed,
     )
+    register_cycle_routes(app, store, read_only_mode=read_only_mode)
     register_sync_routes(app, store, read_only_mode=read_only_mode)

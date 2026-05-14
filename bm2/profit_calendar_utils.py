@@ -19,7 +19,7 @@ def build_month_neighbors(year: int, month: int) -> tuple[int, int, int, int]:
 
 
 def empty_member_day_record(date_text: str) -> dict[str, Any]:
-    return {'date': date_text, 'wear': 0.0, 'income': 0.0, 'note': ''}
+    return {'date': date_text, 'wear': 0.0, 'income': 0.0, 'expense': 0.0, 'note': ''}
 
 
 def build_calendar_weeks(*, year: int, month: int, record_map: dict[str, dict[str, Any]], max_abs_wear: float, note_text: str = '') -> list[list[dict[str, Any]]]:
@@ -32,6 +32,7 @@ def build_calendar_weeks(*, year: int, month: int, record_map: dict[str, dict[st
             record = record_map.get(date_text)
             wear = None if record is None else float(record.get('wear', 0) or 0)
             income = None if record is None else float(record.get('income', 0) or 0)
+            expense = None if record is None else float(record.get('expense', 0) or 0)
             intensity = 0.0
             if wear is not None and max_abs_wear > 0:
                 intensity = min(abs(wear) / max_abs_wear, 1.0)
@@ -44,6 +45,7 @@ def build_calendar_weeks(*, year: int, month: int, record_map: dict[str, dict[st
                     'record': record,
                     'wear': wear,
                     'income': income,
+                    'expense': expense,
                     'note': '' if record is None else str(record.get('note') or ''),
                     'wear_account_count': 0 if record is None else int(record.get('wear_account_count', 0) or 0),
                     'income_account_count': 0 if record is None else int(record.get('income_account_count', 0) or 0),

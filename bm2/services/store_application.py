@@ -33,8 +33,7 @@ class StoreApplication:
 
     def get_active_members(self): return self._context.query_service.get_active_members()
 
-    def get_member_wear_records(self, name: str, year_hint: int | None = None, workbook=None):
-        return self._context.query_service.get_member_wear_records(name, year_hint=year_hint, workbook=workbook)
+    def get_member_wear_records(self, name, year_hint=None, workbook=None): return self._context.query_service.get_member_wear_records(name, year_hint=year_hint, workbook=workbook)
 
     def get_score_summary(self): return self._context.query_service.get_score_summary()
 
@@ -42,58 +41,47 @@ class StoreApplication:
 
     def get_wear_sheet_view(self): return self._context.query_service.get_wear_sheet_view()
 
-    def get_member_profit_calendar(self, name: str, year: int, month: int):
-        return self._context.query_service.get_member_profit_calendar(name, year, month)
+    def get_member_profit_calendar(self, name, year, month): return self._context.query_service.get_member_profit_calendar(name, year, month)
+
+    def get_cycle_profit_view(self, cycle_id=None): return self._context.query_service.get_cycle_profit_view(cycle_id)
+
+    def create_settlement_cycle(self, name): return self._context.command_service.create_settlement_cycle(name)
+
+    def save_cycle_settlement(self, cycle_id, form_data): return self._context.command_service.save_cycle_settlement(cycle_id, form_data)
 
     def get_next_score_date(self): return self._context.query_service.get_next_score_date()
 
-    def get_score_rows_for_date(self, score_date: str):
-        return self._context.query_service.get_score_rows_for_date(score_date)
+    def get_score_rows_for_date(self, score_date): return self._context.query_service.get_score_rows_for_date(score_date)
 
-    def get_score_date_notes(self, score_date: str):
-        return self._context.query_service.get_score_date_notes(score_date)
+    def get_score_date_notes(self, score_date): return self._context.query_service.get_score_date_notes(score_date)
 
-    def get_online_active_members(self):
-        return self._context.query_service.get_online_active_members()
+    def get_online_active_members(self): return self._context.query_service.get_online_active_members()
 
-    def get_online_score_summary(self):
-        return self._context.query_service.get_online_score_summary()
+    def get_online_score_summary(self): return self._context.query_service.get_online_score_summary()
 
-    def get_online_wear_sheet_view(self):
-        return self._context.query_service.get_online_wear_sheet_view()
+    def get_online_wear_sheet_view(self): return self._context.query_service.get_online_wear_sheet_view()
 
-    def get_online_next_score_date(self):
-        return self._context.query_service.get_online_next_score_date()
+    def get_online_next_score_date(self): return self._context.query_service.get_online_next_score_date()
 
-    def get_mobile_overview(self):
-        return self._context.query_service.get_mobile_overview()
+    def get_mobile_overview(self): return self._context.query_service.get_mobile_overview()
 
-    def set_wear_abnormal_threshold(self, value_text: str) -> float:
-        return self._context.command_service.set_wear_abnormal_threshold(value_text)
+    def set_wear_abnormal_threshold(self, value_text): return self._context.command_service.set_wear_abnormal_threshold(value_text)
 
-    def refresh_local_database(self) -> dict[str, object]:
-        return self._context.command_service.refresh_local_database()
+    def refresh_local_database(self): return self._context.command_service.refresh_local_database()
 
-    def save_daily_entry(self, form_data, selected_date: str, *, existing_notes: dict[str, str] | None = None, export_to_excel: bool = True) -> dict:
-        return self._context.command_service.save_daily_entry(form_data, selected_date, existing_notes=existing_notes, export_to_excel=export_to_excel)
+    def save_daily_entry(self, form_data, selected_date, *, existing_notes=None, export_to_excel=True): return self._context.command_service.save_daily_entry(form_data, selected_date, existing_notes=existing_notes, export_to_excel=export_to_excel)
 
-    def export_to_excel(self, date_text: str | None = None) -> int:
-        return self._context.export_service.export_to_excel(date_text)
+    def export_to_excel(self, date_text=None): return self._context.export_service.export_to_excel(date_text)
 
-    def create_new_cycle(self, start_date_text: str) -> str:
-        return self._context.command_service.create_new_cycle(start_date_text)
+    def create_new_cycle(self, start_date_text): return self._context.command_service.create_new_cycle(start_date_text)
 
-    def delete_score_date(self, date_text: str) -> dict[str, int]:
-        return self._context.command_service.delete_score_date(date_text)
+    def delete_score_date(self, date_text): return self._context.command_service.delete_score_date(date_text)
 
-    def is_supabase_configured(self) -> bool:
-        return self._context.command_service.is_supabase_configured()
+    def is_supabase_configured(self): return self._context.command_service.is_supabase_configured()
 
-    def supabase_push(self, *, force_full: bool = True) -> dict[str, int]:
-        return self._context.command_service.supabase_push(force_full=force_full)
+    def supabase_push(self, *, force_full=True): return self._context.command_service.supabase_push(force_full=force_full)
 
-    def supabase_pull(self) -> dict[str, int]:
-        return self._context.command_service.supabase_pull()
+    def supabase_pull(self): return self._context.command_service.supabase_pull()
 
 
 __all__ = ["StoreApplication"]

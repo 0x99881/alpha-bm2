@@ -57,8 +57,33 @@ class SQLiteSchemaMixin:
                     value TEXT NOT NULL DEFAULT ''
                 );
 
+                CREATE TABLE IF NOT EXISTS settlement_cycles (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    deleted INTEGER NOT NULL DEFAULT 0
+                );
+
+                CREATE TABLE IF NOT EXISTS settlement_entries (
+                    cycle_id TEXT NOT NULL,
+                    member_name TEXT NOT NULL,
+                    start_date TEXT NOT NULL DEFAULT '',
+                    start_balance TEXT NOT NULL DEFAULT '',
+                    settle_date TEXT NOT NULL DEFAULT '',
+                    end_balance TEXT NOT NULL DEFAULT '',
+                    updated_at TEXT NOT NULL,
+                    version INTEGER NOT NULL DEFAULT 1,
+                    deleted INTEGER NOT NULL DEFAULT 0,
+                    source TEXT NOT NULL DEFAULT 'local',
+                    PRIMARY KEY (cycle_id, member_name)
+                );
+
                 CREATE INDEX IF NOT EXISTS idx_score_entries_date
                 ON score_entries(score_date);
+
+                CREATE INDEX IF NOT EXISTS idx_settlement_entries_cycle
+                ON settlement_entries(cycle_id);
                 """
             )
             existing_columns = {

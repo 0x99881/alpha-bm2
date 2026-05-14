@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-head">
+    <div>
+        <h2>{{ ui.cycle_profit_title }}</h2>
+        <p>{{ ui.cycle_profit_hint }}</p>
+    </div>
+    <div class="page-head-stats">
+        <div class="stat-card">
+            <span>{{ ui.cycle_total_profit }}</span>
+            <strong class="{% if cycle_data.totals.profit >= 0 %}cycle-profit-positive{% else %}cycle-profit-negative{% endif %}">{{ cycle_data.totals.profit }}</strong>
+        </div>
+        <div class="stat-card">
+            <span>{{ ui.cycle_total_wear }}</span>
+            <strong>{{ cycle_data.totals.wear }}</strong>
+        </div>
+        <div class="stat-card">
+            <span>{{ ui.cycle_total_redpacket }}</span>
+            <strong>{{ cycle_data.totals.redpacket }}</strong>
+        </div>
+    </div>
+</section>
+
+<section class="panel">
+    <div class="cycle-toolbar">
+        <form method="get" action="{{ url_for('cycle_profit') }}" class="cycle-picker">
+            <label>{{ ui.cycle_select }}</label>
+            <select name="cycle" onchange="this.form.submit()" {% if not cycle_data.cycles %}disabled{% endif %}>
+                {% for cycle in cycle_data.cycles %}
+                <option value="{{ cycle.id }}" {% if cycle_data.selected_cycle and cycle.id == cycle_data.selected_cycle.id %}selected{% endif %}>{{ cycle.name }}</option>
+                {% else %}
+                <option value="">{{ ui.cycle_none }}</option>
+                {% endfor %}
+            </select>
+        </form>
+        <form method="post" action="{{ url_for('create_cycle_profit') }}" class="cycle-create">
+            <input type="text" name="name" placeholder="{{ ui.cycle_name_placeholder }}" required>
+            <button type="submit" class="secondary-btn compact-btn">{{ ui.cycle_create }}</button>
+        </form>
+    </div>
+</section>
+
+{% if cycle_data.has_cycle %}
+<section class="panel">
+    <div class="section-title">
+        <h3>{{ cycle_data.selected_cycle.name }}</h3>
+        <p>{{ ui.cycle_formula_hint }}</p>
+    </div>
+    <form method="post" action="{{ url_for('save_cycle_profit') }}">
+        <input type="hidden" name="cycle_id" value="{{ cycle_data.selected_cycle.id }}">
+        <div class="table-wrap">
+            <table class="cycle-table">
+                <thead>
+                    <tr>
+                        <th>{{ ui.cycle_col_member }}</th>
+                        <th>{{ ui.cycle_col_start_date }}</th>
+                        <th>{{ ui.cycle_col_start_balance }}</th>
+                        <th>{{ ui.cycle_col_settle_date }}</th>
+                        <th>{{ ui.cycle_col_end_balance }}</th>
+                        <th>{{ ui.cycle_col_wear }}</th>
+                        <th>{{ ui.cycle_col_redpacket }}</th>
+                        <th>{{ ui.cycle_col_profit }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in cycle_data.rows %}
+                    <tr>
+                        <td class="cycle-member">{{ row.member_name }}</td>
+                        <td><input type="date" name="start_date_{{ row.member_name }}" value="{{ row.start_date }}" class="compact-input"></td>
+                        <td><input type="number" step="any" name="start_balance_{{ row.member_name }}" value="{{ row.start_balance }}" placeholder="{{ ui.cycle_col_start_balance }}" class="compact-input"></td>
+                        <td><input type="date" name="settle_date_{{ row.member_name }}" value="{{ row.settle_date }}" class="compact-input"></td>
+                        <td><input type="number" step="any" name="end_balance_{{ row.member_name }}" value="{{ row.end_balance }}" placeholder="{{ ui.cycle_col_end_balance }}" class="compact-input"></td>
+                        <td class="cycle-wear">{{ row.wear_total }}</td>
+                        <td class="cycle-redpacket">
+                            {% if row.redpacket_items %}
+                            <div class="cycle-redpacket-list">
+                                {% for item in row.redpacket_items %}
+                                <span class="cycle-redpacket-item">{{ item.date }} <strong>{{ item.amount }}</strong></span>
+                                {% endfor %}
+                            </div>
+                            <div class="cycle-redpacket-total">{{ ui.cycle_redpacket_sum }} {{ row.redpacket_total }}</div>
+                            {% else %}
+                            <span class="cycle-empty">{{ ui.cycle_redpacket_empty }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="cycle-profit-cell">
+                            {% if row.has_balances %}
+                            <strong class="{% if row.profit >= 0 %}cycle-profit-positive{% else %}cycle-profit-negative{% endif %}">{{ row.profit }}</strong>
+                            {% else %}
+                            <span class="cycle-empty">{{ ui.cycle_profit_missing }}</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="8" class="empty-cell">{{ ui.cycle_no_members }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="cycle-actions">
+            <button type="submit" class="primary-btn">{{ ui.cycle_save }}</button>
+        </div>
+    </form>
+</section>
+{% else %}
+<section class="panel">
+    <div class="empty-state">
+        <p>{{ ui.cycle_empty_state }}</p>
+    </div>
+</section>
+{% endif %}
+{% endblock %}

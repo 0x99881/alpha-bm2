@@ -32,6 +32,7 @@
         const rangeTextNode = document.querySelector("[data-range-text]");
         const rangeIncomeNode = document.querySelector("[data-range-income]");
         const rangeWearNode = document.querySelector("[data-range-wear]");
+        const rangeExpenseNode = document.querySelector("[data-range-expense]");
         const rangeClearButton = document.querySelector("[data-range-clear]");
         const profitCard = document.querySelector("[data-profit-card]");
         const profitTitleNode = document.querySelector("[data-profit-title]");
@@ -60,6 +61,7 @@
         const negativeLabel = profitCard?.dataset.negativeLabel || getUiText("profitNegative", "Loss");
         const defaultIncome = toNumber(profitCard?.dataset.defaultIncome, 0);
         const defaultWear = toNumber(profitCard?.dataset.defaultWear, 0);
+        const defaultExpense = toNumber(profitCard?.dataset.defaultExpense, 0);
         const boardMonthTitle = getUiText("memberProfitBoardTitle", "Member profit board");
         const boardRangeTitle = getUiText("memberProfitBoardRangeTitle", "Range member profit board");
         const boardEmptyText = boardRoot?.dataset.boardEmpty || getUiText("memberProfitBoardEmpty", "No member data");
@@ -109,13 +111,14 @@
             calendarModal.hidden = false;
         };
 
-        const setProfitCard = (title, incomeTotal, wearTotal) => {
+        const setProfitCard = (title, incomeTotal, wearTotal, expenseTotal) => {
             if (!profitCard || !profitTitleNode || !profitValueNode) {
                 return;
             }
             const safeIncome = statsAllowed ? incomeTotal : 0;
             const safeWear = statsAllowed ? wearTotal : 0;
-            const profitValue = safeIncome - safeWear;
+            const safeExpense = statsAllowed ? expenseTotal : 0;
+            const profitValue = safeIncome - safeWear - safeExpense;
             setText(profitTitleNode, title);
             setText(
                 profitValueNode,
@@ -144,7 +147,7 @@
                 return [];
             }
 
-            const rowMap = new Map(activeMemberNames.map((name) => [name, { name, income: 0, wear: 0 }]));
+            const rowMap = new Map(activeMemberNames.map((name) => [name, { name, income: 0, wear: 0, expense: 0 }]));
             targetButtons.forEach((button) => {
                 parseBreakdownRows(button).forEach((row) => {
                     if (!rowMap.has(row.name)) {
@@ -153,6 +156,7 @@
                     const current = rowMap.get(row.name);
                     current.income += toNumber(row.income, 0);
                     current.wear += toNumber(row.wear, 0);
+                    current.expense += toNumber(row.expense, 0);
                 });
             });
 
@@ -160,7 +164,8 @@
                 name: row.name,
                 income: toNumber(row.income.toFixed(1), 0),
                 wear: toNumber(row.wear.toFixed(1), 0),
-                profit: toNumber((row.income - row.wear).toFixed(1), 0),
+                expense: toNumber(row.expense.toFixed(1), 0),
+                profit: toNumber((row.income - row.wear - row.expense).toFixed(1), 0),
             })).sort((a, b) => b.profit - a.profit || b.income - a.income || a.name.localeCompare(b.name));
         };
 
@@ -190,6 +195,7 @@
                         <div class="profit-board-meta-row">
                             <span class="profit-board-meta"><em>${escapeHTML(getUiText("income", "Income"))}</em><strong>${formatOneDecimal(row.income)}</strong></span>
                             <span class="profit-board-meta"><em>${escapeHTML(getUiText("wear", "Wear"))}</em><strong>${formatOneDecimal(row.wear)}</strong></span>
+                            <span class="profit-board-meta"><em>${escapeHTML(getUiText("expense", "Expense"))}</em><strong>${formatOneDecimal(row.expense)}</strong></span>
                         </div>
                     </article>
                 `;
@@ -206,10 +212,13 @@
             if (rangeWearNode) {
                 setText(rangeWearNode, "0.0");
             }
+            if (rangeExpenseNode) {
+                setText(rangeExpenseNode, "0.0");
+            }
             if (rangeClearButton) {
                 rangeClearButton.disabled = true;
             }
-            setProfitCard(monthProfitTitle, defaultIncome, defaultWear);
+            setProfitCard(monthProfitTitle, defaultIncome, defaultWear, defaultExpense);
             setAverageCard(defaultAverageWear, getMonthButtons());
             if (boardRoot) {
                 renderBoardRows(aggregateBoardRows(getMonthButtons()), boardMonthTitle);
@@ -239,6 +248,7 @@
             const rangeValue = firstDate === lastDate ? firstDate : `${firstDate}${rangeSeparator}${lastDate}`;
             const wearTotal = statsAllowed ? selectedButtons.reduce((sum, button) => sum + toNumber(button.dataset.wear, 0), 0) : 0;
             const incomeTotal = statsAllowed ? selectedButtons.reduce((sum, button) => sum + toNumber(button.dataset.income, 0), 0) : 0;
+            const expenseTotal = statsAllowed ? selectedButtons.reduce((sum, button) => sum + toNumber(button.dataset.expense, 0), 0) : 0;
 
             if (rangeTextNode) {
                 setText(rangeTextNode, buildLabeledRangeText(rangePrefix, rangeValue));
@@ -249,10 +259,13 @@
             if (rangeWearNode) {
                 setText(rangeWearNode, formatOneDecimal(wearTotal));
             }
+            if (rangeExpenseNode) {
+                setText(rangeExpenseNode, formatOneDecimal(expenseTotal));
+            }
             if (rangeClearButton) {
                 rangeClearButton.disabled = false;
             }
-            setProfitCard(rangeProfitTitle, incomeTotal, wearTotal);
+            setProfitCard(rangeProfitTitle, incomeTotal, wearTotal, expenseTotal);
             setAverageCard(wearTotal, selectedButtons);
             if (boardRoot) {
                 renderBoardRows(aggregateBoardRows(selectedButtons), boardRangeTitle);

@@ -24,6 +24,10 @@
             <span>{{ ui.month_wear_total }}</span>
             <strong>{{ calendar_data.month_wear_total }}</strong>
         </div>
+        <div class="profit-stat-card expense-card">
+            <span>{{ ui.month_expense_total }}</span>
+            <strong>{{ calendar_data.month_expense_total }}</strong>
+        </div>
         {% if calendar_data.is_all_members %}
         <div class="profit-stat-card average-card">
             <span>{{ calendar_data.month_income_account_count }}{{ ui.avg_income_suffix }}</span>
@@ -53,6 +57,7 @@
             data-negative-label="{{ ui.profit_negative }}"
             data-default-income="{{ calendar_data.month_income_total }}"
             data-default-wear="{{ calendar_data.month_wear_total }}"
+            data-default-expense="{{ calendar_data.month_expense_total }}"
             data-stats-allowed="{{ 1 if calendar_data.stats_allowed else 0 }}"
         >
             <span data-profit-title>{{ ui.profit_status_month }}</span>
@@ -87,6 +92,10 @@
         <div class="profit-range-card wear-range-card">
             <span>{{ ui.range_wear_total }}</span>
             <strong data-range-wear>0.0</strong>
+        </div>
+        <div class="profit-range-card expense-range-card">
+            <span>{{ ui.range_expense_total }}</span>
+            <strong data-range-expense>0.0</strong>
         </div>
         {% if not calendar_data.is_all_members %}
         <div class="profit-range-card single-average-range-card"
@@ -131,6 +140,7 @@
             data-date="{{ cell.date }}"
             data-wear="{% if cell.wear is not none %}{{ cell.wear }}{% endif %}"
             data-income="{% if cell.income is not none %}{{ cell.income }}{% endif %}"
+            data-expense="{% if cell.expense is not none %}{{ cell.expense }}{% endif %}"
             data-note="{{ cell.note or ui.no_note }}"
             data-wear-count="{{ cell.wear_account_count or 0 }}"
             data-income-count="{{ cell.income_account_count or 0 }}"
@@ -185,6 +195,7 @@
                     <div class="profit-board-meta-row">
                         <span class="profit-board-meta"><em>{{ ui.income }}</em><strong>{{ '%.1f'|format(row.income) }}</strong></span>
                         <span class="profit-board-meta"><em>{{ ui.wear }}</em><strong>{{ '%.1f'|format(row.wear) }}</strong></span>
+                        <span class="profit-board-meta"><em>{{ ui.label_other_expense }}</em><strong>{{ '%.1f'|format(row.expense) }}</strong></span>
                     </div>
                 </article>
                 {% endfor %}

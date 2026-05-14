@@ -35,6 +35,7 @@
                 <a href="{{ url_for('score_overview') }}" class="{% if request.endpoint == 'score_overview' %}active{% endif %}">{{ ui.nav_score_overview }}</a>
                 <a href="{{ url_for('wear_entry') }}" class="{% if request.endpoint == 'wear_entry' %}active{% endif %}">{{ ui.nav_wear }}</a>
                 <a href="{{ url_for('profit_calendar') }}" class="{% if request.endpoint in ['profit_calendar', 'member_detail'] %}active{% endif %}">{{ ui.nav_calendar }}</a>
+                <a href="{{ url_for('cycle_profit') }}" class="{% if request.endpoint == 'cycle_profit' %}active{% endif %}">{{ ui.nav_cycle_profit }}</a>
                 <a href="{{ url_for('members') }}" class="{% if request.endpoint == 'members' %}active{% endif %}">{{ ui.nav_members }}</a>
                 {% endif %}
             </nav>
