@@ -103,6 +103,12 @@ class StoreCommandService:
             "exported_dates": exported_dates,
         }
 
+    def create_settlement_cycle(self, name: str) -> str:
+        return self._context.cycle_service.create_cycle(name)
+
+    def save_cycle_settlement(self, cycle_id: str, form_data) -> None:
+        self._context.cycle_service.save_settlement(cycle_id, form_data)
+
     def is_supabase_configured(self) -> bool:
         return self._context.sync_service.is_configured()
 

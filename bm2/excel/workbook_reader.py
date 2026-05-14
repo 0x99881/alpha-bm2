@@ -8,7 +8,7 @@ from .score_date_reader import latest_header_date, score_date_columns
 from .value_sheet_reader import read_member_value_records
 from .header_locator import find_column
 from .value_sheet_spec import get_value_sheet_spec
-from .value_normalizer import normalize_income, normalize_wear
+from .value_normalizer import normalize_expense, normalize_income, normalize_wear
 
 
 class ExcelWorkbookReader:
@@ -74,6 +74,9 @@ class ExcelWorkbookReader:
     def get_member_income_records(self, name: str, year_hint: int | None = None, workbook=None) -> list[dict[str, Any]]:
         return self._get_member_value_records(name=name, year_hint=year_hint, sheet_type='income', workbook=workbook)
 
+    def get_member_expense_records(self, name: str, year_hint: int | None = None, workbook=None) -> list[dict[str, Any]]:
+        return self._get_member_value_records(name=name, year_hint=year_hint, sheet_type='expense', workbook=workbook)
+
     def get_wear_sheet_snapshot(self) -> dict[str, Any]:
         workbook = self._store.workbook_repository.open()
         try:
@@ -110,6 +113,7 @@ class ExcelWorkbookReader:
     def _build_member_record_map(self, name: str, year: int, month: int, workbook=None) -> dict[str, dict[str, Any]]:
         wear_records = self.get_member_wear_records(name, year_hint=year, workbook=workbook)
         income_records = self.get_member_income_records(name, year_hint=year, workbook=workbook)
+        expense_records = self.get_member_expense_records(name, year_hint=year, workbook=workbook)
         merged_map: dict[str, dict[str, Any]] = {}
         for item in wear_records:
             merged_map.setdefault(item['date'], empty_member_day_record(item['date']))
@@ -117,6 +121,9 @@ class ExcelWorkbookReader:
         for item in income_records:
             merged_map.setdefault(item['date'], empty_member_day_record(item['date']))
             merged_map[item['date']]['income'] = item['income']
+        for item in expense_records:
+            merged_map.setdefault(item['date'], empty_member_day_record(item['date']))
+            merged_map[item['date']]['expense'] = item['expense']
         month_prefix = f'{year:04d}-{month:02d}-'
         return {key: value for key, value in merged_map.items() if key.startswith(month_prefix)}
 
@@ -175,6 +182,7 @@ class ExcelWorkbookReader:
                 'date': item['date'],
                 'wear': 0.0,
                 'income': 0.0,
+                'expense': 0.0,
                 'note': '',
                 'wear_account_count': 0,
                 'income_account_count': 0,
@@ -183,18 +191,21 @@ class ExcelWorkbookReader:
         )
         wear_value = float(item.get('wear', 0) or 0)
         income_value = float(item.get('income', 0) or 0)
+        expense_value = float(item.get('expense', 0) or 0)
         day_record['wear'] = normalize_wear(float(day_record['wear']) + wear_value)
         day_record['income'] = normalize_income(float(day_record['income']) + income_value)
+        day_record['expense'] = normalize_expense(float(day_record['expense']) + expense_value)
         if wear_value != 0:
             day_record['wear_account_count'] = int(day_record['wear_account_count']) + 1
         if income_value != 0:
             day_record['income_account_count'] = int(day_record['income_account_count']) + 1
-        if wear_value != 0 or income_value != 0:
+        if wear_value != 0 or income_value != 0 or expense_value != 0:
             day_record['breakdown'].append(
                 {
                     'name': member_name,
                     'wear': normalize_wear(wear_value),
                     'income': normalize_income(income_value),
+                    'expense': normalize_expense(expense_value),
                 }
             )
 

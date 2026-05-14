@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from ..excel.value_normalizer import normalize_income, normalize_wear
+from ..excel.value_normalizer import normalize_expense, normalize_income, normalize_wear
 from ..profit_calendar_utils import build_calendar_weeks, build_month_label, build_month_neighbors
 
 
@@ -34,12 +34,13 @@ class ProfitCalendarPresenter:
             'next_month': next_month,
         }
 
-    def _sum_profit_calendar_totals(self, month_records: list[dict[str, Any]], stats_allowed: bool) -> tuple[float, float]:
+    def _sum_profit_calendar_totals(self, month_records: list[dict[str, Any]], stats_allowed: bool) -> tuple[float, float, float]:
         if not stats_allowed:
-            return 0.0, 0.0
+            return 0.0, 0.0, 0.0
         month_income = normalize_income(sum(float(item.get('income', 0) or 0) for item in month_records))
         month_wear = normalize_wear(sum(float(item.get('wear', 0) or 0) for item in month_records))
-        return month_income, month_wear
+        month_expense = normalize_expense(sum(float(item.get('expense', 0) or 0) for item in month_records))
+        return month_income, month_wear, month_expense
 
     def _count_profit_stats_members(self, *, name: str, stats_allowed: bool, active_members: list[dict[str, Any]]) -> int:
         if name == 'all':
@@ -69,7 +70,7 @@ class ProfitCalendarPresenter:
         }
 
     def _accumulate_profit_board_totals(self, month_records: list[dict[str, Any]], active_members: list[dict[str, Any]]) -> dict[str, dict[str, float | str]]:
-        row_map = {item['name']: {'name': item['name'], 'income': 0.0, 'wear': 0.0, 'profit': 0.0} for item in active_members}
+        row_map = {item['name']: {'name': item['name'], 'income': 0.0, 'wear': 0.0, 'expense': 0.0, 'profit': 0.0} for item in active_members}
         for item in month_records:
             for row in item.get('breakdown', []):
                 member_name = row.get('name')
@@ -77,6 +78,7 @@ class ProfitCalendarPresenter:
                     continue
                 row_map[member_name]['income'] += float(row.get('income', 0) or 0)
                 row_map[member_name]['wear'] += float(row.get('wear', 0) or 0)
+                row_map[member_name]['expense'] += float(row.get('expense', 0) or 0)
         return row_map
 
     def _build_profit_board_rows(self, row_map: dict[str, dict[str, float | str]]) -> list[dict[str, Any]]:
@@ -84,11 +86,13 @@ class ProfitCalendarPresenter:
         for row in row_map.values():
             income_value = round(float(row['income']), 1)
             wear_value = round(float(row['wear']), 1)
-            profit_value = round(income_value - wear_value, 1)
+            expense_value = round(float(row['expense']), 1)
+            profit_value = round(income_value - wear_value - expense_value, 1)
             board_rows.append({
                 'name': str(row['name']),
                 'income': income_value,
                 'wear': wear_value,
+                'expense': expense_value,
                 'profit': profit_value,
             })
         board_rows.sort(key=lambda item: (-item['profit'], -item['income'], item['name']))
@@ -112,7 +116,7 @@ class ProfitCalendarPresenter:
         dataset = self.repository.get_all_members_calendar_dataset(year, month) if name == 'all' else self.repository.get_member_calendar_dataset(name, year, month)
         calendar_data = self._build_calendar_payload(dataset=dataset)
         month_records = calendar_data['records']
-        month_income, month_wear = self._sum_profit_calendar_totals(month_records, stats_allowed)
+        month_income, month_wear, month_expense = self._sum_profit_calendar_totals(month_records, stats_allowed)
         active_member_count = self._count_profit_stats_members(name=name, stats_allowed=stats_allowed, active_members=active_members)
         data_day_count = len(month_records)
         average_stats = self._build_profit_average_stats(
@@ -126,7 +130,8 @@ class ProfitCalendarPresenter:
             **calendar_data,
             'month_income_total': month_income,
             'month_wear_total': month_wear,
-            'month_profit_total': normalize_income(month_income - month_wear),
+            'month_expense_total': month_expense,
+            'month_profit_total': normalize_income(month_income - month_wear - month_expense),
             **average_stats,
             'profit_board_rows': board_rows,
             'profit_positive_list': profit_positive_list,

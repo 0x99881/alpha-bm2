@@ -320,7 +320,7 @@ class SQLiteToExcelExporter:
             total_col = find_column(score_sheet, TOTAL_HEADER)
             profit_col = find_column(score_sheet, PROFIT_HEADER)
             if total_col is not None and profit_col is not None:
-                recalculate_score_profits(workbook, score_sheet, profit_col, store.income_sheet, store.wear_sheet)
+                recalculate_score_profits(workbook, score_sheet, profit_col, store.income_sheet, store.wear_sheet, store.expense_sheet)
             name_col = find_column(score_sheet, NAME_HEADER)
             if name_col is not None:
                 self._write_score_date_notes(

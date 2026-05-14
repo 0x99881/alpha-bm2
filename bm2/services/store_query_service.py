@@ -119,6 +119,9 @@ class StoreQueryService:
     def get_member_profit_calendar(self, name: str, year: int, month: int):
         return self._context.profit_calendar_presenter.build_member_profit_calendar(name=name, year=year, month=month)
 
+    def get_cycle_profit_view(self, cycle_id: str | None = None):
+        return self._context.cycle_profit_presenter.build_cycle_profit_view(cycle_id)
+
     def get_active_members(self) -> list[dict[str, str]]:
         if self._context.read_only:
             return self._context.member_service.get_active_members()

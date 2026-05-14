@@ -8,10 +8,11 @@ from ..excel.workbook_reader import ExcelWorkbookReader
 from ..excel.workbook_writer import ExcelWorkbookWriter
 from ..excel.workbook_repository import WorkbookRepository
 from ..local_database import LocalDatabase
-from ..presenters import ProfitCalendarPresenter, ScorePresenter, ValueSheetPresenter, WearPresenter
+from ..presenters import CycleProfitPresenter, ProfitCalendarPresenter, ScorePresenter, ValueSheetPresenter, WearPresenter
 from ..repositories import ConfigRepository, SupabaseClient
 from ..sqlite_to_excel_exporter import SQLiteToExcelExporter
 from .application_service import ApplicationService
+from .cycle_service import CycleService
 from .daily_entry_service import DailyEntryService
 from .excel_export_service import ExcelExportService
 from .member_service import MemberService
@@ -84,6 +85,12 @@ class StoreBootstrapService:
         context.wear_presenter = WearPresenter(context)
         context.value_sheet_presenter = ValueSheetPresenter(context)
         context.profit_calendar_presenter = ProfitCalendarPresenter(context)
+        if read_only:
+            context.cycle_service = None
+            context.cycle_profit_presenter = None
+        else:
+            context.cycle_service = CycleService(context.local_db, context.query_service.get_active_members)
+            context.cycle_profit_presenter = CycleProfitPresenter(context.cycle_service)
         return context
 
     def create_online_application_service(self, context) -> ApplicationService:

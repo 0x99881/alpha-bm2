@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .repositories.sqlite_common_repository import SQLiteCommonRepositoryMixin
 from .repositories.sqlite_connection import connect_database
+from .repositories.sqlite_cycle_repository import SQLiteCycleRepositoryMixin
 from .repositories.sqlite_date_note_repository import SQLiteDateNoteRepositoryMixin
 from .repositories.sqlite_member_repository import SQLiteMemberRepositoryMixin
 from .repositories.sqlite_report_repository import SQLiteReportRepositoryMixin
@@ -26,6 +27,7 @@ class LocalDatabase(
     SQLiteScoreEntryRepositoryMixin,
     SQLiteReportRepositoryMixin,
     SQLiteSyncMergeRepositoryMixin,
+    SQLiteCycleRepositoryMixin,
 ):
     def __init__(self, base_dir: Path, *, read_only: bool = False) -> None:
         self.base_dir = Path(base_dir)
