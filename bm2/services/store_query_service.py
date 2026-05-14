@@ -80,6 +80,9 @@ class StoreQueryService:
     def get_wear_sheet_snapshot(self):
         return self._context.workbook_reader.get_wear_sheet_snapshot()
 
+    def get_value_sheet_snapshot(self, sheet_type: str):
+        return self._context.workbook_reader.get_value_sheet_snapshot(sheet_type)
+
     def get_member_calendar_dataset(self, name: str, year: int, month: int, workbook=None):
         return self._context.workbook_reader.get_member_calendar_dataset(name, year, month, workbook=workbook)
 
@@ -109,6 +112,9 @@ class StoreQueryService:
 
     def get_wear_sheet_view(self):
         return self._context.wear_presenter.build_wear_sheet_view()
+
+    def get_value_sheet_view(self, sheet_type: str):
+        return self._context.value_sheet_presenter.build_sheet_view(sheet_type)
 
     def get_member_profit_calendar(self, name: str, year: int, month: int):
         return self._context.profit_calendar_presenter.build_member_profit_calendar(name=name, year=year, month=month)

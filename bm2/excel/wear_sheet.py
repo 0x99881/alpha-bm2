@@ -16,11 +16,17 @@ from ..constants import (
     WEAR_SHEET_ALIASES,
     WEAR_TOTAL_HEADER,
 )
+from ..ui_text import UI_TEXT
+from ..value_utils import to_float_or_none
 
 
 class WearSheet:
     def __init__(self, store) -> None:
         self.store = store
+
+    @property
+    def daily_average_label(self) -> str:
+        return UI_TEXT['wear_daily_member_avg']
 
     def sheet(self, workbook):
         sheet = find_sheet_by_alias(workbook, WEAR_SHEET_ALIASES)
@@ -38,7 +44,8 @@ class WearSheet:
         if name_col is None:
             return
         for row in range(DATA_START_ROW, sheet.max_row + 1):
-            if not sheet.cell(row, name_col).value:
+            name_value = str(sheet.cell(row, name_col).value or '').strip()
+            if not name_value or name_value == self.daily_average_label:
                 continue
             total = 0.0
             for _, col in self.columns(sheet):
@@ -69,6 +76,66 @@ class WearSheet:
         for row in range(DATA_START_ROW, sheet.max_row + 1):
             sheet.cell(row, total_col).font = normal_font
 
+    def _daily_average_rows(self, sheet, name_col: int) -> list[int]:
+        return [
+            row
+            for row in range(DATA_START_ROW, sheet.max_row + 1)
+            if str(sheet.cell(row, name_col).value or '').strip() == self.daily_average_label
+        ]
+
+    def _remove_daily_average_rows(self, sheet, name_col: int) -> bool:
+        changed = False
+        for row in reversed(self._daily_average_rows(sheet, name_col)):
+            sheet.delete_rows(row, 1)
+            changed = True
+        return changed
+
+    def _data_rows(self, sheet, name_col: int) -> list[int]:
+        rows = []
+        for row in range(DATA_START_ROW, sheet.max_row + 1):
+            name_value = str(sheet.cell(row, name_col).value or '').strip()
+            if not name_value or name_value == self.daily_average_label:
+                continue
+            if bool(sheet.row_dimensions[row].hidden):
+                continue
+            rows.append(row)
+        return rows
+
+    def _set_cell_value(self, sheet, row: int, col: int, value) -> bool:
+        if sheet.cell(row, col).value == value:
+            return False
+        sheet.cell(row, col, value)
+        return True
+
+    def _write_daily_average_row(self, sheet, *, total_col: int, name_col: int) -> bool:
+        changed = False
+        summary_rows = self._daily_average_rows(sheet, name_col)
+        if len(summary_rows) == 1 and summary_rows[0] == sheet.max_row:
+            summary_row = summary_rows[0]
+        else:
+            changed = self._remove_daily_average_rows(sheet, name_col) or changed
+            summary_row = sheet.max_row + 1
+            changed = True
+
+        data_rows = self._data_rows(sheet, name_col)
+        averages: dict[int, float] = {}
+        for _, col in self.columns(sheet):
+            values = [
+                numeric_value
+                for row in data_rows
+                if (numeric_value := to_float_or_none(sheet.cell(row, col).value)) is not None
+            ]
+            averages[col] = normalize_wear(sum(values) / len(values)) if values else 0.0
+
+        target_values = {col: value for col, value in averages.items()}
+        target_values[total_col] = normalize_wear(sum(averages.values()))
+        target_values[name_col] = self.daily_average_label
+        for col in range(1, sheet.max_column + 1):
+            value = target_values.get(col, None)
+            changed = self._set_cell_value(sheet, summary_row, col, value) or changed
+            sheet.cell(summary_row, col).font = Font(color='000000', bold=True)
+        return changed
+
     def ensure_structure(self, workbook) -> bool:
         sheet = self.sheet(workbook)
         changed = False
@@ -86,6 +153,7 @@ class WearSheet:
 
         self.recalculate_totals(sheet, total_col)
         sort_named_rows(sheet, total_col, name_col)
+        changed = self._write_daily_average_row(sheet, total_col=total_col, name_col=name_col) or changed
         self.format_sheet(sheet, total_col)
         return changed
 
@@ -100,6 +168,8 @@ class WearSheet:
                 continue
             values = [sheet.cell(row, col).value for col in range(1, sheet.max_column + 1)]
             if name_col is not None and not values[name_col - 1]:
+                continue
+            if name_col is not None and str(values[name_col - 1] or '').strip() == self.daily_average_label:
                 continue
             raw_rows.append(values)
         wear_col_indices = [col - 1 for _, col in self.columns(sheet)]

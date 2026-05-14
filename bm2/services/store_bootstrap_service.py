@@ -8,7 +8,7 @@ from ..excel.workbook_reader import ExcelWorkbookReader
 from ..excel.workbook_writer import ExcelWorkbookWriter
 from ..excel.workbook_repository import WorkbookRepository
 from ..local_database import LocalDatabase
-from ..presenters import ProfitCalendarPresenter, ScorePresenter, WearPresenter
+from ..presenters import ProfitCalendarPresenter, ScorePresenter, ValueSheetPresenter, WearPresenter
 from ..repositories import ConfigRepository, SupabaseClient
 from ..sqlite_to_excel_exporter import SQLiteToExcelExporter
 from .application_service import ApplicationService
@@ -82,6 +82,7 @@ class StoreBootstrapService:
         context.command_service = StoreCommandService(context)
         context.score_presenter = ScorePresenter(context)
         context.wear_presenter = WearPresenter(context)
+        context.value_sheet_presenter = ValueSheetPresenter(context)
         context.profit_calendar_presenter = ProfitCalendarPresenter(context)
         return context
 

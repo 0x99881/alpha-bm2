@@ -86,12 +86,33 @@ button,
     padding: 12px 14px;
     border-radius: 10px;
     transition: 0.2s ease;
+    cursor: grab;
+    user-select: none;
 }
 
 .nav a:hover,
 .nav a.active {
     background: rgba(255, 255, 255, 0.12);
     color: #fff;
+}
+
+.nav-drag-handle {
+    display: inline-flex;
+    margin-right: 8px;
+    color: #94a3b8;
+    letter-spacing: -1px;
+}
+
+.nav a.nav-dragging {
+    opacity: 0.45;
+}
+
+.nav a.nav-drag-before {
+    box-shadow: 0 -2px 0 #60a5fa;
+}
+
+.nav a.nav-drag-after {
+    box-shadow: 0 2px 0 #60a5fa;
 }
 
 .meta-card {

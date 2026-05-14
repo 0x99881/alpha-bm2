@@ -77,6 +77,9 @@ class StoreContext(StoreSheetUtilsMixin, StoreStructureMixin):
     def get_wear_sheet_snapshot(self):
         return self.query_service.get_wear_sheet_snapshot()
 
+    def get_value_sheet_snapshot(self, sheet_type: str):
+        return self.query_service.get_value_sheet_snapshot(sheet_type)
+
     def get_member_calendar_dataset(self, name: str, year: int, month: int, workbook=None):
         return self.query_service.get_member_calendar_dataset(name, year, month, workbook=workbook)
 

@@ -63,7 +63,7 @@
                     <tr>
                         <th class="excel-row-head excel-header-index">1</th>
                         {% for header in wear_sheet.headers %}
-                        <th class="{% if loop.first %}excel-col-name{% elif loop.last %}excel-col-total{% else %}excel-col-date{% endif %}">{{ header or '' }}</th>
+                        <th class="excel-col-{{ wear_sheet.column_kinds[loop.index0] }}">{{ header or '' }}</th>
                         {% endfor %}
                     </tr>
                 </thead>
@@ -72,14 +72,30 @@
                     <tr>
                         <th class="excel-row-head">{{ loop.index + 1 }}</th>
                         {% for cell in row %}
-                        <td class="{% if loop.first %}excel-col-name{% elif loop.last %}excel-col-total{% else %}excel-col-date{% endif %}{% if cell.is_abnormal %} excel-abnormal-cell{% endif %}">{{ '' if cell.value is none else cell.value }}</td>
+                        <td class="excel-col-{{ cell.kind }}{% if cell.is_abnormal %} excel-abnormal-cell{% endif %}">{{ '' if cell.value is none else cell.value }}</td>
                         {% endfor %}
                     </tr>
+                    {% if loop.last and wear_sheet.daily_average_row %}
+                    <tr class="excel-summary-row">
+                        <th class="excel-row-head">{{ wear_sheet.row_count + 2 }}</th>
+                        {% for cell in wear_sheet.daily_average_row %}
+                        <td class="excel-col-{{ cell.kind }}{% if cell.is_abnormal %} excel-abnormal-cell{% endif %}">{{ '' if cell.value is none else cell.value }}</td>
+                        {% endfor %}
+                    </tr>
+                    {% endif %}
                     {% else %}
                     <tr>
                         <th class="excel-row-head">2</th>
                         <td colspan="{{ wear_sheet.column_count or 1 }}" class="empty-cell">{{ ui.empty_wear_records }}</td>
                     </tr>
+                    {% if wear_sheet.daily_average_row %}
+                    <tr class="excel-summary-row">
+                        <th class="excel-row-head">3</th>
+                        {% for cell in wear_sheet.daily_average_row %}
+                        <td class="excel-col-{{ cell.kind }}{% if cell.is_abnormal %} excel-abnormal-cell{% endif %}">{{ '' if cell.value is none else cell.value }}</td>
+                        {% endfor %}
+                    </tr>
+                    {% endif %}
                     {% endfor %}
                 </tbody>
             </table>

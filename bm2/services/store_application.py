@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from .store_bootstrap_service import StoreBootstrapService
 
-
 class StoreApplication:
     def __init__(self, base_dir, read_only: bool = False):
         self._context = StoreBootstrapService().create_context(base_dir, read_only=read_only)
@@ -41,6 +40,7 @@ class StoreApplication:
     def get_score_sheet_view(self): return self._context.query_service.get_score_sheet_view()
 
     def get_wear_sheet_view(self): return self._context.query_service.get_wear_sheet_view()
+    def get_value_sheet_view(self, sheet_type: str): return self._context.query_service.get_value_sheet_view(sheet_type)
 
     def get_member_profit_calendar(self, name: str, year: int, month: int):
         return self._context.query_service.get_member_profit_calendar(name, year, month)
@@ -94,6 +94,5 @@ class StoreApplication:
 
     def supabase_pull(self) -> dict[str, int]:
         return self._context.command_service.supabase_pull()
-
 
 __all__ = ["StoreApplication"]

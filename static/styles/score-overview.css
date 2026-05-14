@@ -140,6 +140,20 @@
     background: #f3f8ff;
 }
 
+.excel-sheet-table .excel-summary-row td,
+.excel-sheet-table .excel-summary-row .excel-row-head {
+    border-top: 2px solid #94a3b8;
+    background: #eef6ff;
+    font-weight: 800;
+}
+
+.wear-sheet-table .excel-summary-row .excel-col-name {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-align: center;
+    line-height: 1.25;
+}
+
 .excel-sheet-table .excel-col-date {
     width: 68px;
     text-align: center;
@@ -152,6 +166,80 @@
 
 .excel-sheet-table .excel-abnormal-cell {
     color: #dc2626;
+    font-weight: 800;
+}
+
+.value-chart-panel {
+    overflow: hidden;
+}
+
+.value-chart-bars {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+    gap: 10px;
+    align-items: end;
+    margin-top: 16px;
+}
+
+.value-chart-bar-item {
+    min-height: 150px;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    gap: 8px;
+    padding: 10px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #f8fafc;
+}
+
+.value-chart-label,
+.value-chart-bar-item strong {
+    text-align: center;
+    font-size: 12px;
+}
+
+.value-chart-track {
+    display: flex;
+    align-items: end;
+    justify-content: center;
+    min-height: 86px;
+}
+
+.value-chart-bar {
+    width: 28px;
+    height: var(--bar-size);
+    min-height: 3px;
+    border-radius: 6px 6px 0 0;
+    background: #cbd5e1;
+}
+
+.value-chart-income .value-chart-bar-item.is-marked {
+    border-color: #16a34a;
+    background: #ecfdf5;
+}
+
+.value-chart-income .value-chart-bar-item.is-marked .value-chart-bar {
+    background: #16a34a;
+}
+
+.value-chart-expense .value-chart-bar-item.is-marked {
+    border-color: #dc2626;
+    background: #fef2f2;
+}
+
+.value-chart-expense .value-chart-bar-item.is-marked .value-chart-bar {
+    background: #dc2626;
+}
+
+.value-sheet-income .excel-value-marked {
+    color: #15803d;
+    background: #dcfce7 !important;
+    font-weight: 800;
+}
+
+.value-sheet-expense .excel-value-marked {
+    color: #dc2626;
+    background: #fee2e2 !important;
     font-weight: 800;
 }
 
@@ -267,12 +355,35 @@ html[data-theme="dark"] .excel-sheet-table tbody tr:hover .excel-row-head {
     background: #262626;
 }
 
+html[data-theme="dark"] .excel-sheet-table .excel-summary-row td,
+html[data-theme="dark"] .excel-sheet-table .excel-summary-row .excel-row-head {
+    border-top-color: #5a5a5a;
+    background: #222222;
+}
+
 html[data-theme="dark"] .excel-sheet-table .excel-low-score {
     color: #ff6b6b;
 }
 
 html[data-theme="dark"] .excel-sheet-table .excel-abnormal-cell {
     color: #ff6b6b;
+}
+
+html[data-theme="dark"] .value-chart-bar-item,
+html[data-theme="dark"] .value-chart-income .value-chart-bar-item.is-marked,
+html[data-theme="dark"] .value-chart-expense .value-chart-bar-item.is-marked {
+    background: #1d1d1d;
+    border-color: #3a3a3a;
+}
+
+html[data-theme="dark"] .value-sheet-income .excel-value-marked {
+    color: #86efac;
+    background: #173420 !important;
+}
+
+html[data-theme="dark"] .value-sheet-expense .excel-value-marked {
+    color: #ff6b6b;
+    background: #3a1515 !important;
 }
 
 html[data-theme="dark"] .excel-sheet-table .excel-col-total,

@@ -25,17 +25,19 @@
                 <h1>{{ ui.app_title }}</h1>
                 <p>{{ ui.local_tool_read_only if read_only_mode else ui.local_tool }}</p>
             </div>
-            <nav class="nav">
+            <nav class="nav" data-sortable-nav="true">
                 {% if read_only_mode %}
-                <a href="{{ url_for('score_entry') }}" class="{% if request.endpoint == 'score_entry' %}active{% endif %}">{{ ui.nav_scores }}</a>
-                <a href="{{ url_for('score_overview') }}" class="{% if request.endpoint == 'score_overview' %}active{% endif %}">{{ ui.nav_score_overview }}</a>
-                <a href="{{ url_for('wear_entry') }}" class="{% if request.endpoint == 'wear_entry' %}active{% endif %}">{{ ui.nav_wear }}</a>
+                <a href="{{ url_for('score_entry') }}" draggable="true" data-nav-item="score_entry" class="{% if request.endpoint == 'score_entry' %}active{% endif %}"><span class="nav-drag-handle" aria-hidden="true">::</span>{{ ui.nav_scores }}</a>
+                <a href="{{ url_for('score_overview') }}" draggable="true" data-nav-item="score_overview" class="{% if request.endpoint == 'score_overview' %}active{% endif %}"><span class="nav-drag-handle" aria-hidden="true">::</span>{{ ui.nav_score_overview }}</a>
+                <a href="{{ url_for('wear_entry') }}" draggable="true" data-nav-item="wear_entry" class="{% if request.endpoint == 'wear_entry' %}active{% endif %}"><span class="nav-drag-handle" aria-hidden="true">::</span>{{ ui.nav_wear }}</a>
                 {% else %}
-                <a href="{{ url_for('score_entry') }}" class="{% if request.endpoint == 'score_entry' %}active{% endif %}">{{ ui.nav_scores }}</a>
-                <a href="{{ url_for('score_overview') }}" class="{% if request.endpoint == 'score_overview' %}active{% endif %}">{{ ui.nav_score_overview }}</a>
-                <a href="{{ url_for('wear_entry') }}" class="{% if request.endpoint == 'wear_entry' %}active{% endif %}">{{ ui.nav_wear }}</a>
-                <a href="{{ url_for('profit_calendar') }}" class="{% if request.endpoint in ['profit_calendar', 'member_detail'] %}active{% endif %}">{{ ui.nav_calendar }}</a>
-                <a href="{{ url_for('members') }}" class="{% if request.endpoint == 'members' %}active{% endif %}">{{ ui.nav_members }}</a>
+                <a href="{{ url_for('score_entry') }}" draggable="true" data-nav-item="score_entry" class="{% if request.endpoint == 'score_entry' %}active{% endif %}"><span class="nav-drag-handle" aria-hidden="true">::</span>{{ ui.nav_scores }}</a>
+                <a href="{{ url_for('score_overview') }}" draggable="true" data-nav-item="score_overview" class="{% if request.endpoint == 'score_overview' %}active{% endif %}"><span class="nav-drag-handle" aria-hidden="true">::</span>{{ ui.nav_score_overview }}</a>
+                <a href="{{ url_for('wear_entry') }}" draggable="true" data-nav-item="wear_entry" class="{% if request.endpoint == 'wear_entry' %}active{% endif %}"><span class="nav-drag-handle" aria-hidden="true">::</span>{{ ui.nav_wear }}</a>
+                <a href="{{ url_for('income_chart') }}" draggable="true" data-nav-item="income_chart" class="{% if request.endpoint == 'income_chart' %}active{% endif %}"><span class="nav-drag-handle" aria-hidden="true">::</span>{{ ui.nav_income_chart }}</a>
+                <a href="{{ url_for('expense_chart') }}" draggable="true" data-nav-item="expense_chart" class="{% if request.endpoint == 'expense_chart' %}active{% endif %}"><span class="nav-drag-handle" aria-hidden="true">::</span>{{ ui.nav_expense_chart }}</a>
+                <a href="{{ url_for('profit_calendar') }}" draggable="true" data-nav-item="profit_calendar" class="{% if request.endpoint in ['profit_calendar', 'member_detail'] %}active{% endif %}"><span class="nav-drag-handle" aria-hidden="true">::</span>{{ ui.nav_calendar }}</a>
+                <a href="{{ url_for('members') }}" draggable="true" data-nav-item="members" class="{% if request.endpoint == 'members' %}active{% endif %}"><span class="nav-drag-handle" aria-hidden="true">::</span>{{ ui.nav_members }}</a>
                 {% endif %}
             </nav>
             <div class="theme-switch-card">
@@ -73,6 +75,7 @@
     <script src="{{ url_for('asset_file', filename='request.js', v=asset_version) }}"></script>
     <script src="{{ url_for('asset_file', filename='members_service.js', v=asset_version) }}"></script>
     <script src="{{ url_for('asset_file', filename='theme.js', v=asset_version) }}"></script>
+    <script src="{{ url_for('asset_file', filename='nav_sort.js', v=asset_version) }}"></script>
     <script src="{{ url_for('asset_file', filename='scores.js', v=asset_version) }}"></script>
     <script src="{{ url_for('asset_file', filename='members_sort.js', v=asset_version) }}"></script>
     <script src="{{ url_for('asset_file', filename='profit_calendar.js', v=asset_version) }}"></script>

@@ -48,7 +48,7 @@ def register_routes(app, store) -> None:
         return {
             'excel_filename': store.workbook_path.name,
             'quick_scores': store.get_quick_scores(),
-            'asset_version': '20260428-01',
+            'asset_version': '20260514-01',
             'ui': UI_TEXT,
             'js_ui_text': JS_UI_TEXT,
             'enabled_status': ENABLED,
@@ -70,6 +70,34 @@ def register_routes(app, store) -> None:
         if read_only_mode:
             return render_template('wear.html', wear_sheet=store.get_online_wear_sheet_view())
         return render_template('wear.html', wear_sheet=store.get_wear_sheet_view())
+
+    @app.route('/income-chart')
+    def income_chart():
+        if read_only_mode:
+            return redirect(url_for('score_overview'))
+        return render_template(
+            'value_chart.html',
+            value_sheet=store.get_value_sheet_view('income'),
+            page_title=UI_TEXT['income_chart_title'],
+            page_hint=UI_TEXT['income_chart_hint'],
+            total_label=UI_TEXT['chart_total_income'],
+            marked_hint=UI_TEXT['chart_marked_income_hint'],
+            marker_class='income',
+        )
+
+    @app.route('/expense-chart')
+    def expense_chart():
+        if read_only_mode:
+            return redirect(url_for('score_overview'))
+        return render_template(
+            'value_chart.html',
+            value_sheet=store.get_value_sheet_view('expense'),
+            page_title=UI_TEXT['expense_chart_title'],
+            page_hint=UI_TEXT['expense_chart_hint'],
+            total_label=UI_TEXT['chart_total_expense'],
+            marked_hint=UI_TEXT['chart_marked_expense_hint'],
+            marker_class='expense',
+        )
 
     @app.post('/wear/threshold')
     def save_wear_threshold():

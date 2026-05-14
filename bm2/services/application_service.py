@@ -97,6 +97,39 @@ class ApplicationService:
             return None
         return normalize_wear(before_balance - after_balance)
 
+    def _wear_daily_average_row(self, headers: list[str], window_dates: list[str], members: list[dict[str, str]], wear_map: dict[tuple[str, str], float]) -> list[dict]:
+        daily_averages = []
+        entered_daily_averages = []
+        for score_date in window_dates:
+            values = [
+                wear_map[(str(member["name"]), score_date)]
+                for member in members
+                if (str(member["name"]), score_date) in wear_map
+            ]
+            daily_average = normalize_wear(sum(values) / len(values)) if values else 0.0
+            daily_averages.append(daily_average)
+            if values:
+                entered_daily_averages.append(daily_average)
+        overall_average = normalize_wear(sum(entered_daily_averages) / len(entered_daily_averages)) if entered_daily_averages else 0.0
+        total_average = normalize_wear(sum(daily_averages))
+        row_values = [*daily_averages, total_average, UI_TEXT["wear_daily_member_avg"], overall_average]
+        threshold = float(WEAR_ABNORMAL_THRESHOLD)
+        return [
+            {
+                "value": value,
+                "is_abnormal": index < len(window_dates) and isinstance(value, (int, float)) and float(value) > threshold,
+                "kind": self._wear_column_kind(index, len(window_dates)),
+            }
+            for index, value in enumerate(row_values[:len(headers)])
+        ]
+
+    def _wear_column_kind(self, index: int, date_count: int) -> str:
+        if index < date_count:
+            return "date"
+        if index == date_count + 1:
+            return "name"
+        return "total"
+
     def online_score_rows_for_date(self, score_date: str) -> list[dict]:
         return [
             row
@@ -158,6 +191,7 @@ class ApplicationService:
 
         headers = [score_date[5:] for score_date in window_dates]
         headers.extend([WEAR_TOTAL_HEADER, NAME_HEADER, UI_TEXT["wear_member_avg"]])
+        column_kinds = [self._wear_column_kind(index, len(window_dates)) for index in range(len(headers))]
         wear_values = list(wear_map.values())
         threshold = float(WEAR_ABNORMAL_THRESHOLD)
         rows = []
@@ -173,6 +207,7 @@ class ApplicationService:
                     {
                         "value": value,
                         "is_abnormal": index < len(window_dates) and isinstance(value, (int, float)) and float(value) > threshold,
+                        "kind": column_kinds[index],
                     }
                     for index, value in enumerate(row_values)
                 ]
@@ -180,7 +215,9 @@ class ApplicationService:
         rows.sort(key=lambda row: (-(float(row[-3]["value"]) if isinstance(row[-3]["value"], (int, float)) else 0.0), str(row[-2]["value"])))
         return {
             "headers": headers,
+            "column_kinds": column_kinds,
             "rows": rows,
+            "daily_average_row": self._wear_daily_average_row(headers, window_dates, members, wear_map),
             "row_count": len(rows),
             "column_count": len(headers),
             "avg_daily_wear": normalize_wear(sum(wear_values) / len(wear_values)) if wear_values else 0.0,

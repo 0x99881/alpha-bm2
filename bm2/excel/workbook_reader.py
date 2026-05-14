@@ -6,6 +6,8 @@ from typing import Any
 from ..profit_calendar_utils import empty_member_day_record, sort_breakdown_rows
 from .score_date_reader import latest_header_date, score_date_columns
 from .value_sheet_reader import read_member_value_records
+from .header_locator import find_column
+from .value_sheet_spec import get_value_sheet_spec
 from .value_normalizer import normalize_income, normalize_wear
 
 
@@ -76,6 +78,32 @@ class ExcelWorkbookReader:
         workbook = self._store.workbook_repository.open()
         try:
             return self._store.wear_sheet.snapshot(workbook)
+        finally:
+            workbook.close()
+
+    def get_value_sheet_snapshot(self, sheet_type: str) -> dict[str, Any]:
+        spec = get_value_sheet_spec(sheet_type)
+        handler = getattr(self._store, f"{sheet_type}_sheet")
+        workbook = self._store.workbook_repository.open()
+        try:
+            handler.ensure_structure(workbook)
+            sheet = handler.sheet(workbook)
+            headers = [sheet.cell(1, col).value for col in range(1, sheet.max_column + 1)]
+            name_col = find_column(sheet, spec["name_header"])
+            raw_rows = []
+            for row in range(2, sheet.max_row + 1):
+                if bool(sheet.row_dimensions[row].hidden):
+                    continue
+                values = [sheet.cell(row, col).value for col in range(1, sheet.max_column + 1)]
+                if name_col is not None and not str(values[name_col - 1] or "").strip():
+                    continue
+                raw_rows.append(values)
+            value_col_indices = [col - 1 for _, col in handler.columns(sheet)]
+            return {
+                "headers": headers,
+                "raw_rows": raw_rows,
+                "value_col_indices": value_col_indices,
+            }
         finally:
             workbook.close()
 

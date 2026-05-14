@@ -284,7 +284,7 @@ class SmokeCheckRunner:
                 app.secret_key = "smoke"
                 register_routes(app, StoreApplication(temp_dir))
                 client = app.test_client()
-                routes = ["/scores", "/score-overview", "/wear", "/profit-calendar", "/members"]
+                routes = ["/scores", "/score-overview", "/wear", "/income-chart", "/expense-chart", "/profit-calendar", "/members"]
                 failures = []
                 for route in routes:
                     response = client.get(route)
@@ -739,6 +739,71 @@ class SmokeCheckRunner:
 
         self.check("wear threshold saved config", _run)
 
+    def check_wear_daily_member_average_row(self) -> None:
+        def _run():
+            from openpyxl import load_workbook
+
+            from bm2.constants import WEAR_NAME_HEADER, WEAR_SHEET, WEAR_TOTAL_HEADER
+            from bm2.excel.value_normalizer import normalize_wear
+            from bm2.services.store_application import StoreApplication
+            from bm2.ui_text import UI_TEXT
+
+            temp_dir = TEST_TEMP_ROOT / "wear_daily_member_average"
+            if temp_dir.exists():
+                shutil.rmtree(temp_dir)
+            temp_dir.mkdir(parents=True)
+            try:
+                store = StoreApplication(temp_dir)
+                members = store.get_active_members()
+                target_date = store.get_next_score_date()
+                wear_values = [float(index + 1) for index, _ in enumerate(members)]
+                form_data = {
+                    f"manual_wear_{member['name']}": str(wear_values[index])
+                    for index, member in enumerate(members)
+                }
+                result = store.daily_entry_service.process_submission(members, form_data, target_date)
+                if not result.get("ok"):
+                    raise ValueError(result.get("error"))
+                store.export_to_excel(target_date)
+
+                expected_average = normalize_wear(sum(wear_values) / len(wear_values))
+                wear_date_header = target_date[5:].replace("-", "")
+                view = store.get_wear_sheet_view()
+                label = UI_TEXT["wear_daily_member_avg"]
+                date_index = view["headers"].index(wear_date_header)
+                name_index = view["headers"].index(WEAR_NAME_HEADER)
+                total_index = view["headers"].index(WEAR_TOTAL_HEADER)
+                summary_row = view["daily_average_row"]
+                if summary_row[name_index]["value"] != label:
+                    raise ValueError("wear average row label missing from page view")
+                if summary_row[date_index]["value"] != expected_average:
+                    raise ValueError("page view wear daily average is wrong")
+                if summary_row[total_index]["value"] < expected_average:
+                    raise ValueError("page view wear daily average total is wrong")
+
+                workbook = load_workbook(store.workbook_path)
+                try:
+                    sheet = workbook[WEAR_SHEET]
+                    headers = [sheet.cell(1, col).value for col in range(1, sheet.max_column + 1)]
+                    date_col = headers.index(wear_date_header) + 1
+                    name_col = headers.index(WEAR_NAME_HEADER) + 1
+                    summary_rows = [
+                        row
+                        for row in range(2, sheet.max_row + 1)
+                        if str(sheet.cell(row, name_col).value or "").strip() == label
+                    ]
+                    if summary_rows != [sheet.max_row]:
+                        raise ValueError("Excel wear average row is not at the bottom")
+                    if sheet.cell(summary_rows[0], date_col).value != expected_average:
+                        raise ValueError("Excel wear daily average is wrong")
+                finally:
+                    workbook.close()
+                return expected_average
+            finally:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+
+        self.check("wear daily member average row", _run)
+
     def check_excel_refresh_rejects_unknown_score_date(self) -> None:
         def _run():
             from openpyxl import load_workbook
@@ -1126,6 +1191,7 @@ class SmokeCheckRunner:
             self.check_supabase_profit_uses_formal_column()
             self.check_online_entry_reports_supabase_request_failure()
             self.check_wear_threshold_uses_saved_config()
+            self.check_wear_daily_member_average_row()
             self.check_excel_refresh_rejects_unknown_score_date()
             self.check_delete_score_date()
             self.check_delete_score_date_rolls_back_on_export_error()

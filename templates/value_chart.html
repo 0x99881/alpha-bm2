@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-head">
+    <div>
+        <h2>{{ page_title }}</h2>
+        <p>{{ page_hint }}</p>
+    </div>
+    <div class="page-head-stats">
+        <div class="stat-card">
+            <span>{{ total_label }}</span>
+            <strong>{{ value_sheet.total_value }}</strong>
+        </div>
+        <div class="stat-card">
+            <span>{{ ui.chart_marked_count }}</span>
+            <strong>{{ value_sheet.marked_count }}</strong>
+            <small>{{ marked_hint.format(count=value_sheet.marked_count) }}</small>
+        </div>
+    </div>
+</section>
+
+<section class="panel value-chart-panel value-chart-{{ marker_class }}">
+    <div class="section-title">
+        <h3>{{ ui.chart_recent_days }}</h3>
+        <p>{{ ui.excel_preview_hint }}</p>
+    </div>
+    <div class="value-chart-bars">
+        {% for item in value_sheet.chart_items %}
+        <div class="value-chart-bar-item {% if item.is_marked %}is-marked{% endif %}">
+            <span class="value-chart-label">{{ item.label }}</span>
+            <div class="value-chart-track">
+                <span class="value-chart-bar" style="--bar-size: {{ item.percent }}%"></span>
+            </div>
+            <strong>{{ item.value }}</strong>
+        </div>
+        {% else %}
+        <div class="empty-cell">{{ ui.empty_value_records }}</div>
+        {% endfor %}
+    </div>
+</section>
+
+<section class="panel">
+    <div class="section-title">
+        <h3>{{ ui.excel_preview_title }}</h3>
+        <p>{{ page_hint }}</p>
+    </div>
+    {% set excel_letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ' %}
+    <div class="table-wrap excel-sheet-wrap">
+        <div class="excel-workbook">
+            <div class="excel-toolbar">
+                <span class="excel-toolbar-chip">{{ ui.excel_view }}</span>
+                <span class="excel-toolbar-chip">{{ ui.rows_columns.format(rows=value_sheet.row_count, cols=value_sheet.column_count) }}</span>
+                <span class="excel-toolbar-chip">{{ marked_hint.format(count=value_sheet.marked_count) }}</span>
+            </div>
+            <div class="excel-formula-bar">
+                <span class="excel-name-box">A1</span>
+                <div class="excel-formula-input">{{ page_title }}</div>
+            </div>
+            <table class="excel-sheet-table value-sheet-table value-sheet-{{ marker_class }}">
+                <thead>
+                    <tr class="excel-letter-row">
+                        <th class="excel-corner-cell"></th>
+                        {% for header in value_sheet.headers %}
+                        <th class="excel-letter-cell">{{ excel_letters[loop.index0] if loop.index0 < excel_letters|length else loop.index }}</th>
+                        {% endfor %}
+                    </tr>
+                    <tr>
+                        <th class="excel-row-head excel-header-index">1</th>
+                        {% for header in value_sheet.headers %}
+                        <th class="excel-col-{{ value_sheet.column_kinds[loop.index0] }}">{{ header or '' }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in value_sheet.rows %}
+                    <tr>
+                        <th class="excel-row-head">{{ loop.index + 1 }}</th>
+                        {% for cell in row %}
+                        <td class="excel-col-{{ cell.kind }}{% if cell.is_marked %} excel-value-marked{% endif %}">{{ '' if cell.value is none else cell.value }}</td>
+                        {% endfor %}
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <th class="excel-row-head">2</th>
+                        <td colspan="{{ value_sheet.column_count or 1 }}" class="empty-cell">{{ ui.empty_value_records }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <div class="excel-sheet-tabs">
+                <span class="excel-tab active">{{ page_title }}</span>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

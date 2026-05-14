@@ -5,6 +5,9 @@
         if (typeof namespace.initTheme === "function") {
             namespace.initTheme();
         }
+        if (typeof namespace.initNavSort === "function") {
+            namespace.initNavSort();
+        }
         if (typeof namespace.initScoresPage === "function") {
             namespace.initScoresPage();
         }
