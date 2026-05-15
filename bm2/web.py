@@ -49,7 +49,7 @@ def register_routes(app, store) -> None:
         return {
             'excel_filename': store.workbook_path.name,
             'quick_scores': store.get_quick_scores(),
-            'asset_version': '20260514-01',
+            'asset_version': '20260515-01',
             'ui': UI_TEXT,
             'js_ui_text': JS_UI_TEXT,
             'enabled_status': ENABLED,
