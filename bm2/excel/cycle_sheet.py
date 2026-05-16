@@ -1,21 +1,23 @@
 """Stacks every settlement cycle as one block inside a single Excel sheet.
 
-Layout (one sheet, name = `周期盈亏记录`):
+Layout (one sheet, name = `周期盈亏记录`) — flat single-table per block:
 
-  [Block 1 — 周期 yyyy-mm-dd ~ yyyy-mm-dd  (已结算 | 未结算)]
-    姓名 | {start}余额 | {date1} | … | {settle}余额 | 红包合计 | 利润 |    | 姓名 | 磨损 | 目前盈亏=收入减去磨损减去红包 | 差异=利润减去目前盈亏
+  [Block — 周期 yyyy-mm-dd ~ yyyy-mm-dd  (已结算 | 未结算)]
+    姓名 | {start}\n期初余额 | {settle}\n期末余额 | {date1} | {date2} | …
+        | 红包合计 | 磨损合计 | 收入合计 | 目前盈亏 | 利润 | 差异
     member rows
   [blank row]
-  [Block 2 — 周期 …]
-    …
+  [next block…]
 
-* Left block ends with 利润 (= 结算余额 − 起始余额 − 红包合计, balance method).
-* Right block carries 目前盈亏 (流水法: 收入 − 磨损 − 红包) and 差异
-  (利润 − 目前盈亏) — the difference surfaces daily-entry inaccuracies.
-* Each block keeps the per-cycle column layout (red-packet date columns vary).
-* Blocks are written in chronological order (oldest first; new cycles appended).
-* On any change we rewrite the whole sheet and drop the obsolete per-cycle
-  tabs (周期MM-DD) created by the previous implementation.
+* 期初/期末余额 sit side-by-side at the front so the balance change is the
+  first thing the eye lands on.
+* 磨损合计 / 收入合计 / 目前盈亏 come straight from daily entries — visible
+  pre-settle too (running estimate).
+* 利润 = 期末 − 期初 − 红包合计 (balance method, after settle).
+* 差异 = 利润 − 目前盈亏 (surfaces daily-entry vs. balance inaccuracies).
+* Blocks chronological (oldest first; new cycles appended).
+* On any change we rewrite the whole sheet and drop the legacy per-cycle
+  tabs (周期MM-DD) from the previous one-tab-per-cycle implementation.
 """
 from __future__ import annotations
 
@@ -120,26 +122,30 @@ def _write_one_block(sheet, start_row: int, cycle_data: dict[str, Any]) -> tuple
     redpacket_dates: list[str] = list(cycle_data.get("redpacket_dates") or [])
     rows: list[dict[str, Any]] = list(cycle_data.get("rows") or [])
 
-    start_header = _balance_header(start_date, "起始余额")
-    settle_header = _balance_header(settle_date, "结算余额")
+    # Flat single-table layout. Multi-line balance headers carry the date.
+    start_header = (f"{start_date}\n期初余额") if start_date else "期初余额"
+    settle_header = (f"{settle_date}\n期末余额") if settle_date else "期末余额"
 
-    left_headers = [NAME_HEADER, start_header]
-    left_headers.extend(_zh_date(d) for d in redpacket_dates)
-    left_headers.extend([settle_header, "红包合计", "利润"])
+    headers: list[str] = [NAME_HEADER, start_header, settle_header]
+    headers.extend(redpacket_dates)
+    headers.extend(["红包合计", "磨损合计", "收入合计", "目前盈亏", "利润", "差异"])
 
-    profit_col = len(left_headers)
-    redpacket_total_col = profit_col - 1
-    settle_balance_col = redpacket_total_col - 1
-    date_columns = {date: 3 + index for index, date in enumerate(redpacket_dates)}
+    # column indices
+    name_col = 1
+    start_balance_col = 2
+    end_balance_col = 3
+    first_date_col = 4
+    date_columns = {d: first_date_col + idx for idx, d in enumerate(redpacket_dates)}
+    after_dates_col = first_date_col + len(redpacket_dates)
+    redpacket_total_col = after_dates_col
+    wear_total_col = after_dates_col + 1
+    income_total_col = after_dates_col + 2
+    flow_col = after_dates_col + 3
+    profit_col = after_dates_col + 4
+    delta_col = after_dates_col + 5
+    total_cols = delta_col
 
-    gap_col = profit_col + 1
-    right_name_col = gap_col + 1
-    right_wear_col = right_name_col + 1
-    right_flow_col = right_name_col + 2
-    right_delta_col = right_name_col + 3
-    total_cols = right_delta_col
-
-    # ---- title row (merged across the block) -----------------------------
+    # ---- title row -------------------------------------------------------
     title_text = _title_for(start_date, settle_date, is_settled)
     title_cell = sheet.cell(start_row, 1, title_text)
     title_cell.font = Font(bold=True, size=12, color="1F2937")
@@ -149,75 +155,76 @@ def _write_one_block(sheet, start_row: int, cycle_data: dict[str, Any]) -> tuple
 
     # ---- header row ------------------------------------------------------
     header_row = start_row + 1
-    for col_index, value in enumerate(left_headers, start=1):
+    for col_index, value in enumerate(headers, start=1):
         cell = sheet.cell(header_row, col_index, value)
         cell.font = Font(bold=True)
         cell.fill = HEADER_FILL
-        cell.alignment = Alignment(horizontal="center")
-    right_columns = (
-        (right_name_col, NAME_HEADER),
-        (right_wear_col, "磨损"),
-        (right_flow_col, "目前盈亏"),
-        (right_delta_col, "差异"),
-    )
-    for col_index, label in right_columns:
-        c = sheet.cell(header_row, col_index, label)
-        c.font = Font(bold=True)
-        c.fill = HEADER_FILL
-        c.alignment = Alignment(horizontal="center")
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    # Slightly taller header row so 2-line balance labels fit cleanly.
+    sheet.row_dimensions[header_row].height = 32
 
     # ---- member rows -----------------------------------------------------
     body_start = header_row + 1
     for row_index, row in enumerate(rows, start=body_start):
         name = row["member_name"]
-        sheet.cell(row_index, 1, name).alignment = Alignment(horizontal="left")
+        sheet.cell(row_index, name_col, name).alignment = Alignment(horizontal="left")
+
         start_balance = _coerce_number(row.get("start_balance"))
         if start_balance is not None:
-            sheet.cell(row_index, 2, start_balance)
+            sheet.cell(row_index, start_balance_col, start_balance)
+
+        end_balance = _coerce_number(row.get("end_balance"))
+        if is_settled and end_balance is not None:
+            sheet.cell(row_index, end_balance_col, end_balance)
+        elif not is_settled:
+            cell = sheet.cell(row_index, end_balance_col, "未结算")
+            cell.font = UNSETTLED_FONT
+            cell.alignment = Alignment(horizontal="center")
+
         for date_text, amount in (row.get("redpacket_by_date") or {}).items():
             col = date_columns.get(date_text)
             if col is None or not amount:
                 continue
             sheet.cell(row_index, col, _coerce_number(amount))
-        end_balance = _coerce_number(row.get("end_balance"))
-        if is_settled and end_balance is not None:
-            sheet.cell(row_index, settle_balance_col, end_balance)
-        elif not is_settled:
-            cell = sheet.cell(row_index, settle_balance_col, "未结算")
-            cell.font = UNSETTLED_FONT
-            cell.alignment = Alignment(horizontal="center")
+
         rp_total = row.get("redpacket_total") or 0
         rp_cell = sheet.cell(row_index, redpacket_total_col, rp_total if rp_total else None)
         if rp_total:
             rp_cell.fill = TOTAL_FILL
 
-        _write_profit_cell(sheet, row_index, profit_col, is_settled, row.get("profit"), PROFIT_FILL)
-
-        sheet.cell(row_index, right_name_col, name).alignment = Alignment(horizontal="left")
-        # 磨损 and 目前盈亏 come from daily entries — known any time, settled or not.
+        # 磨损/收入/目前盈亏 are live from daily entries — show always.
         wear_total = row.get("wear_total") or 0
-        wear_cell = sheet.cell(row_index, right_wear_col, wear_total if wear_total else None)
+        wear_cell = sheet.cell(row_index, wear_total_col, wear_total if wear_total else None)
         if wear_total:
             wear_cell.fill = WEAR_FILL
+        income_total = row.get("income_total") or 0
+        income_cell = sheet.cell(row_index, income_total_col, income_total if income_total else None)
+        if income_total:
+            income_cell.fill = INCOME_FILL
         flow_value = row.get("profit_flow")
         if flow_value is not None:
-            flow_cell = sheet.cell(row_index, right_flow_col, flow_value)
+            flow_cell = sheet.cell(row_index, flow_col, flow_value)
             flow_cell.fill = PROFIT_FLOW_FILL
             flow_cell.font = Font(bold=True)
-        # 差异 = 利润 - 目前盈亏 → only meaningful after settle.
-        _write_profit_cell(sheet, row_index, right_delta_col, is_settled, row.get("profit_delta"), DELTA_FILL, bold=False)
 
-    rows_used = 2 + len(rows)  # title row + header row + member rows
+        # 利润 and 差异 depend on settle balance.
+        _write_profit_cell(sheet, row_index, profit_col, is_settled, row.get("profit"), PROFIT_FILL)
+        _write_profit_cell(sheet, row_index, delta_col, is_settled, row.get("profit_delta"), DELTA_FILL, bold=False)
 
-    # Per-column width estimate for this block (we collect; outer fn aggregates)
+    rows_used = 2 + len(rows)  # title + header + members
+
     col_widths: dict[int, int] = {}
-    for col_index, header in enumerate(left_headers, start=1):
-        col_widths[col_index] = max(8, len(str(header)) * 2 + 2)
-    col_widths[right_name_col] = 10
-    col_widths[right_wear_col] = 10
-    col_widths[right_flow_col] = 12
-    col_widths[right_delta_col] = 10
-    col_widths[gap_col] = 3
+    col_widths[name_col] = 10
+    col_widths[start_balance_col] = 13
+    col_widths[end_balance_col] = 13
+    for date in redpacket_dates:
+        col_widths[date_columns[date]] = 12  # "2026-05-04"
+    col_widths[redpacket_total_col] = 10
+    col_widths[wear_total_col] = 10
+    col_widths[income_total_col] = 10
+    col_widths[flow_col] = 10
+    col_widths[profit_col] = 10
+    col_widths[delta_col] = 10
 
     return rows_used, col_widths
 
