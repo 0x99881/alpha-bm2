@@ -172,8 +172,12 @@ def _write_one_block(sheet, start_row: int, cycle_data: dict[str, Any]) -> tuple
                 continue
             sheet.cell(row_index, col, _coerce_number(amount))
         end_balance = _coerce_number(row.get("end_balance"))
-        if end_balance is not None:
+        if is_settled and end_balance is not None:
             sheet.cell(row_index, settle_balance_col, end_balance)
+        elif not is_settled:
+            cell = sheet.cell(row_index, settle_balance_col, "未结算")
+            cell.font = UNSETTLED_FONT
+            cell.alignment = Alignment(horizontal="center")
         rp_total = row.get("redpacket_total") or 0
         rp_cell = sheet.cell(row_index, redpacket_total_col, rp_total if rp_total else None)
         if rp_total:
@@ -185,13 +189,23 @@ def _write_one_block(sheet, start_row: int, cycle_data: dict[str, Any]) -> tuple
 
         sheet.cell(row_index, right_name_col, name).alignment = Alignment(horizontal="left")
         wear_total = row.get("wear_total") or 0
-        wear_cell = sheet.cell(row_index, right_wear_col, wear_total if wear_total else None)
-        if wear_total:
-            wear_cell.fill = WEAR_FILL
+        if is_settled:
+            wear_cell = sheet.cell(row_index, right_wear_col, wear_total if wear_total else None)
+            if wear_total:
+                wear_cell.fill = WEAR_FILL
+        else:
+            cell = sheet.cell(row_index, right_wear_col, "未结算")
+            cell.font = UNSETTLED_FONT
+            cell.alignment = Alignment(horizontal="center")
         income_total = row.get("income_total") or 0
-        income_cell = sheet.cell(row_index, right_income_col, income_total if income_total else None)
-        if income_total:
-            income_cell.fill = INCOME_FILL
+        if is_settled:
+            income_cell = sheet.cell(row_index, right_income_col, income_total if income_total else None)
+            if income_total:
+                income_cell.fill = INCOME_FILL
+        else:
+            cell = sheet.cell(row_index, right_income_col, "未结算")
+            cell.font = UNSETTLED_FONT
+            cell.alignment = Alignment(horizontal="center")
 
     rows_used = 2 + len(rows)  # title row + header row + member rows
 
