@@ -3,12 +3,15 @@
 Layout (one sheet, name = `周期盈亏记录`):
 
   [Block 1 — 周期 yyyy-mm-dd ~ yyyy-mm-dd  (已结算 | 未结算)]
-    姓名 | {start}余额 | {date1} | … | {settle}余额 | 红包合计 | 利润(余额) | 利润(流水) | 差额 |    | 姓名 | 磨损 | 收入
+    姓名 | {start}余额 | {date1} | … | {settle}余额 | 红包合计 | 利润 |    | 姓名 | 磨损 | 目前盈亏=收入减去磨损减去红包 | 差异=利润减去目前盈亏
     member rows
   [blank row]
   [Block 2 — 周期 …]
     …
 
+* Left block ends with 利润 (= 结算余额 − 起始余额 − 红包合计, balance method).
+* Right block carries 目前盈亏 (流水法: 收入 − 磨损 − 红包) and 差异
+  (利润 − 目前盈亏) — the difference surfaces daily-entry inaccuracies.
 * Each block keeps the per-cycle column layout (red-packet date columns vary).
 * Blocks are written in chronological order (oldest first; new cycles appended).
 * On any change we rewrite the whole sheet and drop the obsolete per-cycle
@@ -122,20 +125,19 @@ def _write_one_block(sheet, start_row: int, cycle_data: dict[str, Any]) -> tuple
 
     left_headers = [NAME_HEADER, start_header]
     left_headers.extend(_zh_date(d) for d in redpacket_dates)
-    left_headers.extend([settle_header, "红包合计", "利润(余额)", "利润(流水)", "差额"])
+    left_headers.extend([settle_header, "红包合计", "利润"])
 
-    delta_col = len(left_headers)
-    profit_flow_col = delta_col - 1
-    profit_col = profit_flow_col - 1
+    profit_col = len(left_headers)
     redpacket_total_col = profit_col - 1
     settle_balance_col = redpacket_total_col - 1
     date_columns = {date: 3 + index for index, date in enumerate(redpacket_dates)}
 
-    gap_col = delta_col + 1
+    gap_col = profit_col + 1
     right_name_col = gap_col + 1
     right_wear_col = right_name_col + 1
-    right_income_col = right_name_col + 2
-    total_cols = right_income_col
+    right_flow_col = right_name_col + 2
+    right_delta_col = right_name_col + 3
+    total_cols = right_delta_col
 
     # ---- title row (merged across the block) -----------------------------
     title_text = _title_for(start_date, settle_date, is_settled)
@@ -152,7 +154,13 @@ def _write_one_block(sheet, start_row: int, cycle_data: dict[str, Any]) -> tuple
         cell.font = Font(bold=True)
         cell.fill = HEADER_FILL
         cell.alignment = Alignment(horizontal="center")
-    for col_index, label in ((right_name_col, NAME_HEADER), (right_wear_col, "磨损"), (right_income_col, "收入")):
+    right_columns = (
+        (right_name_col, NAME_HEADER),
+        (right_wear_col, "磨损"),
+        (right_flow_col, "目前盈亏"),
+        (right_delta_col, "差异"),
+    )
+    for col_index, label in right_columns:
         c = sheet.cell(header_row, col_index, label)
         c.font = Font(bold=True)
         c.fill = HEADER_FILL
@@ -184,8 +192,6 @@ def _write_one_block(sheet, start_row: int, cycle_data: dict[str, Any]) -> tuple
             rp_cell.fill = TOTAL_FILL
 
         _write_profit_cell(sheet, row_index, profit_col, is_settled, row.get("profit"), PROFIT_FILL)
-        _write_profit_cell(sheet, row_index, profit_flow_col, is_settled, row.get("profit_flow"), PROFIT_FLOW_FILL)
-        _write_profit_cell(sheet, row_index, delta_col, is_settled, row.get("profit_delta"), DELTA_FILL, bold=False)
 
         sheet.cell(row_index, right_name_col, name).alignment = Alignment(horizontal="left")
         wear_total = row.get("wear_total") or 0
@@ -197,15 +203,8 @@ def _write_one_block(sheet, start_row: int, cycle_data: dict[str, Any]) -> tuple
             cell = sheet.cell(row_index, right_wear_col, "未结算")
             cell.font = UNSETTLED_FONT
             cell.alignment = Alignment(horizontal="center")
-        income_total = row.get("income_total") or 0
-        if is_settled:
-            income_cell = sheet.cell(row_index, right_income_col, income_total if income_total else None)
-            if income_total:
-                income_cell.fill = INCOME_FILL
-        else:
-            cell = sheet.cell(row_index, right_income_col, "未结算")
-            cell.font = UNSETTLED_FONT
-            cell.alignment = Alignment(horizontal="center")
+        _write_profit_cell(sheet, row_index, right_flow_col, is_settled, row.get("profit_flow"), PROFIT_FLOW_FILL)
+        _write_profit_cell(sheet, row_index, right_delta_col, is_settled, row.get("profit_delta"), DELTA_FILL, bold=False)
 
     rows_used = 2 + len(rows)  # title row + header row + member rows
 
@@ -215,7 +214,8 @@ def _write_one_block(sheet, start_row: int, cycle_data: dict[str, Any]) -> tuple
         col_widths[col_index] = max(8, len(str(header)) * 2 + 2)
     col_widths[right_name_col] = 10
     col_widths[right_wear_col] = 10
-    col_widths[right_income_col] = 10
+    col_widths[right_flow_col] = 12
+    col_widths[right_delta_col] = 10
     col_widths[gap_col] = 3
 
     return rows_used, col_widths
