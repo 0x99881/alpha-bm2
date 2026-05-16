@@ -248,14 +248,14 @@ class CycleService:
         redpacket_total = normalize_expense(sum(redpacket_by_date.values()))
 
         has_balances = start_balance is not None and end_balance is not None
+        # 目前盈亏 (流水法) is computable any time daily-entry data exists — show
+        # it during the cycle as a running estimate, not only after settle.
+        profit_flow = normalize_income(income_total - wear_total - redpacket_total)
         profit = None
-        profit_flow = None
         profit_delta = None
-        if is_settled:
-            profit_flow = normalize_income(income_total - wear_total - redpacket_total)
-            if has_balances:
-                profit = normalize_income(end_balance - start_balance - redpacket_total)
-                profit_delta = normalize_income(profit - profit_flow)
+        if is_settled and has_balances:
+            profit = normalize_income(end_balance - start_balance - redpacket_total)
+            profit_delta = normalize_income(profit - profit_flow)
 
         return {
             "member_name": member_name,
@@ -361,7 +361,7 @@ class CycleService:
             "rows": rows,
             "totals": {
                 "profit": normalize_income(total_profit) if is_settled else 0.0,
-                "profit_flow": normalize_income(total_profit_flow) if is_settled else 0.0,
+                "profit_flow": normalize_income(total_profit_flow),
                 "profit_delta": normalize_income(total_profit_delta) if is_settled else 0.0,
                 "wear": normalize_wear(total_wear),
                 "income": normalize_income(total_income),

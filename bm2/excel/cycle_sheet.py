@@ -194,16 +194,17 @@ def _write_one_block(sheet, start_row: int, cycle_data: dict[str, Any]) -> tuple
         _write_profit_cell(sheet, row_index, profit_col, is_settled, row.get("profit"), PROFIT_FILL)
 
         sheet.cell(row_index, right_name_col, name).alignment = Alignment(horizontal="left")
+        # 磨损 and 目前盈亏 come from daily entries — known any time, settled or not.
         wear_total = row.get("wear_total") or 0
-        if is_settled:
-            wear_cell = sheet.cell(row_index, right_wear_col, wear_total if wear_total else None)
-            if wear_total:
-                wear_cell.fill = WEAR_FILL
-        else:
-            cell = sheet.cell(row_index, right_wear_col, "未结算")
-            cell.font = UNSETTLED_FONT
-            cell.alignment = Alignment(horizontal="center")
-        _write_profit_cell(sheet, row_index, right_flow_col, is_settled, row.get("profit_flow"), PROFIT_FLOW_FILL)
+        wear_cell = sheet.cell(row_index, right_wear_col, wear_total if wear_total else None)
+        if wear_total:
+            wear_cell.fill = WEAR_FILL
+        flow_value = row.get("profit_flow")
+        if flow_value is not None:
+            flow_cell = sheet.cell(row_index, right_flow_col, flow_value)
+            flow_cell.fill = PROFIT_FLOW_FILL
+            flow_cell.font = Font(bold=True)
+        # 差异 = 利润 - 目前盈亏 → only meaningful after settle.
         _write_profit_cell(sheet, row_index, right_delta_col, is_settled, row.get("profit_delta"), DELTA_FILL, bold=False)
 
     rows_used = 2 + len(rows)  # title row + header row + member rows

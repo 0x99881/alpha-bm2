@@ -10,11 +10,11 @@
             <span>{{ ui.cycle_total_profit }}</span>
             <strong class="{% if cycle_data.is_settled and cycle_data.totals.profit >= 0 %}cycle-profit-positive{% elif cycle_data.is_settled %}cycle-profit-negative{% endif %}">{% if cycle_data.is_settled %}{{ cycle_data.totals.profit }}{% else %}{{ ui.cycle_unsettled }}{% endif %}</strong>
         </div>
-        {% if cycle_data.is_settled %}
         <div class="stat-card">
             <span>{{ ui.cycle_total_profit_flow }}</span>
             <strong class="{% if cycle_data.totals.profit_flow >= 0 %}cycle-profit-positive{% else %}cycle-profit-negative{% endif %}">{{ cycle_data.totals.profit_flow }}</strong>
         </div>
+        {% if cycle_data.is_settled %}
         <div class="stat-card">
             <span>{{ ui.cycle_total_delta }}</span>
             <strong>{{ cycle_data.totals.profit_delta }}</strong>
@@ -105,10 +105,10 @@
                         <th>{{ ui.cycle_redpacket_sum }}</th>
                         <th>{{ ui.cycle_col_wear }}</th>
                         <th>{{ ui.cycle_col_income }}</th>
+                        <th>{{ ui.cycle_col_profit_flow }}</th>
                         {% if cycle_data.is_settled %}
                         <th>{{ cycle_data.settle_date }}<br>{{ ui.cycle_col_end_balance }}</th>
                         <th>{{ ui.cycle_col_profit }}</th>
-                        <th>{{ ui.cycle_col_profit_flow }}</th>
                         <th>{{ ui.cycle_col_profit_delta }}</th>
                         {% endif %}
                         <th class="cycle-row-action-col"></th>
@@ -129,18 +129,18 @@
                         <td class="cycle-redpacket-total-cell">{{ row.redpacket_total if row.redpacket_total else '' }}</td>
                         <td class="cycle-wear">{{ row.wear_total if row.wear_total else '' }}</td>
                         <td class="cycle-income">{{ row.income_total if row.income_total else '' }}</td>
+                        <td class="cycle-profit-flow-cell">
+                            {% if row.profit_flow is not none %}
+                            <strong class="{% if row.profit_flow >= 0 %}cycle-profit-positive{% else %}cycle-profit-negative{% endif %}">{{ row.profit_flow }}</strong>
+                            {% else %}
+                            <span class="cycle-empty">-</span>
+                            {% endif %}
+                        </td>
                         {% if cycle_data.is_settled %}
                         <td><input type="number" step="any" name="end_balance_{{ row.member_name }}" value="{{ row.end_balance }}" class="compact-input" placeholder="期末余额"></td>
                         <td class="cycle-profit-cell">
                             {% if row.profit is not none %}
                             <strong class="{% if row.profit >= 0 %}cycle-profit-positive{% else %}cycle-profit-negative{% endif %}">{{ row.profit }}</strong>
-                            {% else %}
-                            <span class="cycle-empty">-</span>
-                            {% endif %}
-                        </td>
-                        <td class="cycle-profit-flow-cell">
-                            {% if row.profit_flow is not none %}
-                            <strong class="{% if row.profit_flow >= 0 %}cycle-profit-positive{% else %}cycle-profit-negative{% endif %}">{{ row.profit_flow }}</strong>
                             {% else %}
                             <span class="cycle-empty">-</span>
                             {% endif %}
@@ -161,7 +161,7 @@
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="{{ 7 + cycle_data.redpacket_dates|length + (4 if cycle_data.is_settled else 0) }}" class="empty-cell">{{ ui.cycle_no_members }}</td>
+                        <td colspan="{{ 8 + cycle_data.redpacket_dates|length + (3 if cycle_data.is_settled else 0) }}" class="empty-cell">{{ ui.cycle_no_members }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
