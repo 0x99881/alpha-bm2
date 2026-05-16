@@ -20,7 +20,7 @@ class ValueSheetPresenter:
 
     def _total_label(self, sheet_type: str) -> str:
         if sheet_type == "income":
-            return "总收入"
+            return "总空投收入"
         return "总支出"
 
     def _normalizer(self, sheet_type: str):

@@ -4,14 +4,14 @@ Layout (one sheet, name = `周期盈亏记录`) — flat single-table per block:
 
   [Block — 周期 yyyy-mm-dd ~ yyyy-mm-dd  (已结算 | 未结算)]
     姓名 | {start}\n期初余额 | {settle}\n期末余额 | {date1} | {date2} | …
-        | 红包合计 | 磨损合计 | 收入合计 | 目前盈亏 | 利润 | 差异
+        | 红包合计 | 磨损合计 | 空投收入合计 | 目前盈亏 | 利润 | 差异
     member rows
   [blank row]
   [next block…]
 
 * 期初/期末余额 sit side-by-side at the front so the balance change is the
   first thing the eye lands on.
-* 磨损合计 / 收入合计 / 目前盈亏 come straight from daily entries — visible
+* 磨损合计 / 空投收入合计 / 目前盈亏 come straight from daily entries — visible
   pre-settle too (running estimate).
 * 利润 = 期末 − 期初 − 红包合计 (balance method, after settle).
 * 差异 = 利润 − 目前盈亏 (surfaces daily-entry vs. balance inaccuracies).
@@ -128,7 +128,7 @@ def _write_one_block(sheet, start_row: int, cycle_data: dict[str, Any]) -> tuple
 
     headers: list[str] = [NAME_HEADER, start_header, settle_header]
     headers.extend(redpacket_dates)
-    headers.extend(["红包合计", "磨损合计", "收入合计", "目前盈亏", "利润", "差异"])
+    headers.extend(["红包合计", "磨损合计", "空投收入合计", "目前盈亏", "利润", "差异"])
 
     # column indices
     name_col = 1
@@ -192,7 +192,7 @@ def _write_one_block(sheet, start_row: int, cycle_data: dict[str, Any]) -> tuple
         if rp_total:
             rp_cell.fill = TOTAL_FILL
 
-        # 磨损/收入/目前盈亏 are live from daily entries — show always.
+        # 磨损/空投收入/目前盈亏 are live from daily entries — show always.
         wear_total = row.get("wear_total") or 0
         wear_cell = sheet.cell(row_index, wear_total_col, wear_total if wear_total else None)
         if wear_total:
