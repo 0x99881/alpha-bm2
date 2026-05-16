@@ -69,13 +69,28 @@
             }
         };
 
+        // Only the front-most drag handle (cycle-drag-cell with data-drag-source)
+        // initiates a drag. Clicking anywhere else in the row is harmless.
         getRows().forEach((row) => {
-            row.addEventListener("dragstart", () => {
+            const handle = row.querySelector("[data-drag-source]");
+            if (!handle) {
+                return;
+            }
+            handle.addEventListener("dragstart", (event) => {
                 draggedRow = row;
                 originalNames = getCurrentNames();
                 row.classList.add("dragging");
+                if (event.dataTransfer) {
+                    event.dataTransfer.effectAllowed = "move";
+                    // setDragImage uses the whole row as the visual ghost.
+                    try {
+                        event.dataTransfer.setDragImage(row, 10, 10);
+                    } catch (_) {
+                        // setDragImage may not be supported in some browsers — ignore.
+                    }
+                }
             });
-            row.addEventListener("dragend", async () => {
+            handle.addEventListener("dragend", async () => {
                 if (!draggedRow) {
                     return;
                 }

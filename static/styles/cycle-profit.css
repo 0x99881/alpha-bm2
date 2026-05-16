@@ -247,6 +247,23 @@
     user-select: none;
     color: var(--muted);
     font-weight: bold;
+    font-size: 14px;
+    text-align: center;
+    line-height: 1;
+    padding: 8px 4px;
+    border-radius: 4px;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.cycle-drag-cell:hover {
+    background: var(--brand-soft);
+    color: var(--brand);
+}
+
+.cycle-drag-cell:active {
+    cursor: grabbing;
+    background: var(--brand);
+    color: #fff;
 }
 
 .cycle-table tr.dragging {

@@ -116,8 +116,8 @@
                 </thead>
                 <tbody data-sortable-cycle="true" data-reorder-url="{{ url_for('reorder_cycle_members_route') }}" data-cycle-id="{{ cycle_data.selected_cycle.id }}">
                     {% for row in cycle_data.rows %}
-                    <tr data-member-name="{{ row.member_name }}" draggable="true">
-                        <td class="cycle-drag-cell" data-drag-source="true" title="拖动调整顺序">::</td>
+                    <tr data-member-name="{{ row.member_name }}">
+                        <td class="cycle-drag-cell" data-drag-source="true" draggable="true" title="按住这里拖动调整顺序">::</td>
                         <td class="cycle-member">
                             {{ row.member_name }}
                             {% if row.is_extra %}<span class="cycle-extra-badge">{{ ui.cycle_extra_badge }}</span>{% endif %}
