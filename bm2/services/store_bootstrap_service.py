@@ -92,7 +92,28 @@ class StoreBootstrapService:
             context.cycle_service = CycleService(context.local_db, context.query_service.get_active_members)
             context.cycle_profit_presenter = CycleProfitPresenter(context.cycle_service)
             context.cycle_service._on_overview_regen = self._make_overview_regen(context)
+            self._sync_cycle_overview_on_startup(context)
         return context
+
+    @staticmethod
+    def _sync_cycle_overview_on_startup(context) -> None:
+        """Force one overview regen at boot so the Excel sheet matches DB.
+
+        Without this, a user who just upgraded the code keeps seeing the old
+        per-cycle tabs until they perform some cycle action. If Excel is
+        locked at startup we skip silently — the next user-triggered change
+        will regenerate cleanly.
+        """
+        try:
+            cycles_data = context.cycle_service.get_all_cycles_data()
+        except (OSError, ValueError):
+            return
+        if not cycles_data:
+            return
+        try:
+            context.cycle_service._on_overview_regen(cycles_data)
+        except (OSError, ValueError):
+            return
 
     def create_online_application_service(self, context) -> ApplicationService:
         return ApplicationService(context.local_db, context.supabase, context.query_service.get_next_score_date)
