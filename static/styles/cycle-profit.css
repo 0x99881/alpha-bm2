@@ -130,6 +130,33 @@
     color: #fff;
 }
 
+.help-mark {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    line-height: 14px;
+    text-align: center;
+    border-radius: 50%;
+    background: var(--brand-soft);
+    color: var(--brand);
+    font-size: 11px;
+    font-style: normal;
+    font-weight: 600;
+    cursor: help;
+    vertical-align: 1px;
+    margin-left: 2px;
+}
+
+.help-mark:hover {
+    background: var(--brand);
+    color: #fff;
+}
+
+.stat-card[title],
+.cycle-table th[title] {
+    cursor: help;
+}
+
 .cycle-status-badge {
     display: inline-block;
     margin-left: 8px;

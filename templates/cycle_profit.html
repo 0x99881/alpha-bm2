@@ -6,17 +6,17 @@
         <p>{{ ui.cycle_profit_hint }}</p>
     </div>
     <div class="page-head-stats">
-        <div class="stat-card">
-            <span>{{ ui.cycle_total_profit }}</span>
+        <div class="stat-card" title="{{ ui.cycle_tip_profit }}">
+            <span>{{ ui.cycle_total_profit }} <em class="help-mark">?</em></span>
             <strong class="{% if cycle_data.is_settled and cycle_data.totals.profit >= 0 %}cycle-profit-positive{% elif cycle_data.is_settled %}cycle-profit-negative{% endif %}">{% if cycle_data.is_settled %}{{ cycle_data.totals.profit }}{% else %}{{ ui.cycle_unsettled }}{% endif %}</strong>
         </div>
-        <div class="stat-card">
-            <span>{{ ui.cycle_total_profit_flow }}</span>
+        <div class="stat-card" title="{{ ui.cycle_tip_profit_flow }}">
+            <span>{{ ui.cycle_total_profit_flow }} <em class="help-mark">?</em></span>
             <strong class="{% if cycle_data.totals.profit_flow >= 0 %}cycle-profit-positive{% else %}cycle-profit-negative{% endif %}">{{ cycle_data.totals.profit_flow }}</strong>
         </div>
         {% if cycle_data.is_settled %}
-        <div class="stat-card">
-            <span>{{ ui.cycle_total_delta }}</span>
+        <div class="stat-card" title="{{ ui.cycle_tip_profit_delta }}">
+            <span>{{ ui.cycle_total_delta }} <em class="help-mark">?</em></span>
             <strong>{{ cycle_data.totals.profit_delta }}</strong>
         </div>
         {% endif %}
@@ -105,11 +105,11 @@
                         <th>{{ ui.cycle_redpacket_sum }}</th>
                         <th>{{ ui.cycle_col_wear }}</th>
                         <th>{{ ui.cycle_col_income }}</th>
-                        <th>{{ ui.cycle_col_profit_flow }}</th>
+                        <th title="{{ ui.cycle_tip_profit_flow }}">{{ ui.cycle_col_profit_flow }} <em class="help-mark">?</em></th>
                         {% if cycle_data.is_settled %}
                         <th>{{ cycle_data.settle_date }}<br>{{ ui.cycle_col_end_balance }}</th>
-                        <th>{{ ui.cycle_col_profit }}</th>
-                        <th>{{ ui.cycle_col_profit_delta }}</th>
+                        <th title="{{ ui.cycle_tip_profit }}">{{ ui.cycle_col_profit }} <em class="help-mark">?</em></th>
+                        <th title="{{ ui.cycle_tip_profit_delta }}">{{ ui.cycle_col_profit_delta }} <em class="help-mark">?</em></th>
                         {% endif %}
                         <th class="cycle-row-action-col"></th>
                     </tr>
