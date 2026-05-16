@@ -1,16 +1,18 @@
-"""Generates the per-cycle settlement Excel sheet.
+"""Stacks every settlement cycle as one block inside a single Excel sheet.
 
-Layout — one sheet per cycle, named like 周期MM-DD:
+Layout (one sheet, name = `周期盈亏记录`):
 
-  Left:  姓名 | {start}余额 | {date1} | {date2} | ... | {settle}余额 | 红包合计 | 利润(余额) | 利润(流水) | 差额
-  Gap
-  Right: 姓名 | 磨损 | 收入
+  [Block 1 — 周期 yyyy-mm-dd ~ yyyy-mm-dd  (已结算 | 未结算)]
+    姓名 | {start}余额 | {date1} | … | {settle}余额 | 红包合计 | 利润(余额) | 利润(流水) | 差额 |    | 姓名 | 磨损 | 收入
+    member rows
+  [blank row]
+  [Block 2 — 周期 …]
+    …
 
-* Middle date columns are dynamic — only dates with red-packet activity get a column.
-* 利润(余额) = 期末余额 - 期初余额 - 红包合计 (only after settle)
-* 利润(流水) = 收入 - 磨损 - 红包合计 (only after settle)
-* 差额 = 利润(余额) - 利润(流水), surfacing daily-entry/balance discrepancies.
-* All profit cells show "未结算" until the cycle is settled.
+* Each block keeps the per-cycle column layout (red-packet date columns vary).
+* Blocks are written in chronological order (oldest first; new cycles appended).
+* On any change we rewrite the whole sheet and drop the obsolete per-cycle
+  tabs (周期MM-DD) created by the previous implementation.
 """
 from __future__ import annotations
 
@@ -23,6 +25,8 @@ from openpyxl.utils import get_column_letter
 from ..constants import NAME_HEADER
 
 
+OVERVIEW_SHEET_NAME = "周期盈亏记录"
+
 HEADER_FILL = PatternFill(start_color="DDEBF7", end_color="DDEBF7", fill_type="solid")
 TOTAL_FILL = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
 PROFIT_FILL = PatternFill(start_color="E2EFDA", end_color="E2EFDA", fill_type="solid")
@@ -30,16 +34,9 @@ PROFIT_FLOW_FILL = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_ty
 DELTA_FILL = PatternFill(start_color="FFE5E5", end_color="FFE5E5", fill_type="solid")
 WEAR_FILL = PatternFill(start_color="FCE4D6", end_color="FCE4D6", fill_type="solid")
 INCOME_FILL = PatternFill(start_color="E2EFDA", end_color="E2EFDA", fill_type="solid")
+TITLE_SETTLED_FILL = PatternFill(start_color="C6E0B4", end_color="C6E0B4", fill_type="solid")
+TITLE_UNSETTLED_FILL = PatternFill(start_color="BDD7EE", end_color="BDD7EE", fill_type="solid")
 UNSETTLED_FONT = Font(color="888888", italic=True)
-
-
-def cycle_sheet_name(start_date: str) -> str:
-    """周期MM-DD short tab name. Falls back to the raw text if parse fails."""
-    try:
-        d = datetime.strptime(start_date, "%Y-%m-%d").date()
-    except (TypeError, ValueError):
-        return f"周期{start_date}"
-    return f"周期{d.month:02d}-{d.day:02d}"
 
 
 def _zh_date(date_text: str) -> str:
@@ -55,37 +52,64 @@ def _balance_header(date_text: str, fallback: str) -> str:
     return f"{zh}余额" if zh and date_text else fallback
 
 
-def remove_cycle_sheet(workbook, sheet_name: str) -> None:
-    if sheet_name in workbook.sheetnames:
-        del workbook[sheet_name]
+def _drop_legacy_per_cycle_sheets(workbook) -> None:
+    """Remove old `周期MM-DD` tabs from the previous one-sheet-per-cycle design."""
+    legacy = [
+        name for name in workbook.sheetnames
+        if name.startswith("周期") and name != OVERVIEW_SHEET_NAME
+    ]
+    for name in legacy:
+        del workbook[name]
 
 
-def delete_cycle_sheet(workbook_repository, start_date: str) -> str | None:
-    sheet_name = cycle_sheet_name(start_date)
+def regenerate_overview_sheet(workbook_repository, cycles_data: list[dict[str, Any]]) -> str:
+    """Rebuild the entire 周期盈亏记录 sheet from the given cycles."""
     book = workbook_repository.open()
     try:
-        if sheet_name not in book.sheetnames:
-            return None
-        remove_cycle_sheet(book, sheet_name)
+        write_overview_sheet(book, cycles_data)
         workbook_repository.save(book)
-        return sheet_name
     finally:
         book.close()
+    return OVERVIEW_SHEET_NAME
 
 
-def regenerate_cycle_sheet(workbook_repository, cycle_data: dict[str, Any]) -> str | None:
-    if not cycle_data.get("has_cycle"):
-        return None
-    book = workbook_repository.open()
-    try:
-        name = write_cycle_sheet(book, cycle_data)
-        workbook_repository.save(book)
-        return name
-    finally:
-        book.close()
+# Backward-compatible aliases (callers still using the old names).
+def regenerate_cycle_sheet(workbook_repository, cycles_data: list[dict[str, Any]]) -> str:
+    return regenerate_overview_sheet(workbook_repository, cycles_data)
 
 
-def write_cycle_sheet(workbook, cycle_data: dict[str, Any]) -> str:
+def delete_cycle_sheet(workbook_repository, _start_date: str) -> str:
+    """Compatibility shim — actual cleanup happens via the regen path now."""
+    return OVERVIEW_SHEET_NAME
+
+
+def write_overview_sheet(workbook, cycles_data: list[dict[str, Any]]) -> str:
+    _drop_legacy_per_cycle_sheets(workbook)
+    if OVERVIEW_SHEET_NAME in workbook.sheetnames:
+        del workbook[OVERVIEW_SHEET_NAME]
+    sheet = workbook.create_sheet(title=OVERVIEW_SHEET_NAME)
+
+    if not cycles_data:
+        sheet.cell(1, 1, "暂无周期").font = UNSETTLED_FONT
+        sheet.freeze_panes = "A2"
+        return OVERVIEW_SHEET_NAME
+
+    current_row = 1
+    max_width_map: dict[int, int] = {}
+    for cycle_data in cycles_data:
+        rows_used, col_widths = _write_one_block(sheet, current_row, cycle_data)
+        for col_index, width in col_widths.items():
+            max_width_map[col_index] = max(max_width_map.get(col_index, 0), width)
+        current_row += rows_used + 1  # 1 blank separator between blocks
+
+    for col_index, width in max_width_map.items():
+        sheet.column_dimensions[get_column_letter(col_index)].width = max(width, 8)
+
+    sheet.freeze_panes = "A2"
+    return OVERVIEW_SHEET_NAME
+
+
+def _write_one_block(sheet, start_row: int, cycle_data: dict[str, Any]) -> tuple[int, dict[int, int]]:
     cycle = cycle_data["selected_cycle"]
     start_date = str(cycle.get("start_date") or "").strip()
     settle_date = str(cycle.get("settle_date") or "").strip()
@@ -93,23 +117,12 @@ def write_cycle_sheet(workbook, cycle_data: dict[str, Any]) -> str:
     redpacket_dates: list[str] = list(cycle_data.get("redpacket_dates") or [])
     rows: list[dict[str, Any]] = list(cycle_data.get("rows") or [])
 
-    sheet_name = cycle_sheet_name(start_date)
-    remove_cycle_sheet(workbook, sheet_name)
-    sheet = workbook.create_sheet(title=sheet_name)
-
     start_header = _balance_header(start_date, "起始余额")
     settle_header = _balance_header(settle_date, "结算余额")
 
-    # Left table headers
     left_headers = [NAME_HEADER, start_header]
     left_headers.extend(_zh_date(d) for d in redpacket_dates)
     left_headers.extend([settle_header, "红包合计", "利润(余额)", "利润(流水)", "差额"])
-
-    for col_index, value in enumerate(left_headers, start=1):
-        cell = sheet.cell(1, col_index, value)
-        cell.font = Font(bold=True)
-        cell.fill = HEADER_FILL
-        cell.alignment = Alignment(horizontal="center")
 
     delta_col = len(left_headers)
     profit_flow_col = delta_col - 1
@@ -118,18 +131,36 @@ def write_cycle_sheet(workbook, cycle_data: dict[str, Any]) -> str:
     settle_balance_col = redpacket_total_col - 1
     date_columns = {date: 3 + index for index, date in enumerate(redpacket_dates)}
 
-    # Right side small table: 姓名 | 磨损 | 收入
     gap_col = delta_col + 1
     right_name_col = gap_col + 1
     right_wear_col = right_name_col + 1
     right_income_col = right_name_col + 2
+    total_cols = right_income_col
+
+    # ---- title row (merged across the block) -----------------------------
+    title_text = _title_for(start_date, settle_date, is_settled)
+    title_cell = sheet.cell(start_row, 1, title_text)
+    title_cell.font = Font(bold=True, size=12, color="1F2937")
+    title_cell.fill = TITLE_SETTLED_FILL if is_settled else TITLE_UNSETTLED_FILL
+    title_cell.alignment = Alignment(horizontal="left", vertical="center")
+    sheet.merge_cells(start_row=start_row, start_column=1, end_row=start_row, end_column=total_cols)
+
+    # ---- header row ------------------------------------------------------
+    header_row = start_row + 1
+    for col_index, value in enumerate(left_headers, start=1):
+        cell = sheet.cell(header_row, col_index, value)
+        cell.font = Font(bold=True)
+        cell.fill = HEADER_FILL
+        cell.alignment = Alignment(horizontal="center")
     for col_index, label in ((right_name_col, NAME_HEADER), (right_wear_col, "磨损"), (right_income_col, "收入")):
-        c = sheet.cell(1, col_index, label)
+        c = sheet.cell(header_row, col_index, label)
         c.font = Font(bold=True)
         c.fill = HEADER_FILL
         c.alignment = Alignment(horizontal="center")
 
-    for row_index, row in enumerate(rows, start=2):
+    # ---- member rows -----------------------------------------------------
+    body_start = header_row + 1
+    for row_index, row in enumerate(rows, start=body_start):
         name = row["member_name"]
         sheet.cell(row_index, 1, name).alignment = Alignment(horizontal="left")
         start_balance = _coerce_number(row.get("start_balance"))
@@ -148,33 +179,10 @@ def write_cycle_sheet(workbook, cycle_data: dict[str, Any]) -> str:
         if rp_total:
             rp_cell.fill = TOTAL_FILL
 
-        if is_settled and row.get("profit") is not None:
-            cell = sheet.cell(row_index, profit_col, row["profit"])
-            cell.fill = PROFIT_FILL
-            cell.font = Font(bold=True)
-        else:
-            cell = sheet.cell(row_index, profit_col, "未结算")
-            cell.font = UNSETTLED_FONT
-            cell.alignment = Alignment(horizontal="center")
+        _write_profit_cell(sheet, row_index, profit_col, is_settled, row.get("profit"), PROFIT_FILL)
+        _write_profit_cell(sheet, row_index, profit_flow_col, is_settled, row.get("profit_flow"), PROFIT_FLOW_FILL)
+        _write_profit_cell(sheet, row_index, delta_col, is_settled, row.get("profit_delta"), DELTA_FILL, bold=False)
 
-        if is_settled and row.get("profit_flow") is not None:
-            cell = sheet.cell(row_index, profit_flow_col, row["profit_flow"])
-            cell.fill = PROFIT_FLOW_FILL
-            cell.font = Font(bold=True)
-        else:
-            cell = sheet.cell(row_index, profit_flow_col, "未结算")
-            cell.font = UNSETTLED_FONT
-            cell.alignment = Alignment(horizontal="center")
-
-        if is_settled and row.get("profit_delta") is not None:
-            cell = sheet.cell(row_index, delta_col, row["profit_delta"])
-            cell.fill = DELTA_FILL
-        else:
-            cell = sheet.cell(row_index, delta_col, "未结算")
-            cell.font = UNSETTLED_FONT
-            cell.alignment = Alignment(horizontal="center")
-
-        # right side: name + wear + income
         sheet.cell(row_index, right_name_col, name).alignment = Alignment(horizontal="left")
         wear_total = row.get("wear_total") or 0
         wear_cell = sheet.cell(row_index, right_wear_col, wear_total if wear_total else None)
@@ -185,9 +193,37 @@ def write_cycle_sheet(workbook, cycle_data: dict[str, Any]) -> str:
         if income_total:
             income_cell.fill = INCOME_FILL
 
-    _autosize_columns(sheet, left_headers, right_name_col, right_wear_col, right_income_col)
-    sheet.freeze_panes = "B2"
-    return sheet_name
+    rows_used = 2 + len(rows)  # title row + header row + member rows
+
+    # Per-column width estimate for this block (we collect; outer fn aggregates)
+    col_widths: dict[int, int] = {}
+    for col_index, header in enumerate(left_headers, start=1):
+        col_widths[col_index] = max(8, len(str(header)) * 2 + 2)
+    col_widths[right_name_col] = 10
+    col_widths[right_wear_col] = 10
+    col_widths[right_income_col] = 10
+    col_widths[gap_col] = 3
+
+    return rows_used, col_widths
+
+
+def _title_for(start_date: str, settle_date: str, is_settled: bool) -> str:
+    start_label = start_date or "起始日期未填"
+    if is_settled and settle_date:
+        return f"周期 {start_label} ~ {settle_date}    已结算"
+    return f"周期 {start_label} ~ 未结算"
+
+
+def _write_profit_cell(sheet, row_index: int, col: int, is_settled: bool, value, fill, bold: bool = True) -> None:
+    if is_settled and value is not None:
+        cell = sheet.cell(row_index, col, value)
+        cell.fill = fill
+        if bold:
+            cell.font = Font(bold=True)
+    else:
+        cell = sheet.cell(row_index, col, "未结算")
+        cell.font = UNSETTLED_FONT
+        cell.alignment = Alignment(horizontal="center")
 
 
 def _coerce_number(value: Any):
@@ -198,15 +234,3 @@ def _coerce_number(value: Any):
     except (TypeError, ValueError):
         return value
     return int(f) if f.is_integer() else f
-
-
-def _autosize_columns(sheet, left_headers, right_name_col, right_wear_col, right_income_col) -> None:
-    for col_index, header in enumerate(left_headers, start=1):
-        width = max(8, len(str(header)) * 2 + 2)
-        sheet.column_dimensions[get_column_letter(col_index)].width = width
-    sheet.column_dimensions[get_column_letter(right_name_col)].width = 10
-    sheet.column_dimensions[get_column_letter(right_wear_col)].width = 10
-    sheet.column_dimensions[get_column_letter(right_income_col)].width = 10
-    gap_col = right_name_col - 1
-    if gap_col > 0:
-        sheet.column_dimensions[get_column_letter(gap_col)].width = 3

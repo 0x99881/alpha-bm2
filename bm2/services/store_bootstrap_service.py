@@ -91,26 +91,16 @@ class StoreBootstrapService:
         else:
             context.cycle_service = CycleService(context.local_db, context.query_service.get_active_members)
             context.cycle_profit_presenter = CycleProfitPresenter(context.cycle_service)
-            context.cycle_service._on_cycle_change = self._make_cycle_excel_writer(context)
-            context.cycle_service._on_cycle_delete = self._make_cycle_excel_deleter(context)
+            context.cycle_service._on_overview_regen = self._make_overview_regen(context)
         return context
 
     def create_online_application_service(self, context) -> ApplicationService:
         return ApplicationService(context.local_db, context.supabase, context.query_service.get_next_score_date)
 
-    def _make_cycle_excel_writer(self, context):
-        from ..excel.cycle_sheet import regenerate_cycle_sheet
+    def _make_overview_regen(self, context):
+        from ..excel.cycle_sheet import regenerate_overview_sheet
 
-        def regen(cycle_id: str) -> None:
-            data = context.cycle_service.get_cycle_profit_data(cycle_id)
-            regenerate_cycle_sheet(context.workbook_repository, data)
+        def regen(cycles_data: list) -> None:
+            regenerate_overview_sheet(context.workbook_repository, cycles_data)
 
         return regen
-
-    def _make_cycle_excel_deleter(self, context):
-        from ..excel.cycle_sheet import delete_cycle_sheet
-
-        def remove(start_date: str) -> None:
-            delete_cycle_sheet(context.workbook_repository, start_date)
-
-        return remove

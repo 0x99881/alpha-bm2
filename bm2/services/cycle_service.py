@@ -25,13 +25,13 @@ class CycleService:
         self,
         local_db,
         get_active_members: Callable[[], list[dict[str, Any]]],
-        on_cycle_change=None,
-        on_cycle_delete=None,
+        on_overview_regen=None,
     ) -> None:
         self._local_db = local_db
         self._get_active_members = get_active_members
-        self._on_cycle_change = on_cycle_change
-        self._on_cycle_delete = on_cycle_delete
+        # Excel layer hook: receives the full cycles-data list and rewrites the
+        # 周期盈亏记录 overview tab; wired by bootstrap.
+        self._on_overview_regen = on_overview_regen
 
     @staticmethod
     def _text(value: Any) -> str:
@@ -114,16 +114,17 @@ class CycleService:
         self._notify_change(cleaned_cycle)
 
     def delete_cycle(self, cycle_id: str) -> None:
-        # Drop the Excel tab first; if it fails (file locked), DB stays intact.
+        # Rewrite Excel first with the post-delete cycle list. If Excel is locked
+        # the regen raises and DB stays intact so the user can retry cleanly.
         cleaned_cycle = self._text(cycle_id)
         cycle = self._local_db.get_settlement_cycle(cleaned_cycle)
         if cycle is None:
             from ..ui_text import MESSAGES
 
             raise ValueError(MESSAGES["cycle_not_found"])
-        start_date = self._text(cycle.get("start_date"))
-        if self._on_cycle_delete is not None:
-            self._on_cycle_delete(start_date)
+        if self._on_overview_regen is not None:
+            remaining = self._build_cycles_data(exclude_cycle_id=cleaned_cycle)
+            self._on_overview_regen(remaining)
         self._local_db.delete_settlement_cycle(cleaned_cycle)
 
     def add_extra_member(self, cycle_id: str, member_name: str) -> None:
@@ -177,9 +178,26 @@ class CycleService:
         self._notify_change(cleaned_cycle)
 
     def _notify_change(self, cycle_id: str) -> None:
-        if self._on_cycle_change is None:
+        if self._on_overview_regen is None:
             return
-        self._on_cycle_change(cycle_id)
+        self._on_overview_regen(self._build_cycles_data())
+
+    def _build_cycles_data(self, *, exclude_cycle_id: str | None = None) -> list[dict[str, Any]]:
+        """All non-deleted cycles in chronological order, with full view data."""
+        cycles = self._local_db.get_settlement_cycles()
+
+        def sort_key(cycle: dict[str, Any]) -> str:
+            return self._text(cycle.get("start_date")) or self._text(cycle.get("created_at"))
+
+        cycles_sorted = sorted(cycles, key=sort_key)
+        return [
+            self.get_cycle_profit_data(cycle["id"])
+            for cycle in cycles_sorted
+            if cycle["id"] != exclude_cycle_id
+        ]
+
+    def get_all_cycles_data(self) -> list[dict[str, Any]]:
+        return self._build_cycles_data()
 
     # ---- read ---------------------------------------------------------------
 
