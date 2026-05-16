@@ -8,7 +8,21 @@
     <div class="page-head-stats">
         <div class="stat-card">
             <span>{{ ui.cycle_total_profit }}</span>
-            <strong class="{% if cycle_data.totals.profit >= 0 %}cycle-profit-positive{% else %}cycle-profit-negative{% endif %}">{{ cycle_data.totals.profit }}</strong>
+            <strong class="{% if cycle_data.is_settled and cycle_data.totals.profit >= 0 %}cycle-profit-positive{% elif cycle_data.is_settled %}cycle-profit-negative{% endif %}">{% if cycle_data.is_settled %}{{ cycle_data.totals.profit }}{% else %}{{ ui.cycle_unsettled }}{% endif %}</strong>
+        </div>
+        {% if cycle_data.is_settled %}
+        <div class="stat-card">
+            <span>{{ ui.cycle_total_profit_flow }}</span>
+            <strong class="{% if cycle_data.totals.profit_flow >= 0 %}cycle-profit-positive{% else %}cycle-profit-negative{% endif %}">{{ cycle_data.totals.profit_flow }}</strong>
+        </div>
+        <div class="stat-card">
+            <span>{{ ui.cycle_total_delta }}</span>
+            <strong>{{ cycle_data.totals.profit_delta }}</strong>
+        </div>
+        {% endif %}
+        <div class="stat-card">
+            <span>{{ ui.cycle_total_income }}</span>
+            <strong>{{ cycle_data.totals.income }}</strong>
         </div>
         <div class="stat-card">
             <span>{{ ui.cycle_total_wear }}</span>
@@ -27,14 +41,21 @@
             <label>{{ ui.cycle_select }}</label>
             <select name="cycle" onchange="this.form.submit()" {% if not cycle_data.cycles %}disabled{% endif %}>
                 {% for cycle in cycle_data.cycles %}
-                <option value="{{ cycle.id }}" {% if cycle_data.selected_cycle and cycle.id == cycle_data.selected_cycle.id %}selected{% endif %}>{{ cycle.name }}</option>
+                <option value="{{ cycle.id }}" {% if cycle_data.selected_cycle and cycle.id == cycle_data.selected_cycle.id %}selected{% endif %}>{{ cycle.name }}{% if cycle.settled %} ({{ ui.cycle_settled_badge }}){% endif %}</option>
                 {% else %}
                 <option value="">{{ ui.cycle_none }}</option>
                 {% endfor %}
             </select>
         </form>
+        {% if cycle_data.has_cycle %}
+        <form method="post" action="{{ url_for('delete_cycle_profit') }}" class="cycle-delete" onsubmit="return confirm('{{ ui.cycle_delete_confirm }}')">
+            <input type="hidden" name="cycle_id" value="{{ cycle_data.selected_cycle.id }}">
+            <button type="submit" class="danger-btn compact-btn" title="{{ ui.cycle_delete }}">{{ ui.cycle_delete }}</button>
+        </form>
+        {% endif %}
         <form method="post" action="{{ url_for('create_cycle_profit') }}" class="cycle-create">
-            <input type="text" name="name" placeholder="{{ ui.cycle_name_placeholder }}" required>
+            <label>{{ ui.cycle_start_date_label }}</label>
+            <input type="date" name="start_date" required>
             <button type="submit" class="secondary-btn compact-btn">{{ ui.cycle_create }}</button>
         </form>
     </div>
@@ -43,65 +64,155 @@
 {% if cycle_data.has_cycle %}
 <section class="panel">
     <div class="section-title">
-        <h3>{{ cycle_data.selected_cycle.name }}</h3>
+        <h3>{{ cycle_data.selected_cycle.name }}
+            {% if cycle_data.is_settled %}
+            <span class="cycle-status-badge cycle-status-settled">{{ ui.cycle_settled_badge }} {{ cycle_data.settle_date }}</span>
+            {% else %}
+            <span class="cycle-status-badge cycle-status-unsettled">{{ ui.cycle_unsettled }}</span>
+            {% endif %}
+        </h3>
         <p>{{ ui.cycle_formula_hint }}</p>
     </div>
-    <form method="post" action="{{ url_for('save_cycle_profit') }}">
+
+    <div class="cycle-member-tools">
+        <form method="post" action="{{ url_for('add_cycle_member_route') }}" class="cycle-add-member-form">
+            <input type="hidden" name="cycle_id" value="{{ cycle_data.selected_cycle.id }}">
+            <label>{{ ui.cycle_add_member_label }}</label>
+            <input type="text" name="member_name" placeholder="{{ ui.cycle_add_member_placeholder }}" required>
+            <button type="submit" class="secondary-btn compact-btn">{{ ui.cycle_add_member_btn }}</button>
+        </form>
+        <span class="cycle-drag-hint">{{ ui.cycle_drag_hint }}</span>
+    </div>
+
+    <form method="post" action="{% if cycle_data.is_settled %}{{ url_for('settle_cycle_profit') }}{% else %}{{ url_for('save_cycle_profit') }}{% endif %}">
         <input type="hidden" name="cycle_id" value="{{ cycle_data.selected_cycle.id }}">
+        {% if cycle_data.is_settled %}
+        <div class="cycle-settle-date-row">
+            <label>{{ ui.cycle_settle_date_label }}</label>
+            <input type="date" name="settle_date" value="{{ cycle_data.settle_date }}" required>
+        </div>
+        {% endif %}
         <div class="table-wrap">
             <table class="cycle-table">
                 <thead>
                     <tr>
+                        <th class="cycle-drag-col"></th>
                         <th>{{ ui.cycle_col_member }}</th>
-                        <th>{{ ui.cycle_col_start_date }}</th>
-                        <th>{{ ui.cycle_col_start_balance }}</th>
-                        <th>{{ ui.cycle_col_settle_date }}</th>
-                        <th>{{ ui.cycle_col_end_balance }}</th>
+                        <th>{{ cycle_data.start_date }}<br>{{ ui.cycle_col_start_balance }}</th>
+                        {% for d in cycle_data.redpacket_dates %}
+                        <th>{{ d }}</th>
+                        {% endfor %}
+                        <th>{{ ui.cycle_redpacket_sum }}</th>
                         <th>{{ ui.cycle_col_wear }}</th>
-                        <th>{{ ui.cycle_col_redpacket }}</th>
+                        <th>{{ ui.cycle_col_income }}</th>
+                        {% if cycle_data.is_settled %}
+                        <th>{{ cycle_data.settle_date }}<br>{{ ui.cycle_col_end_balance }}</th>
                         <th>{{ ui.cycle_col_profit }}</th>
+                        <th>{{ ui.cycle_col_profit_flow }}</th>
+                        <th>{{ ui.cycle_col_profit_delta }}</th>
+                        {% endif %}
+                        <th class="cycle-row-action-col"></th>
                     </tr>
                 </thead>
-                <tbody>
+                <tbody data-sortable-cycle="true" data-reorder-url="{{ url_for('reorder_cycle_members_route') }}" data-cycle-id="{{ cycle_data.selected_cycle.id }}">
                     {% for row in cycle_data.rows %}
-                    <tr>
-                        <td class="cycle-member">{{ row.member_name }}</td>
-                        <td><input type="date" name="start_date_{{ row.member_name }}" value="{{ row.start_date }}" class="compact-input"></td>
-                        <td><input type="number" step="any" name="start_balance_{{ row.member_name }}" value="{{ row.start_balance }}" placeholder="{{ ui.cycle_col_start_balance }}" class="compact-input"></td>
-                        <td><input type="date" name="settle_date_{{ row.member_name }}" value="{{ row.settle_date }}" class="compact-input"></td>
-                        <td><input type="number" step="any" name="end_balance_{{ row.member_name }}" value="{{ row.end_balance }}" placeholder="{{ ui.cycle_col_end_balance }}" class="compact-input"></td>
-                        <td class="cycle-wear">{{ row.wear_total }}</td>
-                        <td class="cycle-redpacket">
-                            {% if row.redpacket_items %}
-                            <div class="cycle-redpacket-list">
-                                {% for item in row.redpacket_items %}
-                                <span class="cycle-redpacket-item">{{ item.date }} <strong>{{ item.amount }}</strong></span>
-                                {% endfor %}
-                            </div>
-                            <div class="cycle-redpacket-total">{{ ui.cycle_redpacket_sum }} {{ row.redpacket_total }}</div>
-                            {% else %}
-                            <span class="cycle-empty">{{ ui.cycle_redpacket_empty }}</span>
-                            {% endif %}
+                    <tr data-member-name="{{ row.member_name }}" draggable="true">
+                        <td class="cycle-drag-cell" data-drag-source="true" title="拖动调整顺序">::</td>
+                        <td class="cycle-member">
+                            {{ row.member_name }}
+                            {% if row.is_extra %}<span class="cycle-extra-badge">{{ ui.cycle_extra_badge }}</span>{% endif %}
                         </td>
+                        <td><input type="number" step="any" name="start_balance_{{ row.member_name }}" value="{{ row.start_balance }}" class="compact-input" placeholder="期初余额"></td>
+                        {% for d in cycle_data.redpacket_dates %}
+                        <td class="cycle-redpacket-cell">{{ row.redpacket_by_date.get(d, '') or '' }}</td>
+                        {% endfor %}
+                        <td class="cycle-redpacket-total-cell">{{ row.redpacket_total if row.redpacket_total else '' }}</td>
+                        <td class="cycle-wear">{{ row.wear_total if row.wear_total else '' }}</td>
+                        <td class="cycle-income">{{ row.income_total if row.income_total else '' }}</td>
+                        {% if cycle_data.is_settled %}
+                        <td><input type="number" step="any" name="end_balance_{{ row.member_name }}" value="{{ row.end_balance }}" class="compact-input" placeholder="期末余额"></td>
                         <td class="cycle-profit-cell">
-                            {% if row.has_balances %}
+                            {% if row.profit is not none %}
                             <strong class="{% if row.profit >= 0 %}cycle-profit-positive{% else %}cycle-profit-negative{% endif %}">{{ row.profit }}</strong>
                             {% else %}
-                            <span class="cycle-empty">{{ ui.cycle_profit_missing }}</span>
+                            <span class="cycle-empty">-</span>
+                            {% endif %}
+                        </td>
+                        <td class="cycle-profit-flow-cell">
+                            {% if row.profit_flow is not none %}
+                            <strong class="{% if row.profit_flow >= 0 %}cycle-profit-positive{% else %}cycle-profit-negative{% endif %}">{{ row.profit_flow }}</strong>
+                            {% else %}
+                            <span class="cycle-empty">-</span>
+                            {% endif %}
+                        </td>
+                        <td class="cycle-profit-delta-cell">
+                            {% if row.profit_delta is not none %}
+                            {{ row.profit_delta }}
+                            {% else %}
+                            <span class="cycle-empty">-</span>
+                            {% endif %}
+                        </td>
+                        {% endif %}
+                        <td class="cycle-row-action">
+                            {% if row.is_extra %}
+                            <button type="button" class="link-danger-btn" data-remove-member="{{ row.member_name }}" data-cycle-id="{{ cycle_data.selected_cycle.id }}">{{ ui.cycle_remove_member_btn }}</button>
                             {% endif %}
                         </td>
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="8" class="empty-cell">{{ ui.cycle_no_members }}</td>
+                        <td colspan="{{ 7 + cycle_data.redpacket_dates|length + (4 if cycle_data.is_settled else 0) }}" class="empty-cell">{{ ui.cycle_no_members }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
         <div class="cycle-actions">
-            <button type="submit" class="primary-btn">{{ ui.cycle_save }}</button>
+            <button type="submit" class="{% if cycle_data.is_settled %}primary-btn{% else %}secondary-btn{% endif %}">
+                {% if cycle_data.is_settled %}{{ ui.cycle_resettle }}{% else %}{{ ui.cycle_save_start_balance }}{% endif %}
+            </button>
         </div>
+    </form>
+
+    {% if not cycle_data.is_settled %}
+    <details class="cycle-settle-section">
+        <summary>{{ ui.cycle_settle_open }}</summary>
+        <form method="post" action="{{ url_for('settle_cycle_profit') }}" class="cycle-settle-form">
+            <input type="hidden" name="cycle_id" value="{{ cycle_data.selected_cycle.id }}">
+            <div class="cycle-settle-date-row">
+                <label>{{ ui.cycle_settle_date_label }}</label>
+                <input type="date" name="settle_date" required>
+            </div>
+            <div class="table-wrap">
+                <table class="cycle-table">
+                    <thead>
+                        <tr>
+                            <th>{{ ui.cycle_col_member }}</th>
+                            <th>{{ ui.cycle_col_start_balance }}</th>
+                            <th>{{ ui.cycle_col_end_balance }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in cycle_data.rows %}
+                        <tr>
+                            <td class="cycle-member">{{ row.member_name }}</td>
+                            <td class="cycle-readonly">{{ row.start_balance or '-' }}</td>
+                            <td><input type="number" step="any" name="end_balance_{{ row.member_name }}" value="{{ row.end_balance }}" class="compact-input" placeholder="期末余额"></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="cycle-actions">
+                <button type="submit" class="primary-btn">{{ ui.cycle_confirm_settle }}</button>
+            </div>
+        </form>
+    </details>
+    {% endif %}
+
+    <form method="post" action="{{ url_for('remove_cycle_member_route') }}" id="cycle-remove-member-form" hidden>
+        <input type="hidden" name="cycle_id" value="">
+        <input type="hidden" name="member_name" value="">
     </form>
 </section>
 {% else %}

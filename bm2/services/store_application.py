@@ -45,9 +45,19 @@ class StoreApplication:
 
     def get_cycle_profit_view(self, cycle_id=None): return self._context.query_service.get_cycle_profit_view(cycle_id)
 
-    def create_settlement_cycle(self, name): return self._context.command_service.create_settlement_cycle(name)
+    def create_settlement_cycle(self, start_date): return self._context.command_service.create_settlement_cycle(start_date)
 
     def save_cycle_settlement(self, cycle_id, form_data): return self._context.command_service.save_cycle_settlement(cycle_id, form_data)
+
+    def settle_cycle(self, cycle_id, settle_date): return self._context.command_service.settle_cycle(cycle_id, settle_date)
+
+    def delete_cycle(self, cycle_id): return self._context.command_service.delete_cycle(cycle_id)
+
+    def add_cycle_member(self, cycle_id, member_name): return self._context.command_service.add_cycle_member(cycle_id, member_name)
+
+    def remove_cycle_member(self, cycle_id, member_name): return self._context.command_service.remove_cycle_member(cycle_id, member_name)
+
+    def reorder_cycle_members(self, cycle_id, ordered_names): return self._context.command_service.reorder_cycle_members(cycle_id, ordered_names)
 
     def get_next_score_date(self): return self._context.query_service.get_next_score_date()
 

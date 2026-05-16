@@ -60,6 +60,9 @@ class SQLiteSchemaMixin:
                 CREATE TABLE IF NOT EXISTS settlement_cycles (
                     id TEXT PRIMARY KEY,
                     name TEXT NOT NULL,
+                    start_date TEXT NOT NULL DEFAULT '',
+                    settle_date TEXT NOT NULL DEFAULT '',
+                    settled INTEGER NOT NULL DEFAULT 0,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
                     deleted INTEGER NOT NULL DEFAULT 0
@@ -72,6 +75,8 @@ class SQLiteSchemaMixin:
                     start_balance TEXT NOT NULL DEFAULT '',
                     settle_date TEXT NOT NULL DEFAULT '',
                     end_balance TEXT NOT NULL DEFAULT '',
+                    is_extra INTEGER NOT NULL DEFAULT 0,
+                    sort_order INTEGER NOT NULL DEFAULT 0,
                     updated_at TEXT NOT NULL,
                     version INTEGER NOT NULL DEFAULT 1,
                     deleted INTEGER NOT NULL DEFAULT 0,
@@ -110,6 +115,31 @@ class SQLiteSchemaMixin:
                 if column_name not in existing_note_columns:
                     connection.execute(
                         f"ALTER TABLE score_date_notes ADD COLUMN {column_name} TEXT NOT NULL DEFAULT ''"
+                    )
+            existing_cycle_columns = {
+                row["name"]
+                for row in connection.execute("PRAGMA table_info(settlement_cycles)").fetchall()
+            }
+            for column_name, default_clause in (
+                ("start_date", "TEXT NOT NULL DEFAULT ''"),
+                ("settle_date", "TEXT NOT NULL DEFAULT ''"),
+                ("settled", "INTEGER NOT NULL DEFAULT 0"),
+            ):
+                if column_name not in existing_cycle_columns:
+                    connection.execute(
+                        f"ALTER TABLE settlement_cycles ADD COLUMN {column_name} {default_clause}"
+                    )
+            existing_entry_columns = {
+                row["name"]
+                for row in connection.execute("PRAGMA table_info(settlement_entries)").fetchall()
+            }
+            for column_name, default_clause in (
+                ("is_extra", "INTEGER NOT NULL DEFAULT 0"),
+                ("sort_order", "INTEGER NOT NULL DEFAULT 0"),
+            ):
+                if column_name not in existing_entry_columns:
+                    connection.execute(
+                        f"ALTER TABLE settlement_entries ADD COLUMN {column_name} {default_clause}"
                     )
             connection.commit()
         finally:

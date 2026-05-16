@@ -17,6 +17,9 @@
         if (typeof namespace.initProfitCalendar === "function") {
             namespace.initProfitCalendar();
         }
+        if (typeof namespace.initCycleSort === "function") {
+            namespace.initCycleSort();
+        }
     };
 
     if (document.readyState === "loading") {

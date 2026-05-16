@@ -103,11 +103,26 @@ class StoreCommandService:
             "exported_dates": exported_dates,
         }
 
-    def create_settlement_cycle(self, name: str) -> str:
-        return self._context.cycle_service.create_cycle(name)
+    def create_settlement_cycle(self, start_date: str) -> str:
+        return self._context.cycle_service.create_cycle(start_date)
 
     def save_cycle_settlement(self, cycle_id: str, form_data) -> None:
         self._context.cycle_service.save_settlement(cycle_id, form_data)
+
+    def settle_cycle(self, cycle_id: str, settle_date: str) -> None:
+        self._context.cycle_service.settle_cycle(cycle_id, settle_date)
+
+    def delete_cycle(self, cycle_id: str) -> None:
+        self._context.cycle_service.delete_cycle(cycle_id)
+
+    def add_cycle_member(self, cycle_id: str, member_name: str) -> None:
+        self._context.cycle_service.add_extra_member(cycle_id, member_name)
+
+    def remove_cycle_member(self, cycle_id: str, member_name: str) -> None:
+        self._context.cycle_service.remove_extra_member(cycle_id, member_name)
+
+    def reorder_cycle_members(self, cycle_id: str, ordered_names: list[str]) -> None:
+        self._context.cycle_service.reorder_members(cycle_id, ordered_names)
 
     def is_supabase_configured(self) -> bool:
         return self._context.sync_service.is_configured()
