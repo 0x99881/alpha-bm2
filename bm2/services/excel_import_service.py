@@ -230,18 +230,21 @@ class ExcelImportService:
                 for col, score_date in block["date_by_col"].items():
                     raw_value = sheet.cell(row_index, col).value
                     if raw_value in (None, ""):
+                        # Empty cell is treated as "user didn't touch this
+                        # row x date" so DB keeps its existing value. To
+                        # clear an entry to zero, type ``0`` explicitly —
+                        # an empty cell isn't distinguishable from a padded
+                        # day where the member just didn't participate.
                         continue
                     try:
                         numeric = normalizer(raw_value)
                     except (TypeError, ValueError):
                         continue
-                    if numeric == 0:
-                        continue
-                    # Last-write-wins across blocks. In practice a (member,
-                    # date) pair belongs to a single cycle so collisions
-                    # shouldn't happen, but if a user copy-pastes between
-                    # blocks the later block wins, matching what the
-                    # daily-save flow would produce.
+                    # Note: ``0`` IS surfaced. Previously the reader skipped
+                    # zeros, which made ``5 → 0`` edits look like no-ops
+                    # because the (member, date) pair never made it into
+                    # the snapshot. Now zero rewrites land in DB just like
+                    # any other edit.
                     values[(member_name, score_date)] = str(numeric)
         return values
 
