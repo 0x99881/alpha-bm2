@@ -1,18 +1,53 @@
 from __future__ import annotations
 
+from datetime import date as _date_cls
+
 from .header_locator import find_column
 from .value_normalizer import normalize_expense, normalize_income, normalize_wear
 from ..constants import NAME_HEADER
 
 
+def _current_cycle_window(local_db) -> tuple[str, str]:
+    """Return (start_iso, end_iso) for the current cycle, summed straight from
+    SQLite's settlement_cycles table.
+
+    Picks the latest unsettled cycle if any, otherwise falls back to the most
+    recent settled cycle. When the DB has no cycles at all we return empty
+    strings — the caller treats that as "include every entry" so a brand-new
+    workbook still shows a meaningful profit column.
+    """
+    cycles = local_db.get_settlement_cycles()
+    if not cycles:
+        return "", ""
+
+    def _text(value):
+        return str(value or "").strip()
+
+    ordered = sorted(
+        cycles,
+        key=lambda c: _text(c.get("start_date")) or _text(c.get("created_at")),
+    )
+    today_iso = _date_cls.today().strftime("%Y-%m-%d")
+    for cycle in reversed(ordered):
+        if not int(cycle.get("settled", 0) or 0):
+            return _text(cycle.get("start_date")), today_iso
+    latest = ordered[-1]
+    settle = _text(latest.get("settle_date"))
+    return _text(latest.get("start_date")), settle or today_iso
+
+
 def recalculate_score_profits_from_db(
     *, local_db, workbook, score_sheet, profit_col: int,
 ) -> None:
-    """Lifetime profit per member, summed straight from SQLite.
+    """Per-cycle flow-method profit (``income − wear − redpacket``).
 
-    Replaces the old Excel-sheet aggregation. The cycle-block sheet layout
-    means a member can appear in many rows; the DB is the unambiguous source
-    of truth so we read from there instead of trying to disambiguate rows.
+    Each row in the score sheet shows the **current cycle's** running
+    profit-loss for that member, summed straight from SQLite. Entries
+    outside the cycle window are skipped so a settled cycle's totals don't
+    drift forward into the next cycle's column.
+
+    Header text comes from ``PROFIT_HEADER`` (``周期盈亏``) — the
+    cycle-scope is what makes "累计" misleading and we dropped it.
     """
     from ..value_utils import to_float_or_none
     from ..domain.rules.daily_entry import resolve_wear_value, IncompleteBalanceInput
@@ -22,8 +57,14 @@ def recalculate_score_profits_from_db(
     if score_name_col is None:
         return
 
+    start_iso, end_iso = _current_cycle_window(local_db)
     rows = local_db.get_score_rows()
     by_member: dict[str, dict[str, float]] = {}
+
+    def _in_window(date_text: str) -> bool:
+        if not start_iso:  # no cycle exists — include everything
+            return True
+        return start_iso <= date_text <= end_iso
 
     def _resolve_wear(row):
         try:
@@ -43,6 +84,9 @@ def recalculate_score_profits_from_db(
     for row in rows:
         name = str(row.get("member_name", "") or "").strip()
         if not name:
+            continue
+        date_text = str(row.get("score_date", "") or "").strip()
+        if not _in_window(date_text):
             continue
         bucket = by_member.setdefault(name, {"income": 0.0, "wear": 0.0, "expense": 0.0})
         income = to_float_or_none(str(row.get("income", "") or "").strip())
