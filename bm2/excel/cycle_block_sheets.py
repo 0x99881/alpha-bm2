@@ -12,6 +12,7 @@ inserts. No member-row deduping. Just a rewrite.
 """
 from __future__ import annotations
 
+from datetime import date as _date_cls, datetime, timedelta
 from typing import Any
 
 from openpyxl.styles import Alignment, Font, PatternFill
@@ -121,6 +122,7 @@ def build_cycle_blocks(
     cycles_chronological = sorted(cycles, key=_sort_key)
     cycles_newest_first = list(reversed(cycles_chronological))
 
+    today_iso = _date_cls.today().strftime("%Y-%m-%d")
     blocks: list[dict[str, Any]] = []
     for index, cycle in enumerate(cycles_newest_first):
         start = _text(cycle.get("start_date"))
@@ -128,13 +130,17 @@ def build_cycle_blocks(
             continue
         is_settled = bool(int(cycle.get("settled", 0) or 0))
         settle = _text(cycle.get("settle_date"))
-        upper = settle if (is_settled and settle) else "9999-12-31"
+        # Active window ends today; settled window ends at settle_date.
+        end_inclusive = settle if (is_settled and settle) else today_iso
 
         member_values: dict[str, dict[str, float]] = {name: {} for name in member_order}
-        date_set: set[str] = set()
-        for date_text, rows in by_date.items():
-            if not (start <= date_text <= upper):
-                continue
+        # Every day in [start, end_inclusive] becomes a column, even if no
+        # member had a value that day. Keeps the table rectangular so users
+        # can see "this day existed but everyone was 0" at a glance instead
+        # of silently collapsing days out of the layout.
+        date_list = _enumerate_dates(start, end_inclusive)
+        for date_text in date_list:
+            rows = by_date.get(date_text, [])
             for row in rows:
                 name = _text(row.get("member_name"))
                 if not name:
@@ -143,16 +149,32 @@ def build_cycle_blocks(
                 if value is None or value == 0:
                     continue
                 member_values.setdefault(name, {})[date_text] = value
-                date_set.add(date_text)
 
         blocks.append({
             "cycle": cycle,
-            "dates": sorted(date_set),
+            "dates": date_list,
             "member_values": member_values,
             "is_settled": is_settled,
             "is_active": index == 0,  # newest is active block
         })
     return blocks
+
+
+def _enumerate_dates(start_iso: str, end_iso: str) -> list[str]:
+    """Inclusive list of ISO dates from ``start_iso`` to ``end_iso``."""
+    try:
+        start = datetime.strptime(start_iso, "%Y-%m-%d").date()
+        end = datetime.strptime(end_iso, "%Y-%m-%d").date()
+    except ValueError:
+        return []
+    if end < start:
+        return []
+    out: list[str] = []
+    cursor = start
+    while cursor <= end:
+        out.append(cursor.strftime("%Y-%m-%d"))
+        cursor += timedelta(days=1)
+    return out
 
 
 def _synthetic_block(
