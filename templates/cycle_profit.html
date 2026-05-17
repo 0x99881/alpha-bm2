@@ -53,11 +53,22 @@
             <button type="submit" class="danger-btn compact-btn" title="{{ ui.cycle_delete }}">{{ ui.cycle_delete }}</button>
         </form>
         {% endif %}
+
+        {% if not cycle_data.has_cycle %}
         <form method="post" action="{{ url_for('create_cycle_profit') }}" class="cycle-create">
-            <label>{{ ui.cycle_start_date_label }}</label>
-            <input type="date" name="start_date" required>
-            <button type="submit" class="secondary-btn compact-btn">{{ ui.cycle_create }}</button>
+            <label>{{ ui.cycle_first_start_date_label }}</label>
+            <input type="date" name="start_date" value="{{ cycle_data.next_start_date_default }}" required>
+            <button type="submit" class="primary-btn compact-btn">{{ ui.cycle_create_first }}</button>
         </form>
+        {% elif cycle_data.is_latest_cycle and cycle_data.is_settled %}
+        <form method="post" action="{{ url_for('create_cycle_profit') }}" class="cycle-create">
+            <label>{{ ui.cycle_next_start_date_label }}</label>
+            <input type="date" name="start_date" value="{{ cycle_data.next_start_date_default }}" required>
+            <button type="submit" class="primary-btn compact-btn">{{ ui.cycle_open_next }}</button>
+        </form>
+        {% elif cycle_data.is_latest_cycle and not cycle_data.is_settled %}
+        <a href="#cycle-settle-next" class="primary-btn compact-btn cycle-jump-settle">{{ ui.cycle_open_next }}</a>
+        {% endif %}
     </div>
 </section>
 
@@ -174,14 +185,19 @@
         </div>
     </form>
 
-    {% if not cycle_data.is_settled %}
-    <details class="cycle-settle-section">
-        <summary>{{ ui.cycle_settle_open }}</summary>
-        <form method="post" action="{{ url_for('settle_cycle_profit') }}" class="cycle-settle-form">
+    {% if cycle_data.is_latest_cycle and not cycle_data.is_settled %}
+    <details class="cycle-settle-section" id="cycle-settle-next" {% if cycle_data.rows %}open{% endif %}>
+        <summary>{{ ui.cycle_settle_and_create_next_open }}</summary>
+        <p class="cycle-settle-hint">{{ ui.cycle_settle_and_create_next_hint }}</p>
+        <form method="post" action="{{ url_for('settle_and_create_next_cycle') }}" class="cycle-settle-form">
             <input type="hidden" name="cycle_id" value="{{ cycle_data.selected_cycle.id }}">
             <div class="cycle-settle-date-row">
                 <label>{{ ui.cycle_settle_date_label }}</label>
-                <input type="date" name="settle_date" required>
+                <input type="date" name="settle_date" value="{{ cycle_data.settle_date_default }}" required data-cycle-settle-date>
+                <span class="cycle-next-start-preview">
+                    {{ ui.cycle_next_start_preview }}
+                    <strong data-cycle-next-start>—</strong>
+                </span>
             </div>
             <div class="table-wrap">
                 <table class="cycle-table">
@@ -204,7 +220,7 @@
                 </table>
             </div>
             <div class="cycle-actions">
-                <button type="submit" class="primary-btn">{{ ui.cycle_confirm_settle }}</button>
+                <button type="submit" class="primary-btn">{{ ui.cycle_settle_and_create_next_confirm }}</button>
             </div>
         </form>
     </details>
@@ -214,6 +230,27 @@
         <input type="hidden" name="cycle_id" value="">
         <input type="hidden" name="member_name" value="">
     </form>
+
+    <script>
+        (() => {
+            const dateInput = document.querySelector('[data-cycle-settle-date]');
+            const preview = document.querySelector('[data-cycle-next-start]');
+            if (!dateInput || !preview) return;
+            const update = () => {
+                const value = dateInput.value;
+                if (!value) { preview.textContent = '—'; return; }
+                const parsed = new Date(value + 'T00:00:00');
+                if (Number.isNaN(parsed.getTime())) { preview.textContent = '—'; return; }
+                parsed.setDate(parsed.getDate() + 1);
+                const y = parsed.getFullYear();
+                const m = String(parsed.getMonth() + 1).padStart(2, '0');
+                const d = String(parsed.getDate()).padStart(2, '0');
+                preview.textContent = `${y}-${m}-${d}`;
+            };
+            dateInput.addEventListener('input', update);
+            update();
+        })();
+    </script>
 </section>
 {% else %}
 <section class="panel">

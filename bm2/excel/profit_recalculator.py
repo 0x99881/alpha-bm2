@@ -1,44 +1,89 @@
 from __future__ import annotations
 
 from .header_locator import find_column
-from .member_rows import build_name_row_map
-from .number_utils import sum_sheet_row_values
 from .value_normalizer import normalize_expense, normalize_income, normalize_wear
-from ..constants import EXPENSE_NAME_HEADER, INCOME_NAME_HEADER, NAME_HEADER, WEAR_NAME_HEADER
+from ..constants import NAME_HEADER
 
 
-def recalculate_score_profits(workbook, score_sheet, profit_col: int, income_sheet_handler, wear_sheet_handler, expense_sheet_handler) -> None:
+def recalculate_score_profits_from_db(
+    *, local_db, workbook, score_sheet, profit_col: int,
+) -> None:
+    """Lifetime profit per member, summed straight from SQLite.
+
+    Replaces the old Excel-sheet aggregation. The cycle-block sheet layout
+    means a member can appear in many rows; the DB is the unambiguous source
+    of truth so we read from there instead of trying to disambiguate rows.
+    """
+    from ..value_utils import to_float_or_none
+    from ..domain.rules.daily_entry import resolve_wear_value, IncompleteBalanceInput
+    from .value_normalizer import parse_decimal
+
     score_name_col = find_column(score_sheet, NAME_HEADER)
-    income_sheet = income_sheet_handler.sheet(workbook)
-    wear_sheet = wear_sheet_handler.sheet(workbook)
-    expense_sheet = expense_sheet_handler.sheet(workbook)
-    income_name_col = find_column(income_sheet, INCOME_NAME_HEADER)
-    wear_name_col = find_column(wear_sheet, WEAR_NAME_HEADER)
-    expense_name_col = find_column(expense_sheet, EXPENSE_NAME_HEADER)
-    if score_name_col is None or income_name_col is None or wear_name_col is None:
+    if score_name_col is None:
         return
 
-    income_row_map = build_name_row_map(income_sheet, income_name_col)
-    wear_row_map = build_name_row_map(wear_sheet, wear_name_col)
-    expense_row_map = build_name_row_map(expense_sheet, expense_name_col) if expense_name_col is not None else {}
-    income_columns = [col for _, col in income_sheet_handler.columns(income_sheet)]
-    wear_columns = [col for _, col in wear_sheet_handler.columns(wear_sheet)]
-    expense_columns = [col for _, col in expense_sheet_handler.columns(expense_sheet)] if expense_name_col is not None else []
+    rows = local_db.get_score_rows()
+    by_member: dict[str, dict[str, float]] = {}
+
+    def _resolve_wear(row):
+        try:
+            value = resolve_wear_value(
+                before_text=str(row.get("before_balance", "") or "").strip(),
+                after_text=str(row.get("after_balance", "") or "").strip(),
+                manual_wear_text=str(row.get("manual_wear", "") or "").strip(),
+                parse_decimal=parse_decimal,
+                manual_field="manual_wear",
+                before_field="before",
+                after_field="after",
+            )
+        except (IncompleteBalanceInput, ValueError):
+            return None
+        return None if value is None else normalize_wear(value)
+
+    for row in rows:
+        name = str(row.get("member_name", "") or "").strip()
+        if not name:
+            continue
+        bucket = by_member.setdefault(name, {"income": 0.0, "wear": 0.0, "expense": 0.0})
+        income = to_float_or_none(str(row.get("income", "") or "").strip())
+        expense = to_float_or_none(str(row.get("other_expense", "") or "").strip())
+        wear = _resolve_wear(row)
+        if income is not None:
+            bucket["income"] += normalize_income(income)
+        if expense is not None:
+            bucket["expense"] += normalize_expense(expense)
+        if wear is not None:
+            bucket["wear"] += wear
 
     for row in range(2, score_sheet.max_row + 1):
-        member_name = str(score_sheet.cell(row, score_name_col).value or '').strip()
+        member_name = str(score_sheet.cell(row, score_name_col).value or "").strip()
         if not member_name:
             continue
-        income_total = normalize_income(
-            sum_sheet_row_values(income_sheet, income_row_map[member_name], income_columns)
-            if member_name in income_row_map else 0
+        sums = by_member.get(member_name, {"income": 0.0, "wear": 0.0, "expense": 0.0})
+        profit = normalize_income(
+            normalize_income(sums["income"]) - normalize_wear(sums["wear"]) - normalize_expense(sums["expense"])
         )
-        wear_total = normalize_wear(
-            sum_sheet_row_values(wear_sheet, wear_row_map[member_name], wear_columns)
-            if member_name in wear_row_map else 0
+        score_sheet.cell(row, profit_col, profit)
+
+
+# Legacy alias for backward compatibility with call sites that pass the
+# sheet handlers. The handlers are no longer needed for this aggregation —
+# we read from DB.
+def recalculate_score_profits(
+    workbook, score_sheet, profit_col: int,
+    income_sheet_handler, wear_sheet_handler, expense_sheet_handler,
+    *, local_db=None,
+) -> None:
+    if local_db is None:
+        # Best-effort: dig the local_db out of one of the handlers' stores.
+        local_db = getattr(
+            getattr(wear_sheet_handler, "store", None), "local_db", None,
         )
-        expense_total = normalize_expense(
-            sum_sheet_row_values(expense_sheet, expense_row_map[member_name], expense_columns)
-            if member_name in expense_row_map else 0
-        )
-        score_sheet.cell(row, profit_col, normalize_income(income_total - wear_total - expense_total))
+    if local_db is None:
+        return
+    recalculate_score_profits_from_db(
+        local_db=local_db,
+        workbook=workbook,
+        score_sheet=score_sheet,
+        profit_col=profit_col,
+    )

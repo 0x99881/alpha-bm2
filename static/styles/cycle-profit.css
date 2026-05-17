@@ -216,6 +216,30 @@
     max-width: 600px;
 }
 
+.cycle-settle-hint {
+    margin: 4px 0 12px;
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.55;
+}
+
+.cycle-next-start-preview {
+    color: var(--muted);
+    font-size: 13px;
+    margin-left: 6px;
+}
+
+.cycle-next-start-preview strong {
+    color: var(--brand);
+    margin-left: 4px;
+}
+
+.cycle-jump-settle {
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+}
+
 .cycle-readonly {
     color: var(--muted);
 }

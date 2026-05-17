@@ -82,6 +82,28 @@ class SQLiteCycleRepositoryMixin:
         finally:
             connection.close()
 
+    def unsettle_settlement_cycle(self, cycle_id: str) -> None:
+        """Revert a settled cycle back to unsettled state. Used for rollback."""
+        if self.read_only:
+            return
+        cleaned_cycle = self._cycle_text(cycle_id)
+        if not cleaned_cycle:
+            return
+        now = self._now_text()
+        connection = self._connect()
+        try:
+            connection.execute(
+                """
+                UPDATE settlement_cycles
+                SET settle_date = '', settled = 0, updated_at = ?
+                WHERE id = ? AND deleted = 0
+                """,
+                (now, cleaned_cycle),
+            )
+            connection.commit()
+        finally:
+            connection.close()
+
     def get_settlement_cycles(self) -> list[dict[str, Any]]:
         connection = self._connect()
         try:

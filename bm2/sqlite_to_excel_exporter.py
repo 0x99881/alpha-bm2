@@ -12,6 +12,7 @@ from decimal import Decimal, InvalidOperation
 from typing import TYPE_CHECKING, Any
 
 from .domain.rules.daily_entry import IncompleteBalanceInput, resolve_wear_value
+from .excel.cycle_block_sheets import build_cycle_blocks, rewrite_value_sheet_with_blocks
 from .excel.header_locator import find_column
 from .excel.member_rows import ensure_member_rows_with_map
 from .excel.profit_recalculator import recalculate_score_profits
@@ -203,63 +204,28 @@ class SQLiteToExcelExporter:
         member_names: list[str],
         replace_dates: set[str] | None = None,
     ) -> None:
-        target_dates = replace_dates or set(self._detail_dates(rows))
-        rows_by_date = {date_text: [] for date_text in sorted(target_dates)}
-        if not rows_by_date:
-            return
-        for row in rows:
-            date_text = self._entry_text(row, "score_date")
-            if date_text in rows_by_date:
-                rows_by_date[date_text].append(row)
+        """Rebuild wear / income / expense sheets with cycle-block layout.
 
-        for date_text, date_rows in rows_by_date.items():
-            wear_values: dict[str, float] = {}
-            income_values: dict[str, float] = {}
-            expense_values: dict[str, float] = {}
-            for row in date_rows:
-                name = self._entry_text(row, "member_name")
-                if not name:
-                    continue
-                wear = self._resolve_wear(row)
-                income = self._resolve_value(row, "income")
-                expense = self._resolve_value(row, "other_expense")
-                if wear is not None:
-                    wear_values[name] = wear
-                if income is not None:
-                    income_values[name] = income
-                if expense is not None:
-                    expense_values[name] = expense
-
-            for sheet_type in ("wear", "income", "expense"):
-                self._remove_existing_value_column(workbook, store, sheet_type, date_text)
-
-            if wear_values:
-                self._write_value_sheet(
-                    workbook,
-                    store,
-                    sheet_type="wear",
-                    date_text=date_text,
-                    member_names=member_names,
-                    values=wear_values,
-                )
-            if income_values:
-                self._write_value_sheet(
-                    workbook,
-                    store,
-                    sheet_type="income",
-                    date_text=date_text,
-                    member_names=member_names,
-                    values=income_values,
-                )
-            if expense_values:
-                self._write_value_sheet(
-                    workbook,
-                    store,
-                    sheet_type="expense",
-                    date_text=date_text,
-                    member_names=member_names,
-                    values=expense_values,
-                )
+        ``rows`` and ``replace_dates`` are ignored here: the rewrite reads
+        directly from SQLite so the Excel file is always a fresh projection of
+        the database, with the active cycle's table at the top and historical
+        cycles laid out as blocks below.
+        """
+        for sheet_type in ("wear", "income", "expense"):
+            helpers = store.value_sheet_helpers_for(sheet_type)
+            sheet = helpers.sheet_getter(workbook)
+            blocks = build_cycle_blocks(
+                local_db=self._local_db,
+                sheet_type=sheet_type,
+                member_order=member_names,
+            )
+            rewrite_value_sheet_with_blocks(
+                workbook,
+                sheet_type=sheet_type,
+                sheet=sheet,
+                blocks=blocks,
+                member_order=member_names,
+            )
 
     def export_missing_dates(self, store: Any, *, detail_date_text: str | None = None) -> int:
         rows = self._local_db.get_filtered_score_rows()
@@ -279,9 +245,10 @@ class SQLiteToExcelExporter:
 
         workbook = store.workbook_repository.open()
         try:
-            store.ensure_wear_sheet_structure(workbook)
-            store.ensure_income_sheet_structure(workbook)
-            store.ensure_expense_sheet_structure(workbook)
+            # We no longer run ensure_*_sheet_structure for the value sheets
+            # here: the cycle-block rewrite below handles their layout end-to-
+            # end. Running ensure on them would re-introduce the legacy 2D
+            # member-row dedupe and clobber historical blocks.
             score_sheet = store.score_sheet_for(workbook)
             if score_sheet.max_column:
                 score_sheet.delete_cols(1, score_sheet.max_column)
@@ -312,15 +279,18 @@ class SQLiteToExcelExporter:
                     score_sheet.cell(row, column_index, int(score_map.get((name, date_text), 0)))
             replace_dates = {detail_date_text.strip()} if detail_date_text and detail_date_text.strip() else None
             self._write_detail_sheets(workbook, store, rows, member_names=member_names, replace_dates=replace_dates)
-            store.ensure_wear_sheet_structure(workbook)
-            store.ensure_income_sheet_structure(workbook)
-            store.ensure_expense_sheet_structure(workbook)
+            # Value sheets (wear/income/expense) are now fully rendered by
+            # ``_write_detail_sheets`` (cycle-block layout); skip ensure_*.
             store.score_sheet.ensure_structure(workbook)
             score_sheet = store.score_sheet_for(workbook)
             total_col = find_column(score_sheet, TOTAL_HEADER)
             profit_col = find_column(score_sheet, PROFIT_HEADER)
             if total_col is not None and profit_col is not None:
-                recalculate_score_profits(workbook, score_sheet, profit_col, store.income_sheet, store.wear_sheet, store.expense_sheet)
+                recalculate_score_profits(
+                    workbook, score_sheet, profit_col,
+                    store.income_sheet, store.wear_sheet, store.expense_sheet,
+                    local_db=self._local_db,
+                )
             name_col = find_column(score_sheet, NAME_HEADER)
             if name_col is not None:
                 self._write_score_date_notes(

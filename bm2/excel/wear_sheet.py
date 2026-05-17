@@ -158,19 +158,35 @@ class WearSheet:
         return changed
 
     def snapshot(self, workbook) -> dict[str, Any]:
-        self.ensure_structure(workbook)
+        # ensure_structure is intentionally NOT called here: the cycle-block
+        # exporter is the canonical source for this sheet's layout. Re-running
+        # ensure_structure would re-introduce legacy member-row dedupe and
+        # corrupt the historical blocks below the active table.
+        from .cycle_block_sheets import (
+            CYCLE_AVG_LABEL,
+            CYCLE_BANNER_PREFIX,
+            CYCLE_TOTAL_LABEL,
+            WEAR_DAILY_AVG_LABEL,
+        )
+
         sheet = self.sheet(workbook)
         headers = [sheet.cell(1, col).value for col in range(1, sheet.max_column + 1)]
         raw_rows = []
         name_col = find_column(sheet, WEAR_NAME_HEADER)
+        block_terminators = {CYCLE_TOTAL_LABEL, CYCLE_AVG_LABEL, WEAR_DAILY_AVG_LABEL}
         for row in range(DATA_START_ROW, sheet.max_row + 1):
             if bool(sheet.row_dimensions[row].hidden):
                 continue
+            first_cell = str(sheet.cell(row, 1).value or '').strip()
+            if first_cell.startswith(CYCLE_BANNER_PREFIX):
+                break
             values = [sheet.cell(row, col).value for col in range(1, sheet.max_column + 1)]
-            if name_col is not None and not values[name_col - 1]:
-                continue
-            if name_col is not None and str(values[name_col - 1] or '').strip() == self.daily_average_label:
-                continue
+            if name_col is not None:
+                name_value = str(values[name_col - 1] or '').strip()
+                if not name_value:
+                    continue
+                if name_value in block_terminators:
+                    break
             raw_rows.append(values)
         wear_col_indices = [col - 1 for _, col in self.columns(sheet)]
         return {

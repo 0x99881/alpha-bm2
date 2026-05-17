@@ -70,34 +70,58 @@ def register_routes(app, store) -> None:
     def wear_entry():
         if read_only_mode:
             return render_template('wear.html', wear_sheet=store.get_online_wear_sheet_view())
-        return render_template('wear.html', wear_sheet=store.get_wear_sheet_view())
+        return render_template(
+            'wear.html',
+            wear_sheet=store.get_wear_sheet_view(),
+            cycle_wear=store.get_current_cycle_wear_summary(),
+        )
+
+    def _render_value_chart(sheet_type, page_title, page_hint, total_label, marked_hint, marker_class):
+        range_mode = (request.args.get('range') or 'cycle').strip()
+        if range_mode not in ('cycle', 'all'):
+            range_mode = 'cycle'
+        cycle_window = store.get_cycle_window()
+        # If there is no cycle yet, fall back to "all" silently so the page
+        # still shows the full history rather than an empty chart.
+        if not cycle_window.get('has_cycle'):
+            range_mode = 'all'
+        effective_window = cycle_window if range_mode == 'cycle' else None
+        return render_template(
+            'value_chart.html',
+            value_sheet=store.get_value_sheet_view(sheet_type, cycle_window=effective_window),
+            page_title=page_title,
+            page_hint=page_hint,
+            total_label=total_label,
+            marked_hint=marked_hint,
+            marker_class=marker_class,
+            range_mode=range_mode,
+            cycle_window=cycle_window,
+        )
 
     @app.route('/income-chart')
     def income_chart():
         if read_only_mode:
             return redirect(url_for('score_overview'))
-        return render_template(
-            'value_chart.html',
-            value_sheet=store.get_value_sheet_view('income'),
-            page_title=UI_TEXT['income_chart_title'],
-            page_hint=UI_TEXT['income_chart_hint'],
-            total_label=UI_TEXT['chart_total_income'],
-            marked_hint=UI_TEXT['chart_marked_income_hint'],
-            marker_class='income',
+        return _render_value_chart(
+            'income',
+            UI_TEXT['income_chart_title'],
+            UI_TEXT['income_chart_hint'],
+            UI_TEXT['chart_total_income'],
+            UI_TEXT['chart_marked_income_hint'],
+            'income',
         )
 
     @app.route('/expense-chart')
     def expense_chart():
         if read_only_mode:
             return redirect(url_for('score_overview'))
-        return render_template(
-            'value_chart.html',
-            value_sheet=store.get_value_sheet_view('expense'),
-            page_title=UI_TEXT['expense_chart_title'],
-            page_hint=UI_TEXT['expense_chart_hint'],
-            total_label=UI_TEXT['chart_total_expense'],
-            marked_hint=UI_TEXT['chart_marked_expense_hint'],
-            marker_class='expense',
+        return _render_value_chart(
+            'expense',
+            UI_TEXT['expense_chart_title'],
+            UI_TEXT['expense_chart_hint'],
+            UI_TEXT['chart_total_expense'],
+            UI_TEXT['chart_marked_expense_hint'],
+            'expense',
         )
 
     @app.post('/wear/threshold')
@@ -127,13 +151,25 @@ def register_routes(app, store) -> None:
         selected_name = request.args.get('name', '').strip() or 'all'
         if selected_name not in ['all', *member_names]:
             selected_name = 'all'
-        year = request.args.get('year', type=int) or datetime.now().year
-        month = request.args.get('month', type=int) or datetime.now().month
+
+        # Cycle-mode is now the default. We fall back to legacy month-mode only
+        # when no cycle exists yet, so the page stays usable on a fresh install.
+        cycle_id_arg = (request.args.get('cycle') or '').strip()
+        cycle_window = store.get_cycle_window(cycle_id_arg or None)
+        if cycle_window.get('has_cycle'):
+            all_cycles = store.get_all_cycles()
+            calendar_data = store.get_member_profit_calendar_for_cycle(
+                selected_name, cycle_window, all_cycles,
+            )
+        else:
+            year = request.args.get('year', type=int) or datetime.now().year
+            month = request.args.get('month', type=int) or datetime.now().month
+            calendar_data = store.get_member_profit_calendar(selected_name, year, month)
         return render_template(
             'profit_calendar.html',
             members=members,
             selected_name=selected_name,
-            calendar_data=store.get_member_profit_calendar(selected_name, year, month),
+            calendar_data=calendar_data,
         )
 
     register_score_routes(

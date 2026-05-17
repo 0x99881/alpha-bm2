@@ -438,3 +438,37 @@ html[data-theme="dark"] .excel-tab.active {
         font-size: 12px;
     }
 }
+
+.chart-range-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 6px;
+}
+
+.chart-range-btn {
+    padding: 4px 12px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 12px;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.chart-range-btn:hover {
+    color: var(--text);
+    border-color: var(--text);
+}
+
+.chart-range-btn.active {
+    background: var(--brand);
+    color: #fff;
+    border-color: var(--brand);
+}
+
+.chart-range-hint {
+    color: var(--muted);
+    font-size: 12px;
+    margin-left: 6px;
+}

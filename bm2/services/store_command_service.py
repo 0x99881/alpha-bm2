@@ -81,12 +81,6 @@ class StoreCommandService:
                 submission["export_error"] = exc
         return submission
 
-    def create_new_cycle(self, start_date_text: str) -> str:
-        filename = self._context.workbook_repository.create_new_cycle(self._context, start_date_text)
-        self._context.workbook_path = self._context.workbook_repository.workbook_path
-        self.refresh_local_database()
-        return filename
-
     def delete_score_date(self, date_text: str) -> dict[str, int]:
         delete_snapshot = self._delete_score_date_for_export(date_text)
         try:
@@ -111,6 +105,13 @@ class StoreCommandService:
 
     def settle_cycle(self, cycle_id: str, settle_date: str) -> None:
         self._context.cycle_service.settle_cycle(cycle_id, settle_date)
+
+    def settle_and_create_next_cycle(
+        self, cycle_id: str, settle_date: str, end_balances: dict[str, str]
+    ) -> str:
+        return self._context.cycle_service.settle_and_create_next(
+            cycle_id, settle_date, end_balances
+        )
 
     def delete_cycle(self, cycle_id: str) -> None:
         self._context.cycle_service.delete_cycle(cycle_id)

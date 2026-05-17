@@ -122,6 +122,12 @@ class StoreBootstrapService:
         from ..excel.cycle_sheet import regenerate_overview_sheet
 
         def regen(cycles_data: list) -> None:
+            # 1. Refresh the cycle-profit overview tab.
             regenerate_overview_sheet(context.workbook_repository, cycles_data)
+            # 2. Rebuild wear/income/expense with the cycle-block layout so a
+            #    newly-settled cycle becomes visible as a historical block.
+            #    Excel-busy errors propagate so settle_and_create_next can roll
+            #    back DB state and the user can retry with Excel closed.
+            context.excel_exporter.export_missing_dates(context)
 
         return regen

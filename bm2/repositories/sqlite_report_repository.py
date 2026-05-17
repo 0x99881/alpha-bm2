@@ -8,54 +8,39 @@ from ..constants import NAME_HEADER, PROFIT_HEADER, TOTAL_HEADER
 
 class SQLiteReportRepositoryMixin:
     def _cycle_start_date(self) -> datetime.date | None:
-        raw_value = self._get_sync_state("score_cycle_start_date").strip()
-        if not raw_value:
-            return None
-        try:
-            return datetime.strptime(raw_value, "%Y-%m-%d").date()
-        except ValueError:
-            return None
+        """Always None now — the score sheet is cycle-agnostic.
+
+        The old per-cycle-file workflow stored ``score_cycle_start_date`` in
+        ``sync_state`` to clip out previous-cycle dates. With the cycle-block
+        layout the score sheet keeps rolling across cycles and the 15-day
+        red-highlight is enforced by ``recent_numbers`` formatting, not by
+        clipping the data. Returning ``None`` here makes ``get_filtered_*``
+        return all active entries.
+        """
+        return None
 
     def _filtered_score_rows(self) -> list[dict[str, Any]]:
         return self.get_filtered_score_rows()
 
     def get_filtered_score_rows(self) -> list[dict[str, Any]]:
-        """Return active score rows limited to the current cycle (cycle_start onwards)."""
-        cycle_start = self._cycle_start_date()
+        """Return all active score rows (cycle-agnostic)."""
         rows = []
         for row in self.get_score_rows():
             try:
-                score_date = datetime.strptime(str(row["score_date"]).strip(), "%Y-%m-%d").date()
+                datetime.strptime(str(row["score_date"]).strip(), "%Y-%m-%d").date()
             except ValueError:
-                continue
-            if cycle_start is not None and score_date < cycle_start:
                 continue
             rows.append(row)
         return rows
 
     def get_filtered_score_date_notes(self) -> dict[str, list[str]]:
-        cycle_start = self._cycle_start_date()
-        notes = self.get_score_date_notes_map()
-        if cycle_start is None:
-            return notes
-        filtered: dict[str, list[str]] = {}
-        for score_date, values in notes.items():
-            try:
-                parsed_date = datetime.strptime(str(score_date).strip(), "%Y-%m-%d").date()
-            except ValueError:
-                continue
-            if parsed_date >= cycle_start:
-                filtered[score_date] = values
-        return filtered
+        return self.get_score_date_notes_map()
 
     def get_next_score_date(self, default_date: str) -> str:
         rows = self._filtered_score_rows()
         if rows:
             latest = max(datetime.strptime(str(row["score_date"]).strip(), "%Y-%m-%d").date() for row in rows)
             return (latest + timedelta(days=1)).strftime("%Y-%m-%d")
-        cycle_start = self._cycle_start_date()
-        if cycle_start is not None:
-            return cycle_start.strftime("%Y-%m-%d")
         return default_date
 
     def get_score_date_count(self) -> int:

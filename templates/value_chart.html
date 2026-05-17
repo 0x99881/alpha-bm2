@@ -22,6 +22,15 @@
     <div class="section-title">
         <h3>{{ ui.chart_recent_days }}</h3>
         <p>{{ ui.excel_preview_hint }}</p>
+        {% if cycle_window is defined and cycle_window and cycle_window.has_cycle %}
+        <div class="chart-range-switch">
+            <a href="?range=cycle" class="chart-range-btn {% if range_mode == 'cycle' %}active{% endif %}">{{ ui.chart_range_cycle }}</a>
+            <a href="?range=all" class="chart-range-btn {% if range_mode == 'all' %}active{% endif %}">{{ ui.chart_range_all }}</a>
+            {% if range_mode == 'cycle' %}
+            <span class="chart-range-hint">{{ ui.chart_range_window_hint.format(start=cycle_window.start_date, end=cycle_window.end_date) }}</span>
+            {% endif %}
+        </div>
+        {% endif %}
     </div>
     <div class="value-chart-bars">
         {% for item in value_sheet.chart_items %}

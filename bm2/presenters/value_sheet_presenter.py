@@ -1,7 +1,43 @@
 from __future__ import annotations
 
+from datetime import date, datetime
+
 from ..constants import VALUE_SHEET_SPECS
 from ..value_utils import to_float_or_none
+
+
+def _label_to_iso(label, today_iso: str) -> str | None:
+    """Parse a value-sheet column header into an ISO date string, or None.
+
+    Accepts: ``YYYY-MM-DD``, ``MM-DD`` (with current/previous year as needed),
+    ``MMDD`` (4 digits, current year). Returns None for non-date labels like
+    the 名称/合计 columns.
+    """
+    if isinstance(label, (date, datetime)):
+        return label.strftime("%Y-%m-%d") if not isinstance(label, datetime) else label.date().strftime("%Y-%m-%d")
+    text = str(label or "").strip()
+    if not text:
+        return None
+    try:
+        return datetime.strptime(text, "%Y-%m-%d").strftime("%Y-%m-%d")
+    except ValueError:
+        pass
+    try:
+        parsed = datetime.strptime(text, "%m-%d")
+    except ValueError:
+        parsed = None
+    if parsed is None and len(text) == 4 and text.isdigit():
+        try:
+            parsed = datetime.strptime(text, "%m%d")
+        except ValueError:
+            parsed = None
+    if parsed is None:
+        return None
+    year = int(today_iso[:4])
+    candidate = parsed.replace(year=year).strftime("%Y-%m-%d")
+    if candidate > today_iso:
+        candidate = parsed.replace(year=year - 1).strftime("%Y-%m-%d")
+    return candidate
 
 
 class ValueSheetPresenter:
@@ -30,7 +66,20 @@ class ValueSheetPresenter:
             return self.store.format_income_value
         return self.store.format_expense_value
 
-    def build_sheet_view(self, sheet_type: str) -> dict:
+    def build_sheet_view(
+        self,
+        sheet_type: str,
+        *,
+        cycle_window: dict | None = None,
+    ) -> dict:
+        """Build the value-sheet view for the chart pages.
+
+        When ``cycle_window`` is provided (dict with ``start_date`` and
+        ``end_date`` ISO strings), chart bars and the headline total are
+        restricted to columns whose label date falls inside the window. The
+        Excel preview table below the chart is unaffected — it always shows the
+        raw sheet so the user can still spot historical anomalies.
+        """
         spec = VALUE_SHEET_SPECS[sheet_type]
         snapshot = self.store.get_value_sheet_snapshot(sheet_type)
         headers = list(snapshot["headers"])
@@ -80,11 +129,29 @@ class ValueSheetPresenter:
             }
             for col_index, total in date_totals.items()
         ][-15:]
+
+        # Cycle-window filter: keep only columns whose date falls in
+        # [start_date, end_date]. When labels can't be parsed (non-date
+        # columns) they are kept so the chart degrades gracefully.
+        if cycle_window and cycle_window.get("has_cycle"):
+            start = cycle_window.get("start_date") or ""
+            end = cycle_window.get("end_date") or ""
+            today_iso = date.today().strftime("%Y-%m-%d")
+            kept = []
+            for item in chart_items:
+                iso = _label_to_iso(item["label"], today_iso)
+                if iso is None or (start <= iso <= end):
+                    kept.append(item)
+            chart_items = kept
+
         max_chart_value = max((abs(float(item["value"] or 0)) for item in chart_items), default=0.0)
         for item in chart_items:
             item["percent"] = 0 if max_chart_value == 0 else max(6, abs(float(item["value"] or 0)) / max_chart_value * 100)
 
-        total_value = normalizer(sum(date_totals.values()))
+        if cycle_window and cycle_window.get("has_cycle"):
+            total_value = normalizer(sum(float(item["value"] or 0) for item in chart_items))
+        else:
+            total_value = normalizer(sum(date_totals.values()))
         headers.append(self._total_label(sheet_type))
         column_kinds.append("total")
         return {

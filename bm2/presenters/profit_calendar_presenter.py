@@ -1,10 +1,26 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from typing import Any
 
 from ..excel.value_normalizer import normalize_expense, normalize_income, normalize_wear
 from ..profit_calendar_utils import build_calendar_weeks, build_month_label, build_month_neighbors
+
+
+def _iter_year_months(start_iso: str, end_iso: str):
+    """Yield (year, month) tuples for every month spanned by [start, end]."""
+    start = datetime.strptime(start_iso, "%Y-%m-%d").date()
+    end = datetime.strptime(end_iso, "%Y-%m-%d").date()
+    if end < start:
+        return
+    cursor = start.replace(day=1)
+    end_anchor = end.replace(day=1)
+    while cursor <= end_anchor:
+        yield cursor.year, cursor.month
+        if cursor.month == 12:
+            cursor = cursor.replace(year=cursor.year + 1, month=1)
+        else:
+            cursor = cursor.replace(month=cursor.month + 1)
 
 
 class ProfitCalendarPresenter:
@@ -109,6 +125,104 @@ class ProfitCalendarPresenter:
         profit_positive_list, profit_negative_list = self._split_profit_board_rows(board_rows)
         return board_rows, profit_positive_list, profit_negative_list
 
+    def build_member_profit_calendar_for_cycle(
+        self,
+        name: str,
+        cycle_window: dict[str, Any],
+        cycles: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        """Calendar payload scoped to a single cycle window.
+
+        Composes per-month datasets across every calendar month touched by the
+        cycle's [start_date, end_date] window, sums cycle-scope totals, and
+        returns a payload shaped compatibly with the legacy month payload so
+        the template can branch cleanly.
+        """
+        active_members = self.repository.get_active_members()
+        active_names = {item['name'] for item in active_members}
+        stats_allowed = name == 'all' or name in active_names
+
+        start_iso = cycle_window.get('start_date') or ''
+        end_iso = cycle_window.get('end_date') or datetime.now().strftime('%Y-%m-%d')
+
+        # Collect month blocks and aggregate records across the cycle window.
+        month_blocks: list[dict[str, Any]] = []
+        cycle_records: list[dict[str, Any]] = []
+        for year, month in _iter_year_months(start_iso, end_iso):
+            dataset = (
+                self.repository.get_all_members_calendar_dataset(year, month)
+                if name == 'all'
+                else self.repository.get_member_calendar_dataset(name, year, month)
+            )
+            weeks = build_calendar_weeks(
+                year=year,
+                month=month,
+                record_map=dataset['record_map'],
+                max_abs_wear=dataset['max_abs_wear'],
+                note_text=dataset.get('note_text', ''),
+            )
+            month_blocks.append({
+                'year': year,
+                'month': month,
+                'month_label': build_month_label(year, month),
+                'weeks': weeks,
+            })
+            for item in dataset['month_records']:
+                item_date = str(item.get('date') or '')
+                if start_iso <= item_date <= end_iso:
+                    cycle_records.append(item)
+
+        # Cycle-scope totals identical in shape to month totals so the template
+        # can keep the same card structure.
+        cycle_income, cycle_wear, cycle_expense = self._sum_profit_calendar_totals(cycle_records, stats_allowed)
+        active_member_count = self._count_profit_stats_members(
+            name=name, stats_allowed=stats_allowed, active_members=active_members,
+        )
+        data_day_count = len(cycle_records)
+        average_stats = self._build_profit_average_stats(
+            month_income=cycle_income,
+            month_wear=cycle_wear,
+            active_member_count=active_member_count,
+            data_day_count=data_day_count,
+        )
+        board_rows, profit_positive_list, profit_negative_list = (
+            self._build_profit_board_lists(cycle_records, active_members)
+            if name == 'all'
+            else ([], [], [])
+        )
+
+        # Anchor year/month is the first month in the span — kept for backward
+        # compatibility with parts of the template that still reference them
+        # (e.g. modal date prefill).
+        anchor_year = month_blocks[0]['year'] if month_blocks else datetime.now().year
+        anchor_month = month_blocks[0]['month'] if month_blocks else datetime.now().month
+
+        return {
+            'mode': 'cycle',
+            'year': anchor_year,
+            'month': anchor_month,
+            'month_label': month_blocks[0]['month_label'] if month_blocks else '',
+            'month_blocks': month_blocks,
+            'weeks': month_blocks[0]['weeks'] if month_blocks else [],
+            'records': cycle_records,
+            'cycle_start_date': start_iso,
+            'cycle_end_date': end_iso,
+            'cycle_id': cycle_window.get('cycle_id', ''),
+            'is_settled': bool(cycle_window.get('is_settled')),
+            'cycles': list(cycles or []),
+            'month_income_total': cycle_income,
+            'month_wear_total': cycle_wear,
+            'month_expense_total': cycle_expense,
+            'month_profit_total': normalize_income(cycle_income - cycle_wear - cycle_expense),
+            **average_stats,
+            'profit_board_rows': board_rows,
+            'profit_positive_list': profit_positive_list,
+            'profit_negative_list': profit_negative_list,
+            'today': datetime.now().strftime('%Y-%m-%d'),
+            'is_all_members': name == 'all',
+            'stats_allowed': stats_allowed,
+        }
+
     def build_member_profit_calendar(self, name: str, year: int, month: int) -> dict[str, Any]:
         active_members = self.repository.get_active_members()
         active_names = {item['name'] for item in active_members}
@@ -126,7 +240,16 @@ class ProfitCalendarPresenter:
             data_day_count=data_day_count,
         )
         board_rows, profit_positive_list, profit_negative_list = self._build_profit_board_lists(month_records, active_members) if name == 'all' else ([], [], [])
+        # Legacy month mode also exposes a single-element ``month_blocks`` list
+        # so the template can render with one unified loop regardless of mode.
+        month_blocks = [{
+            'year': calendar_data['year'],
+            'month': calendar_data['month'],
+            'month_label': calendar_data['month_label'],
+            'weeks': calendar_data['weeks'],
+        }]
         return {
+            'mode': 'month',
             **calendar_data,
             'month_income_total': month_income,
             'month_wear_total': month_wear,
@@ -139,4 +262,9 @@ class ProfitCalendarPresenter:
             'today': datetime.now().strftime('%Y-%m-%d'),
             'is_all_members': name == 'all',
             'stats_allowed': stats_allowed,
+            'cycles': [],
+            'cycle_id': '',
+            'month_blocks': month_blocks,
+            'cycle_start_date': '',
+            'cycle_end_date': '',
         }

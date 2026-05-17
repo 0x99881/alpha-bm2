@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
+{% set is_cycle_mode = calendar_data.mode == 'cycle' %}
 <section class="calendar-toolbar">
     <form method="get" action="{{ url_for('profit_calendar') }}" class="member-picker-panel">
         <label>
@@ -11,21 +12,32 @@
                 {% endfor %}
             </select>
         </label>
+        {% if is_cycle_mode %}
+        <label>
+            {{ ui.calendar_cycle_label }}
+            <select name="cycle" class="member-select" onchange="this.form.submit()">
+                {% for cycle in calendar_data.cycles %}
+                <option value="{{ cycle.id }}" {% if cycle.id == calendar_data.cycle_id %}selected{% endif %}>{{ cycle.name }}{% if cycle.settled %} ({{ ui.cycle_settled_badge }}){% endif %}</option>
+                {% endfor %}
+            </select>
+        </label>
+        {% else %}
         <input type="hidden" name="year" value="{{ calendar_data.year }}">
         <input type="hidden" name="month" value="{{ calendar_data.month }}">
+        {% endif %}
     </form>
 
     <div class="calendar-stats">
         <div class="profit-stat-card">
-            <span>{{ ui.month_income_total }}</span>
+            <span>{{ ui.cycle_income_total if is_cycle_mode else ui.month_income_total }}</span>
             <strong>{{ calendar_data.month_income_total }}</strong>
         </div>
         <div class="profit-stat-card wear-card">
-            <span>{{ ui.month_wear_total }}</span>
+            <span>{{ ui.cycle_wear_total if is_cycle_mode else ui.month_wear_total }}</span>
             <strong>{{ calendar_data.month_wear_total }}</strong>
         </div>
         <div class="profit-stat-card expense-card">
-            <span>{{ ui.month_expense_total }}</span>
+            <span>{{ ui.cycle_expense_total if is_cycle_mode else ui.month_expense_total }}</span>
             <strong>{{ calendar_data.month_expense_total }}</strong>
         </div>
         {% if calendar_data.is_all_members %}
@@ -51,7 +63,7 @@
         <div
             class="profit-stat-card profit-status-card {% if calendar_data.month_profit_total >= 0 %}profit-positive-card{% else %}profit-negative-card{% endif %}"
             data-profit-card="true"
-            data-default-title="{{ ui.profit_status_month }}"
+            data-default-title="{{ ui.profit_status_cycle if is_cycle_mode else ui.profit_status_month }}"
             data-range-title="{{ ui.profit_status_range }}"
             data-positive-label="{{ ui.profit_positive }}"
             data-negative-label="{{ ui.profit_negative }}"
@@ -60,7 +72,7 @@
             data-default-expense="{{ calendar_data.month_expense_total }}"
             data-stats-allowed="{{ 1 if calendar_data.stats_allowed else 0 }}"
         >
-            <span data-profit-title>{{ ui.profit_status_month }}</span>
+            <span data-profit-title>{{ ui.profit_status_cycle if is_cycle_mode else ui.profit_status_month }}</span>
             <strong data-profit-value>
                 {% if calendar_data.month_profit_total >= 0 %}
                 {{ ui.profit_positive }} +{{ calendar_data.month_profit_total }}
@@ -70,6 +82,9 @@
             </strong>
         </div>
     </div>
+    {% if is_cycle_mode and calendar_data.cycle_start_date %}
+    <p class="calendar-cycle-hint">{{ ui.calendar_cycle_window_hint.format(start=calendar_data.cycle_start_date, end=calendar_data.cycle_end_date) }}</p>
+    {% endif %}
 </section>
 
 <section class="profit-range-panel"
@@ -77,7 +92,7 @@
     data-empty-text="{{ ui.selected_range_empty }}"
     data-range-prefix="{{ ui.selected_range_label }}"
     data-range-separator="{{ ui.range_separator }}"
-    data-month-prefix="{{ "%04d-%02d-"|format(calendar_data.year, calendar_data.month) }}"
+    data-month-prefix="{% if is_cycle_mode %}{% else %}{{ "%04d-%02d-"|format(calendar_data.year, calendar_data.month) }}{% endif %}"
 >
     <div class="profit-range-copy">
         <span class="profit-range-kicker">{{ ui.selected_range_title }}</span>
@@ -114,10 +129,9 @@
 
 <div class="profit-content-row">
 <section class="profit-panel">
+    {% for block in calendar_data.month_blocks %}
     <div class="profit-header">
-        <a class="month-arrow" href="{{ url_for('profit_calendar', name=selected_name, year=calendar_data.prev_year, month=calendar_data.prev_month) }}">&larr;</a>
-        <strong>{{ calendar_data.month_label }}</strong>
-        <a class="month-arrow" href="{{ url_for('profit_calendar', name=selected_name, year=calendar_data.next_year, month=calendar_data.next_month) }}">&rarr;</a>
+        <strong>{{ block.month_label }}</strong>
     </div>
 
     <div class="profit-weekdays">
@@ -130,12 +144,13 @@
         <div>{{ ui.weekday_sat }}</div>
     </div>
 
-    {% for week in calendar_data.weeks %}
+    {% for week in block.weeks %}
     <div class="profit-calendar-grid">
         {% for cell in week %}
+        {% set out_of_cycle = is_cycle_mode and cell.date and (cell.date < calendar_data.cycle_start_date or cell.date > calendar_data.cycle_end_date) %}
         <button
             type="button"
-            class="profit-day {% if not cell.in_month %}other-month{% endif %} {% if cell.date == calendar_data.today %}today{% endif %} {% if cell.wear is not none or cell.income is not none %}has-data{% endif %}"
+            class="profit-day {% if not cell.in_month %}other-month{% endif %} {% if out_of_cycle %}out-of-cycle{% endif %} {% if cell.date == calendar_data.today %}today{% endif %} {% if cell.wear is not none or cell.income is not none %}has-data{% endif %}"
             data-calendar-open="true"
             data-date="{{ cell.date }}"
             data-wear="{% if cell.wear is not none %}{{ cell.wear }}{% endif %}"
@@ -165,6 +180,7 @@
         {% endfor %}
     </div>
     {% endfor %}
+    {% endfor %}
 </section>
 
 {% if calendar_data.is_all_members %}
@@ -182,7 +198,7 @@
         </div>
     </div>
     <div class="profit-board-table-wrap">
-        <div class="profit-board-metric" data-board-profit-header>{{ ui.profit_status_month }}</div>
+        <div class="profit-board-metric" data-board-profit-header>{{ ui.profit_status_cycle if is_cycle_mode else ui.profit_status_month }}</div>
         <div class="profit-board-list" data-board-body>
             {% if calendar_data.profit_board_rows %}
                 {% for row in calendar_data.profit_board_rows | sort(attribute='profit', reverse=true) %}

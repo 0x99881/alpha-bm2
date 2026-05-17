@@ -1,23 +1,16 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
-import logging
+from datetime import datetime
 from pathlib import Path
 import re
 
-from openpyxl import Workbook, load_workbook
+from openpyxl import load_workbook
 
 from ..constants import (
     DATA_FILE_PATTERNS,
-    NAME_HEADER,
-    SCORE_SHEET,
-    TOTAL_HEADER,
-    WINDOW_SIZE,
     WORKBOOK_FILENAME_PREFIX,
 )
 from ..ui_text import MESSAGES
-
-LOGGER = logging.getLogger(__name__)
 
 
 class WorkbookRepository:
@@ -95,57 +88,3 @@ class WorkbookRepository:
             self.save(workbook)
         finally:
             workbook.close()
-
-    def create_new_cycle(self, structure_owner, start_date_text: str) -> str:
-        raw_text = (start_date_text or "").strip()
-        if not raw_text:
-            raise ValueError(MESSAGES["new_cycle_date_required"])
-        try:
-            start_date = datetime.strptime(raw_text, "%Y-%m-%d").date()
-        except ValueError as exc:
-            raise ValueError(MESSAGES["new_cycle_date_invalid"]) from exc
-
-        date_text = start_date.strftime("%Y-%m-%d")
-        new_path = self._base_dir / f"{WORKBOOK_FILENAME_PREFIX}{date_text}.xlsx"
-        counter = 2
-        while new_path.exists():
-            new_path = self._base_dir / f"{WORKBOOK_FILENAME_PREFIX}{date_text}_{counter}.xlsx"
-            counter += 1
-
-        workbook = Workbook()
-        score_sheet = workbook.active
-        score_sheet.title = SCORE_SHEET
-        for column_index in range(1, WINDOW_SIZE + 1):
-            header_date = start_date - timedelta(days=(WINDOW_SIZE - column_index))
-            score_sheet.cell(1, column_index, header_date.strftime("%m-%d"))
-        score_sheet.cell(1, WINDOW_SIZE + 1, TOTAL_HEADER)
-        score_sheet.cell(1, WINDOW_SIZE + 2, NAME_HEADER)
-
-        try:
-            workbook.save(new_path)
-        except PermissionError as exc:
-            raise ValueError(MESSAGES["excel_busy"].format(filename=new_path.name)) from exc
-        except OSError as exc:
-            raise ValueError(MESSAGES["excel_save_failed"].format(filename=new_path.name)) from exc
-        finally:
-            workbook.close()
-
-        previous_path = self.workbook_path
-        self.workbook_path = new_path
-        try:
-            structure_owner.workbook_path = new_path
-            structure_owner.ensure_workbook()
-        except (OSError, ValueError, KeyError, RuntimeError):
-            self.workbook_path = previous_path
-            structure_owner.workbook_path = previous_path
-            try:
-                new_path.unlink()
-            except OSError as cleanup_error:
-                LOGGER.warning("Failed to remove incomplete workbook %s: %s", new_path, cleanup_error)
-            raise
-
-        config = self._config_repository.load()
-        config["excel_filename"] = new_path.name
-        config["default_score_date"] = date_text
-        self._config_repository.save(config)
-        return new_path.name

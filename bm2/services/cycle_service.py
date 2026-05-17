@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from typing import Any, Callable
 
 from ..excel.value_normalizer import normalize_expense, normalize_income, normalize_wear
@@ -46,6 +46,15 @@ class CycleService:
         except ValueError:
             return False
 
+    @staticmethod
+    def _iso_next_day(text: str) -> str:
+        parsed = datetime.strptime(text, "%Y-%m-%d").date()
+        return (parsed + timedelta(days=1)).strftime("%Y-%m-%d")
+
+    @staticmethod
+    def _today_iso() -> str:
+        return date.today().strftime("%Y-%m-%d")
+
     def _resolve_wear(self, row: dict[str, Any]) -> float:
         manual = to_float_or_none(self._text(row.get("manual_wear")))
         if manual is not None:
@@ -59,11 +68,37 @@ class CycleService:
     # ---- mutations ----------------------------------------------------------
 
     def create_cycle(self, start_date: str) -> str:
+        from ..ui_text import MESSAGES
+
         cleaned = self._text(start_date)
         if not self._is_iso_date(cleaned):
-            from ..ui_text import MESSAGES
-
             raise ValueError(MESSAGES["cycle_start_date_required"])
+
+        # Only one open cycle at a time. Without this guard a stray double-
+        # click or stale browser tab can quietly create a duplicate cycle that
+        # shares a start date with the existing one, which then makes every
+        # downstream view (charts, calendar, settle dialog) ambiguous.
+        existing_unsettled = [
+            c for c in self._local_db.get_settlement_cycles()
+            if not int(c.get("settled", 0) or 0)
+        ]
+        if existing_unsettled:
+            raise ValueError(MESSAGES["cycle_unsettled_exists"])
+
+        # Chronological ordering: the new cycle must start strictly after the
+        # most recently settled cycle. Anything else creates overlapping
+        # windows that produce nonsense per-cycle aggregations.
+        all_cycles = self._local_db.get_settlement_cycles()
+        if all_cycles:
+            latest_end = max(
+                (self._text(c.get("settle_date")) or self._text(c.get("start_date")))
+                for c in all_cycles
+            )
+            if cleaned <= latest_end:
+                raise ValueError(
+                    MESSAGES["cycle_start_must_be_after"].format(date=latest_end)
+                )
+
         cycle_id = self._local_db.create_settlement_cycle(cleaned)
         self._notify_change(cycle_id)
         return cycle_id
@@ -126,6 +161,203 @@ class CycleService:
             remaining = self._build_cycles_data(exclude_cycle_id=cleaned_cycle)
             self._on_overview_regen(remaining)
         self._local_db.delete_settlement_cycle(cleaned_cycle)
+
+    # ---- current-cycle window helpers --------------------------------------
+
+    def get_current_cycle(self) -> dict[str, Any] | None:
+        """Latest un-settled cycle; if every cycle is settled, the most recent."""
+        cycles = self._local_db.get_settlement_cycles()
+        if not cycles:
+            return None
+        ordered = sorted(
+            cycles,
+            key=lambda c: self._text(c.get("start_date")) or self._text(c.get("created_at")),
+        )
+        for cycle in reversed(ordered):
+            if not int(cycle.get("settled", 0) or 0):
+                return cycle
+        return ordered[-1]
+
+    def get_window(self, cycle_id: str | None = None) -> dict[str, Any]:
+        """Return the date window for a cycle (or the current cycle).
+
+        Returns dict with: cycle_id, start_date, end_date, is_settled, has_cycle.
+        end_date is settle_date if settled, else today (ISO).
+        """
+        cycle = None
+        if cycle_id:
+            cycle = self._local_db.get_settlement_cycle(self._text(cycle_id))
+        if cycle is None:
+            cycle = self.get_current_cycle()
+        if cycle is None:
+            return {
+                "has_cycle": False,
+                "cycle_id": "",
+                "start_date": "",
+                "end_date": "",
+                "is_settled": False,
+            }
+        start = self._text(cycle.get("start_date"))
+        is_settled = bool(int(cycle.get("settled", 0) or 0))
+        settle = self._text(cycle.get("settle_date"))
+        end = settle if (is_settled and settle) else self._today_iso()
+        return {
+            "has_cycle": True,
+            "cycle_id": self._text(cycle.get("id")),
+            "start_date": start,
+            "end_date": end,
+            "is_settled": is_settled,
+        }
+
+    def get_current_cycle_wear_summary(self) -> dict[str, Any]:
+        """Wear total / per-member-avg for the current cycle window.
+
+        Used by the 磨损 page summary cards. Counts only members who have any
+        wear entry within the window when computing the average, so an inactive
+        member with no rows doesn't dilute the figure.
+        """
+        window = self.get_window()
+        if not window["has_cycle"]:
+            return {
+                "has_cycle": False,
+                "cycle_name": "",
+                "start_date": "",
+                "end_date": "",
+                "total_wear": 0.0,
+                "member_count": 0,
+                "avg_wear_per_member": 0.0,
+            }
+        start = window["start_date"]
+        end = window["end_date"]
+        cycle = self._local_db.get_settlement_cycle(window["cycle_id"]) or {}
+        cycle_name = self._text(cycle.get("name"))
+
+        wear_by_member: dict[str, float] = {}
+        for row in self._local_db.get_score_rows():
+            date_text = self._text(row.get("score_date"))
+            if not (start <= date_text <= end):
+                continue
+            name = self._text(row.get("member_name"))
+            if not name:
+                continue
+            wear_by_member[name] = wear_by_member.get(name, 0.0) + self._resolve_wear(row)
+
+        total = normalize_wear(sum(wear_by_member.values()))
+        contributing = sum(1 for value in wear_by_member.values() if value)
+        avg = normalize_wear(total / contributing) if contributing else 0.0
+        return {
+            "has_cycle": True,
+            "cycle_name": cycle_name,
+            "start_date": start,
+            "end_date": end,
+            "total_wear": total,
+            "member_count": contributing,
+            "avg_wear_per_member": avg,
+        }
+
+    # ---- atomic settle + new-cycle composite ------------------------------
+
+    def settle_and_create_next(
+        self,
+        cycle_id: str,
+        settle_date: str,
+        end_balances: dict[str, str],
+    ) -> str:
+        """Settle the given cycle and create the next cycle starting settle_date+1.
+
+        Atomic: if the Excel overview regen fails, all DB mutations are rolled
+        back so the user can retry once Excel is closed.
+
+        ``end_balances`` is a mapping of member_name -> end_balance string. Only
+        present members will be persisted; missing names keep their prior value.
+        """
+        from ..ui_text import MESSAGES
+
+        cleaned_cycle = self._text(cycle_id)
+        cleaned_settle = self._text(settle_date)
+        cycle = self._local_db.get_settlement_cycle(cleaned_cycle)
+        if cycle is None:
+            raise ValueError(MESSAGES["cycle_not_found"])
+        if int(cycle.get("settled", 0) or 0):
+            raise ValueError(MESSAGES["cycle_already_settled"])
+        if not self._is_iso_date(cleaned_settle):
+            raise ValueError(MESSAGES["cycle_settle_date_required"])
+        start_date = self._text(cycle.get("start_date"))
+        if start_date and cleaned_settle < start_date:
+            raise ValueError(MESSAGES["cycle_settle_before_start"])
+        next_start = self._iso_next_day(cleaned_settle)
+
+        # Snapshot end_balances for rollback (start_balance is not touched).
+        prior_entries = self._local_db.get_settlement_entries(cleaned_cycle)
+        prior_end_balances = {
+            name: self._text(entry.get("end_balance"))
+            for name, entry in prior_entries.items()
+        }
+
+        # Reuse save_settlement by synthesising a form_data dict with only the
+        # end_balance keys present. This respects the partial-update semantics
+        # already implemented in save_settlement.
+        synthetic_form: dict[str, str] = {}
+        for name, value in (end_balances or {}).items():
+            clean_name = self._text(name)
+            if not clean_name:
+                continue
+            synthetic_form[f"end_balance_{clean_name}"] = self._text(value)
+
+        # ---- apply DB mutations -----
+        applied_end_balances = bool(synthetic_form)
+        new_cycle_id: str | None = None
+        try:
+            if applied_end_balances:
+                # save_settlement also calls _notify_change which regens Excel;
+                # suppress that here so we can do a single regen at the end.
+                self._save_settlement_no_notify(cleaned_cycle, synthetic_form)
+            self._local_db.settle_settlement_cycle(cleaned_cycle, cleaned_settle)
+            new_cycle_id = self._local_db.create_settlement_cycle(next_start)
+            # ---- Excel regen (the only operation that can plausibly fail) ----
+            if self._on_overview_regen is not None:
+                self._on_overview_regen(self._build_cycles_data())
+        except Exception:
+            # Roll back in reverse order. Each repo call is best-effort.
+            if new_cycle_id is not None:
+                self._local_db.delete_settlement_cycle(new_cycle_id)
+            self._local_db.unsettle_settlement_cycle(cleaned_cycle)
+            if applied_end_balances:
+                self._restore_end_balances(cleaned_cycle, prior_end_balances)
+            raise
+        return new_cycle_id or ""
+
+    def _save_settlement_no_notify(self, cycle_id: str, form_data: Any) -> None:
+        """Same as save_settlement but without the overview regen side effect."""
+        existing = self._local_db.get_settlement_entries(cycle_id)
+        active_names = [self._text(m["name"]) for m in self._get_active_members()]
+        names_to_save = list(active_names) + [
+            name for name in existing.keys() if name not in active_names
+        ]
+        entries = []
+        for name in names_to_save:
+            prior = existing.get(name, {})
+            entry = {
+                "member_name": name,
+                "start_balance": self._text(prior.get("start_balance", "")),
+                "end_balance": self._text(prior.get("end_balance", "")),
+            }
+            start_key = f"start_balance_{name}"
+            end_key = f"end_balance_{name}"
+            if start_key in form_data:
+                entry["start_balance"] = self._text(form_data.get(start_key, ""))
+            if end_key in form_data:
+                entry["end_balance"] = self._text(form_data.get(end_key, ""))
+            entries.append(entry)
+        self._local_db.save_settlement_entries(cycle_id, entries)
+
+    def _restore_end_balances(
+        self, cycle_id: str, prior_end_balances: dict[str, str]
+    ) -> None:
+        synthetic: dict[str, str] = {}
+        for name, value in prior_end_balances.items():
+            synthetic[f"end_balance_{name}"] = value
+        self._save_settlement_no_notify(cycle_id, synthetic)
 
     def add_extra_member(self, cycle_id: str, member_name: str) -> None:
         cleaned_cycle = self._text(cycle_id)
@@ -286,8 +518,11 @@ class CycleService:
                 "selected_cycle": None,
                 "has_cycle": False,
                 "is_settled": False,
+                "is_latest_cycle": False,
                 "start_date": "",
                 "settle_date": "",
+                "settle_date_default": "",
+                "next_start_date_default": self._today_iso(),
                 "redpacket_dates": [],
                 "rows": [],
                 "totals": {
@@ -350,13 +585,48 @@ class CycleService:
                 total_profit_delta += member_row["profit_delta"]
 
         redpacket_dates = sorted(all_dates)
+
+        # Whether the viewed cycle is the most recent one (drives whether the
+        # "open next cycle" controls appear on this page view). Tiebreak by
+        # created_at then id so duplicate-start-date cycles don't cause the
+        # ordering to flip-flop between renders.
+        ordered_cycle_ids = [
+            c["id"]
+            for c in sorted(
+                cycles,
+                key=lambda c: (
+                    self._text(c.get("start_date")) or self._text(c.get("created_at")),
+                    self._text(c.get("created_at")),
+                    self._text(c.get("id")),
+                ),
+            )
+        ]
+        is_latest_cycle = bool(ordered_cycle_ids) and (
+            selected_cycle["id"] == ordered_cycle_ids[-1]
+        )
+
+        # Default new-cycle start_date when the viewed cycle is settled and
+        # latest: settle_date + 1. Used to prefill the inline create form.
+        next_start_date_default = ""
+        if is_latest_cycle and is_settled and settle_date:
+            try:
+                next_start_date_default = self._iso_next_day(settle_date)
+            except ValueError:
+                next_start_date_default = ""
+
+        # Default settle_date for the unsettled-latest dialog: today.
+        settle_date_default = self._today_iso() if is_latest_cycle and not is_settled else ""
+
         return {
             "cycles": cycles,
             "selected_cycle": selected_cycle,
             "has_cycle": True,
             "is_settled": is_settled,
+            "is_latest_cycle": is_latest_cycle,
             "start_date": start_date,
             "settle_date": settle_date,
+            "settle_date_default": settle_date_default,
+            "next_start_date_default": next_start_date_default,
             "redpacket_dates": redpacket_dates,
             "rows": rows,
             "totals": {

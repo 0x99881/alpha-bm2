@@ -89,17 +89,31 @@ class ExcelWorkbookReader:
         handler = getattr(self._store, f"{sheet_type}_sheet")
         workbook = self._store.workbook_repository.open()
         try:
-            handler.ensure_structure(workbook)
             sheet = handler.sheet(workbook)
             headers = [sheet.cell(1, col).value for col in range(1, sheet.max_column + 1)]
             name_col = find_column(sheet, spec["name_header"])
             raw_rows = []
+            # The cycle-block layout puts the active block on rows 2..M and any
+            # historical cycles below as self-contained sub-tables (preceded
+            # by banner rows, with their own header / 周期合计 / 周期平均
+            # markers in name_col). Only the active block belongs in the
+            # chart/preview snapshot — historical blocks reference different
+            # date columns that wouldn't align with row 1's headers.
+            from .cycle_block_sheets import CYCLE_AVG_LABEL, CYCLE_BANNER_PREFIX, CYCLE_TOTAL_LABEL, WEAR_DAILY_AVG_LABEL
+            block_terminators = {CYCLE_TOTAL_LABEL, CYCLE_AVG_LABEL, WEAR_DAILY_AVG_LABEL}
             for row in range(2, sheet.max_row + 1):
                 if bool(sheet.row_dimensions[row].hidden):
                     continue
+                first_cell = str(sheet.cell(row, 1).value or "").strip()
+                if first_cell.startswith(CYCLE_BANNER_PREFIX):
+                    break  # entered historical territory
                 values = [sheet.cell(row, col).value for col in range(1, sheet.max_column + 1)]
-                if name_col is not None and not str(values[name_col - 1] or "").strip():
-                    continue
+                if name_col is not None:
+                    name_value = str(values[name_col - 1] or "").strip()
+                    if not name_value:
+                        continue
+                    if name_value in block_terminators:
+                        break
                 raw_rows.append(values)
             value_col_indices = [col - 1 for _, col in handler.columns(sheet)]
             return {
@@ -111,21 +125,52 @@ class ExcelWorkbookReader:
             workbook.close()
 
     def _build_member_record_map(self, name: str, year: int, month: int, workbook=None) -> dict[str, dict[str, Any]]:
-        wear_records = self.get_member_wear_records(name, year_hint=year, workbook=workbook)
-        income_records = self.get_member_income_records(name, year_hint=year, workbook=workbook)
-        expense_records = self.get_member_expense_records(name, year_hint=year, workbook=workbook)
-        merged_map: dict[str, dict[str, Any]] = {}
-        for item in wear_records:
-            merged_map.setdefault(item['date'], empty_member_day_record(item['date']))
-            merged_map[item['date']]['wear'] = item['wear']
-        for item in income_records:
-            merged_map.setdefault(item['date'], empty_member_day_record(item['date']))
-            merged_map[item['date']]['income'] = item['income']
-        for item in expense_records:
-            merged_map.setdefault(item['date'], empty_member_day_record(item['date']))
-            merged_map[item['date']]['expense'] = item['expense']
+        """Per-month wear / income / expense map straight from SQLite.
+
+        Previously this aggregated Excel sheets. With the cycle-block sheet
+        layout, a member appears in multiple rows (one per cycle), so reading
+        from Excel cleanly is awkward. The DB is the source of truth and has
+        every entry indexed by date, so we ask it directly.
+        """
+        local_db = getattr(self._store, 'local_db', None)
         month_prefix = f'{year:04d}-{month:02d}-'
-        return {key: value for key, value in merged_map.items() if key.startswith(month_prefix)}
+        if local_db is None:
+            return {}
+
+        from ..value_utils import to_float_or_none
+        from ..domain.rules.daily_entry import resolve_wear_value, IncompleteBalanceInput
+        from .value_normalizer import normalize_expense, normalize_income, normalize_wear, parse_decimal
+
+        merged_map: dict[str, dict[str, Any]] = {}
+        for row in local_db.get_score_rows():
+            row_name = str(row.get('member_name', '') or '').strip()
+            if row_name != name:
+                continue
+            date_text = str(row.get('score_date', '') or '').strip()
+            if not date_text.startswith(month_prefix):
+                continue
+            entry = merged_map.setdefault(date_text, empty_member_day_record(date_text))
+            income = to_float_or_none(str(row.get('income', '') or '').strip())
+            expense = to_float_or_none(str(row.get('other_expense', '') or '').strip())
+            try:
+                wear = resolve_wear_value(
+                    before_text=str(row.get('before_balance', '') or '').strip(),
+                    after_text=str(row.get('after_balance', '') or '').strip(),
+                    manual_wear_text=str(row.get('manual_wear', '') or '').strip(),
+                    parse_decimal=parse_decimal,
+                    manual_field='manual_wear',
+                    before_field='before',
+                    after_field='after',
+                )
+            except (IncompleteBalanceInput, ValueError):
+                wear = None
+            if income is not None:
+                entry['income'] = normalize_income(income)
+            if expense is not None:
+                entry['expense'] = normalize_expense(expense)
+            if wear is not None:
+                entry['wear'] = normalize_wear(wear)
+        return merged_map
 
     def get_member_calendar_dataset(self, name: str, year: int, month: int, workbook=None) -> dict[str, Any]:
         month_record_map = self._build_member_record_map(name, year, month, workbook=workbook)

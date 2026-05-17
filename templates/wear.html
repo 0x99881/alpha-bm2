@@ -32,6 +32,18 @@
             <span>{{ ui.wear_avg_daily }}</span>
             <strong>{{ wear_sheet.avg_daily_wear }}</strong>
         </div>
+        {% if not read_only_mode and cycle_wear %}
+        <div class="stat-card wear-cycle-card">
+            <span>{{ ui.wear_cycle_total }}</span>
+            <strong>{% if cycle_wear.has_cycle %}{{ cycle_wear.total_wear }}{% else %}—{% endif %}</strong>
+            <small>{% if cycle_wear.has_cycle %}{{ ui.wear_cycle_range_hint.format(start=cycle_wear.start_date, end=cycle_wear.end_date) }}{% else %}{{ ui.wear_cycle_no_cycle }}{% endif %}</small>
+        </div>
+        <div class="stat-card wear-cycle-card">
+            <span>{{ ui.wear_cycle_avg }}</span>
+            <strong>{% if cycle_wear.has_cycle and cycle_wear.member_count %}{{ cycle_wear.avg_wear_per_member }}{% else %}—{% endif %}</strong>
+            <small>{% if cycle_wear.has_cycle and cycle_wear.member_count %}{{ cycle_wear.member_count }} 人有磨损{% else %}{{ ui.wear_cycle_no_cycle }}{% endif %}</small>
+        </div>
+        {% endif %}
     </div>
 </section>
 

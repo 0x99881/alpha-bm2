@@ -38,9 +38,10 @@ class ExcelImportService:
         score_rows = self._known_member_score_rows(score_rows)
         self._local_database.replace_score_entries_from_snapshot(score_rows)
         self._sync_score_date_notes(date_notes)
-        cycle_start = self._score_rows_cycle_start(score_rows) or self._workbook_cycle_start()
-        if cycle_start:
-            self._local_database.set_sync_state("score_cycle_start_date", cycle_start)
+        # ``score_cycle_start_date`` sync_state was the per-cycle-file marker
+        # from the old workflow; the rolling-window filter now derives the
+        # boundary directly from score entries so we deliberately stop
+        # writing it back to keep the two sources in sync.
 
     def _seed_members_if_empty(self) -> None:
         if self._local_database.get_member_rows(include_deleted=True):
@@ -221,7 +222,6 @@ class ExcelImportService:
     def _read_value_sheet_fields(self, workbook, sheet_type: str) -> dict[tuple[str, str], str]:
         helpers = self._excel_store.value_sheet_helpers_for(sheet_type)
         sheet = helpers.sheet_getter(workbook)
-        helpers.ensure_structure(workbook)
         spec = get_value_sheet_spec(sheet_type)
         name_col = find_column(sheet, spec["name_header"])
         if name_col is None:
@@ -232,11 +232,27 @@ class ExcelImportService:
             "income": normalize_income,
             "expense": normalize_expense,
         }[sheet_type]
+        # Refresh-from-Excel only mirrors what the user can sensibly edit:
+        # the active cycle's table on row 2..K. Historical cycle blocks below
+        # are read-only outputs whose columns don't align with row 1's date
+        # headers, so we stop scanning at the first block boundary.
+        from ..excel.cycle_block_sheets import (
+            CYCLE_AVG_LABEL,
+            CYCLE_BANNER_PREFIX,
+            CYCLE_TOTAL_LABEL,
+            WEAR_DAILY_AVG_LABEL,
+        )
+        block_terminators = {CYCLE_TOTAL_LABEL, CYCLE_AVG_LABEL, WEAR_DAILY_AVG_LABEL}
         values: dict[tuple[str, str], str] = {}
         for row_index in range(DATA_START_ROW, sheet.max_row + 1):
+            first_cell = str(sheet.cell(row_index, 1).value or "").strip()
+            if first_cell.startswith(CYCLE_BANNER_PREFIX):
+                break
             member_name = str(sheet.cell(row_index, name_col).value or "").strip()
             if not member_name:
                 continue
+            if member_name in block_terminators:
+                break
             for col, score_date in date_by_col.items():
                 raw_value = sheet.cell(row_index, col).value
                 if raw_value in (None, ""):

@@ -113,11 +113,21 @@ class StoreQueryService:
     def get_wear_sheet_view(self):
         return self._context.wear_presenter.build_wear_sheet_view()
 
-    def get_value_sheet_view(self, sheet_type: str):
-        return self._context.value_sheet_presenter.build_sheet_view(sheet_type)
+    def get_value_sheet_view(self, sheet_type: str, *, cycle_window=None):
+        return self._context.value_sheet_presenter.build_sheet_view(
+            sheet_type, cycle_window=cycle_window
+        )
 
     def get_member_profit_calendar(self, name: str, year: int, month: int):
         return self._context.profit_calendar_presenter.build_member_profit_calendar(name=name, year=year, month=month)
+
+    def get_member_profit_calendar_for_cycle(self, name: str, cycle_window: dict, cycles: list):
+        return self._context.profit_calendar_presenter.build_member_profit_calendar_for_cycle(
+            name=name, cycle_window=cycle_window, cycles=cycles,
+        )
+
+    def get_all_cycles(self) -> list[dict]:
+        return self._context.local_db.get_settlement_cycles()
 
     def get_cycle_profit_view(self, cycle_id: str | None = None):
         return self._context.cycle_profit_presenter.build_cycle_profit_view(cycle_id)

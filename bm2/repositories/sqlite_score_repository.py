@@ -61,23 +61,40 @@ class SQLiteScoreEntryRepositoryMixin:
         )
         if existing_has_balance and not snapshot_has_balance:
             manual_wear = self._entry_text(existing or {}, "manual_wear")
-        else:
+        elif "manual_wear" in item:
             manual_wear = self._preserve_numeric_text(
                 (existing or {}).get("manual_wear", ""),
                 self._default_zero_wear_text(item),
             )
+        else:
+            # Reader didn't surface this date's wear (e.g. it lives in a
+            # historical cycle block that the active-block-only reader
+            # doesn't scan). Preserve whatever the DB already has so refresh
+            # doesn't silently zero out historical entries.
+            manual_wear = self._entry_text(existing or {}, "manual_wear")
+
+        if "income" in item:
+            income = self._preserve_numeric_text(
+                (existing or {}).get("income", ""),
+                self._default_zero_entry_text(item, "income"),
+            )
+        else:
+            income = self._entry_text(existing or {}, "income")
+
+        if "other_expense" in item:
+            other_expense = self._preserve_numeric_text(
+                (existing or {}).get("other_expense", ""),
+                self._default_zero_entry_text(item, "other_expense"),
+            )
+        else:
+            other_expense = self._entry_text(existing or {}, "other_expense")
+
         return {
             "before_balance": before_balance,
             "after_balance": after_balance,
             "manual_wear": manual_wear,
-            "income": self._preserve_numeric_text(
-                (existing or {}).get("income", ""),
-                self._default_zero_entry_text(item, "income"),
-            ),
-            "other_expense": self._preserve_numeric_text(
-                (existing or {}).get("other_expense", ""),
-                self._default_zero_entry_text(item, "other_expense"),
-            ),
+            "income": income,
+            "other_expense": other_expense,
             "profit": (
                 self._entry_text(item, "profit")
                 if "profit" in item

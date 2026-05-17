@@ -204,16 +204,3 @@ def register_score_routes(
             flash(MESSAGES["excel_refresh_unchanged"], "success")
         return redirect(url_for("score_entry"))
 
-    @app.post("/cycles/new")
-    def create_new_cycle():
-        if read_only_mode:
-            abort(403)
-        date_text = request.form.get("start_date", "").strip()
-        try:
-            new_filename = store.create_new_cycle(date_text)
-            flash(MESSAGES["new_cycle_created"].format(filename=new_filename), "success")
-            flash_remote_sync_needed()
-            return redirect(url_for("score_entry", date=date_text))
-        except ValueError as exc:
-            flash(str(exc), "error")
-        return _render_score_entry(selected_date=date_text or store.get_next_score_date())

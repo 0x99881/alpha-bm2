@@ -65,6 +65,40 @@ def register_cycle_routes(app, store, *, read_only_mode: bool) -> None:
             return redirect(url_for("cycle_profit", cycle=cycle_id))
         return redirect(url_for("cycle_profit"))
 
+    @app.post("/cycle-profit/settle-and-create-next")
+    def settle_and_create_next_cycle():
+        """Settle current cycle and open next one atomically.
+
+        end_balance_<name> form fields are picked up and persisted before
+        settlement. On Excel failure all DB changes are rolled back.
+        """
+        if read_only_mode:
+            abort(403)
+        cycle_id = request.form.get("cycle_id", "").strip()
+        settle_date = request.form.get("settle_date", "").strip()
+        end_balances: dict[str, str] = {}
+        for key, value in request.form.items():
+            if key.startswith("end_balance_"):
+                end_balances[key[len("end_balance_"):]] = value
+        try:
+            new_cycle_id = store.settle_and_create_next_cycle(
+                cycle_id, settle_date, end_balances
+            )
+            window = store.get_cycle_window(new_cycle_id)
+            flash(
+                MESSAGES["cycle_settle_and_create_next_done"].format(
+                    start_date=window.get("start_date", "")
+                ),
+                "success",
+            )
+            if new_cycle_id:
+                return redirect(url_for("cycle_profit", cycle=new_cycle_id))
+        except (ValueError, OSError) as exc:
+            _flash_action_error(exc)
+        if cycle_id:
+            return redirect(url_for("cycle_profit", cycle=cycle_id))
+        return redirect(url_for("cycle_profit"))
+
     @app.post("/cycle-profit/delete")
     def delete_cycle_profit():
         if read_only_mode:

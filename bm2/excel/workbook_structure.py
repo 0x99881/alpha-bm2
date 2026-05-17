@@ -71,9 +71,14 @@ class StoreStructureMixin:
         try:
             changed = self._ensure_meta_sheets(workbook) or changed
             changed = self._ensure_score_sheet_structure(workbook) or changed
-            changed = self._ensure_wear_sheet_structure(workbook) or changed
-            changed = self._ensure_income_sheet_structure(workbook) or changed
-            changed = self._ensure_expense_sheet_structure(workbook) or changed
+            # Value sheets (wear/income/expense) are now driven by the cycle-
+            # block writer (``rewrite_value_sheet_with_blocks``) rather than
+            # by the legacy per-sheet ensure_structure flow. Skipping these
+            # avoids clobbering historical blocks on every boot. The block
+            # writer runs from ``_sync_cycle_overview_on_startup`` and on
+            # every export. For fresh workbooks with no cycle, the sheet
+            # itself is lazily created by ``sheet_getter`` when first
+            # accessed — no structural cleanup needed up-front.
             if PROFIT_SHEET in workbook.sheetnames:
                 workbook.remove(workbook[PROFIT_SHEET])
                 changed = True
@@ -87,9 +92,12 @@ class StoreStructureMixin:
     def _sync_member_visibility_in_workbook(self, workbook) -> bool:
         changed = False
         self._ensure_score_sheet_structure(workbook)
-        self._ensure_wear_sheet_structure(workbook)
-        self._ensure_income_sheet_structure(workbook)
-        self._ensure_expense_sheet_structure(workbook)
+        # ``ensure_*_sheet_structure`` for value sheets is intentionally
+        # skipped here: under the cycle-block layout the active block already
+        # has name_col on row 1, and rerunning ensure_structure would
+        # re-introduce legacy 2D dedupe and corrupt historical blocks. We
+        # still rely on find_column below, which only inspects row 1 — that's
+        # always the active block's header.
 
         score_sheet = self._score_sheet(workbook)
         wear_sheet = self._wear_sheet(workbook)
