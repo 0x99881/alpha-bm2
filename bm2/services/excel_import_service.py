@@ -269,6 +269,14 @@ class ExcelImportService:
                 row[field_name] = value
 
     def _workbook_cycle_start(self) -> str:
+        """Year-hint for score-sheet MMDD header parsing.
+
+        Returns the ISO date embedded in the workbook filename (e.g.
+        ``BM2记录_2026-04-24.xlsx`` -> ``2026-04-24``), or empty string if
+        the filename doesn't follow the convention. Used only as a year
+        hint when refreshing the score sheet — the cycle-block layout for
+        wear/income/expense gets its year from each block's banner instead.
+        """
         stem = self._excel_store.workbook_path.stem
         if stem.startswith(WORKBOOK_FILENAME_PREFIX):
             suffix = stem[len(WORKBOOK_FILENAME_PREFIX):]
@@ -278,16 +286,3 @@ class ExcelImportService:
             except ValueError:
                 return ""
         return ""
-
-    @staticmethod
-    def _score_rows_cycle_start(rows: list[dict[str, object]]) -> str:
-        dates = []
-        for row in rows:
-            raw_date = str(row.get("score_date", "")).strip()
-            if not raw_date:
-                continue
-            try:
-                dates.append(datetime.strptime(raw_date, "%Y-%m-%d").date())
-            except ValueError:
-                continue
-        return min(dates).strftime("%Y-%m-%d") if dates else ""

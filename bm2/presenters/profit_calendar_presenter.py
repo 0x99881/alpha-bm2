@@ -8,9 +8,17 @@ from ..profit_calendar_utils import build_calendar_weeks, build_month_label, bui
 
 
 def _iter_year_months(start_iso: str, end_iso: str):
-    """Yield (year, month) tuples for every month spanned by [start, end]."""
-    start = datetime.strptime(start_iso, "%Y-%m-%d").date()
-    end = datetime.strptime(end_iso, "%Y-%m-%d").date()
+    """Yield (year, month) tuples for every month spanned by [start, end].
+
+    Yields nothing when either bound is empty or unparseable so callers
+    can pass cycle-window dicts without pre-checking; this matters for
+    the empty-cycle fallback path where ``start_date`` may be ``""``.
+    """
+    try:
+        start = datetime.strptime(start_iso, "%Y-%m-%d").date()
+        end = datetime.strptime(end_iso, "%Y-%m-%d").date()
+    except ValueError:
+        return
     if end < start:
         return
     cursor = start.replace(day=1)
