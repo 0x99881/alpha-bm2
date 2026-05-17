@@ -32,7 +32,7 @@
             <span>{{ ui.wear_avg_daily }}</span>
             <strong>{{ wear_sheet.avg_daily_wear }}</strong>
         </div>
-        {% if not read_only_mode and cycle_wear %}
+        {% if cycle_wear %}
         <div class="stat-card wear-cycle-card">
             <span>{{ ui.wear_cycle_total }}</span>
             <strong>{% if cycle_wear.has_cycle %}{{ cycle_wear.total_wear }}{% else %}—{% endif %}</strong>

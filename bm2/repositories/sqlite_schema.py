@@ -65,7 +65,9 @@ class SQLiteSchemaMixin:
                     settled INTEGER NOT NULL DEFAULT 0,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
-                    deleted INTEGER NOT NULL DEFAULT 0
+                    version INTEGER NOT NULL DEFAULT 1,
+                    deleted INTEGER NOT NULL DEFAULT 0,
+                    source TEXT NOT NULL DEFAULT 'local'
                 );
 
                 CREATE TABLE IF NOT EXISTS settlement_entries (
@@ -124,6 +126,8 @@ class SQLiteSchemaMixin:
                 ("start_date", "TEXT NOT NULL DEFAULT ''"),
                 ("settle_date", "TEXT NOT NULL DEFAULT ''"),
                 ("settled", "INTEGER NOT NULL DEFAULT 0"),
+                ("version", "INTEGER NOT NULL DEFAULT 1"),
+                ("source", "TEXT NOT NULL DEFAULT 'local'"),
             ):
                 if column_name not in existing_cycle_columns:
                     connection.execute(

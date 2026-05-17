@@ -37,6 +37,32 @@ class ApplicationService:
             raise RuntimeError("\u7ebf\u4e0a\u6570\u636e\u5e93\u672a\u914d\u7f6e\uff0c\u4e0d\u80fd\u8bfb\u53d6\u7ebf\u4e0a\u79ef\u5206\u6570\u636e\u3002")
         return self._supabase_client.pull_score_entries()
 
+    def _online_current_cycle(self) -> dict | None:
+        """Return the current cycle for online consumers, or ``None`` when
+        the Supabase project hasn't seen any cycle yet.
+
+        "Current" mirrors the local rule (``CycleService.get_current_cycle``):
+        prefer the latest unsettled cycle; if every cycle is settled, take
+        the most recent settled one. Sorting is by ``start_date`` to stay
+        stable across machines whose ``created_at`` clocks may drift.
+
+        Missing-table is treated as "no cycle" rather than an error so the
+        view still renders when the Supabase project hasn't run the
+        cycle-table migration yet.
+        """
+        try:
+            rows = self._supabase_client.pull_settlement_cycles()
+        except Exception:  # noqa: BLE001 - pull already retries; failing here is non-fatal
+            return None
+        live = [row for row in rows if int(row.get("deleted", 0) or 0) == 0]
+        if not live:
+            return None
+        live.sort(key=lambda c: str(c.get("start_date") or c.get("created_at") or ""))
+        for cycle in reversed(live):
+            if not int(cycle.get("settled", 0) or 0):
+                return cycle
+        return live[-1]
+
     def _active_members_from_rows(self, member_rows: list[dict]) -> list[dict[str, str]]:
         rows = [
             row
@@ -142,8 +168,50 @@ class ApplicationService:
         return self._active_members_from_rows(self._online_member_rows())
 
     def _online_window_dates(self, score_rows: list[dict]) -> list[str]:
+        """15-day rolling window used by the score sheet/summary.
+
+        Score continuity is intentional across cycle boundaries — the
+        user has been explicit that the score table must keep rolling
+        and not reset on cycle switch."""
         latest = self._latest_score_date(score_rows) or datetime.now().date()
         return [(latest - timedelta(days=offset)).strftime("%Y-%m-%d") for offset in range(14, -1, -1)]
+
+    def _online_cycle_window_dates(self, score_rows: list[dict]) -> list[str]:
+        """Date column window for cycle-scoped views (wear / income /
+        expense) on the online side.
+
+        Behaviour mirrors ``CycleService.get_window`` on the local side:
+        the window is [cycle.start_date, end] where ``end`` is the
+        settle_date for a closed cycle or today for an open one. When no
+        cycle has been synced yet, fall back to the 15-day rolling
+        window so the view stays useful on a fresh Supabase project."""
+        cycle = self._online_current_cycle()
+        if cycle is None:
+            return self._online_window_dates(score_rows)
+        start_text = str(cycle.get("start_date") or "").strip()
+        if not start_text:
+            return self._online_window_dates(score_rows)
+        try:
+            start = datetime.strptime(start_text, "%Y-%m-%d").date()
+        except ValueError:
+            return self._online_window_dates(score_rows)
+        is_settled = bool(int(cycle.get("settled", 0) or 0))
+        settle_text = str(cycle.get("settle_date") or "").strip()
+        if is_settled and settle_text:
+            try:
+                end = datetime.strptime(settle_text, "%Y-%m-%d").date()
+            except ValueError:
+                end = datetime.now().date()
+        else:
+            end = datetime.now().date()
+        if end < start:
+            end = start
+        dates: list[str] = []
+        cursor = start
+        while cursor <= end:
+            dates.append(cursor.strftime("%Y-%m-%d"))
+            cursor += timedelta(days=1)
+        return dates
 
     def _score_summary_data(self, members: list[dict[str, str]], score_rows: list[dict]) -> dict:
         window_dates = self._online_window_dates(score_rows)
@@ -177,8 +245,15 @@ class ApplicationService:
         raw_rows.sort(key=lambda row: (-int(row[-3]), str(row[-1])))
         return build_score_sheet_view(headers, raw_rows)
 
-    def _wear_sheet_view(self, members: list[dict[str, str]], score_rows: list[dict]) -> dict:
-        window_dates = self._online_window_dates(score_rows)
+    def _wear_sheet_view(
+        self,
+        members: list[dict[str, str]],
+        score_rows: list[dict],
+        *,
+        window_dates: list[str] | None = None,
+    ) -> dict:
+        if window_dates is None:
+            window_dates = self._online_window_dates(score_rows)
         wear_map: dict[tuple[str, str], float] = {}
         for row in self._live_score_rows(score_rows):
             member_name = str(row.get("member_name", "")).strip()
@@ -238,7 +313,68 @@ class ApplicationService:
         return self._score_summary(self.online_score_summary_data())
 
     def online_wear_sheet_view(self) -> dict:
-        return self._wear_sheet_view(self._active_members_from_rows(self._online_member_rows()), self._online_score_rows())
+        members = self._active_members_from_rows(self._online_member_rows())
+        score_rows = self._online_score_rows()
+        # Wear/income/expense are cycle-scoped on the local side, so the
+        # online view must match. When no cycle has been synced yet the
+        # helper transparently falls back to the 15-day window.
+        window_dates = self._online_cycle_window_dates(score_rows)
+        return self._wear_sheet_view(members, score_rows, window_dates=window_dates)
+
+    def online_cycle_wear_summary(self) -> dict:
+        """Mirror of ``CycleService.get_current_cycle_wear_summary`` for
+        the online side. Returns the same shape so the wear page can
+        render the cycle banner in read-only mode without a second code
+        path in the template."""
+        cycle = self._online_current_cycle()
+        if cycle is None:
+            return {
+                "has_cycle": False,
+                "cycle_name": "",
+                "start_date": "",
+                "end_date": "",
+                "total_wear": 0.0,
+                "member_count": 0,
+                "avg_wear_per_member": 0.0,
+            }
+        score_rows = self._online_score_rows()
+        window_dates = self._online_cycle_window_dates(score_rows)
+        if not window_dates:
+            return {
+                "has_cycle": False,
+                "cycle_name": "",
+                "start_date": "",
+                "end_date": "",
+                "total_wear": 0.0,
+                "member_count": 0,
+                "avg_wear_per_member": 0.0,
+            }
+        start = window_dates[0]
+        end = window_dates[-1]
+        wear_by_member: dict[str, float] = {}
+        for row in self._live_score_rows(score_rows):
+            date_text = str(row.get("score_date") or "").strip()
+            if not (start <= date_text <= end):
+                continue
+            name = str(row.get("member_name") or "").strip()
+            if not name:
+                continue
+            value = self._score_wear_value(row)
+            if value is None:
+                continue
+            wear_by_member[name] = wear_by_member.get(name, 0.0) + float(value)
+        total = normalize_wear(sum(wear_by_member.values()))
+        contributing = sum(1 for value in wear_by_member.values() if value)
+        avg = normalize_wear(total / contributing) if contributing else 0.0
+        return {
+            "has_cycle": True,
+            "cycle_name": str(cycle.get("name") or "").strip(),
+            "start_date": start,
+            "end_date": end,
+            "total_wear": total,
+            "member_count": contributing,
+            "avg_wear_per_member": avg,
+        }
 
     def online_next_score_date(self) -> str:
         return self._next_score_date(self._online_score_rows())

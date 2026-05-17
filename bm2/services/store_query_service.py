@@ -175,6 +175,9 @@ class StoreQueryService:
     def get_online_wear_sheet_view(self):
         return self._application_service().online_wear_sheet_view()
 
+    def get_online_cycle_wear_summary(self):
+        return self._application_service().online_cycle_wear_summary()
+
     def get_online_next_score_date(self) -> str:
         return self._application_service().online_next_score_date()
 

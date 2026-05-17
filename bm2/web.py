@@ -69,7 +69,11 @@ def register_routes(app, store) -> None:
     @app.route('/wear')
     def wear_entry():
         if read_only_mode:
-            return render_template('wear.html', wear_sheet=store.get_online_wear_sheet_view())
+            return render_template(
+                'wear.html',
+                wear_sheet=store.get_online_wear_sheet_view(),
+                cycle_wear=store.get_online_cycle_wear_summary(),
+            )
         return render_template(
             'wear.html',
             wear_sheet=store.get_wear_sheet_view(),

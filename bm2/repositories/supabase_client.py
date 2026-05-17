@@ -55,6 +55,32 @@ _SCORE_ENTRY_UPLOAD_COLUMNS = (
     "deleted",
     "source",
 )
+_SETTLEMENT_CYCLE_COLUMNS = (
+    "id",
+    "name",
+    "start_date",
+    "settle_date",
+    "settled",
+    "created_at",
+    "updated_at",
+    "version",
+    "deleted",
+    "source",
+)
+_SETTLEMENT_ENTRY_COLUMNS = (
+    "cycle_id",
+    "member_name",
+    "start_date",
+    "start_balance",
+    "settle_date",
+    "end_balance",
+    "is_extra",
+    "sort_order",
+    "updated_at",
+    "version",
+    "deleted",
+    "source",
+)
 
 
 class SupabaseSchemaError(RuntimeError):
@@ -191,4 +217,99 @@ class SupabaseClient:
             return query.order("updated_at").execute()
 
         result = _retry_on_transient(_run, label="pull_score_entries")
+        return result.data or []
+
+    # ------------------------------------------------------------------
+    # Settlement cycles + entries
+    #
+    # These tables are optional on the Supabase side: an older project
+    # may not have them yet. Missing-table errors are caught and
+    # surfaced as an empty result so the pull path stays robust during
+    # the rollout window where local code knows about cycles but the
+    # remote schema hasn't been migrated.
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _is_missing_table_error(exc: APIError) -> bool:
+        message = str(exc)
+        return "does not exist" in message or "could not find" in message.lower()
+
+    def push_settlement_cycles(self, rows: list[dict[str, Any]]) -> int:
+        if not rows:
+            return 0
+        LOGGER.info("Supabase push_settlement_cycles: upserting %d rows", len(rows))
+        try:
+            _retry_on_transient(
+                lambda: self._client().table("settlement_cycles").upsert(rows, on_conflict="id").execute(),
+                label="push_settlement_cycles",
+            )
+        except APIError as exc:
+            if self._is_missing_table_error(exc):
+                LOGGER.warning(
+                    "Supabase settlement_cycles table missing; skipping push. "
+                    "Run docs/supabase_schema.sql in the Supabase SQL Editor."
+                )
+                return 0
+            raise
+        return len(rows)
+
+    def push_settlement_entries(self, rows: list[dict[str, Any]]) -> int:
+        if not rows:
+            return 0
+        LOGGER.info("Supabase push_settlement_entries: upserting %d rows", len(rows))
+        try:
+            _retry_on_transient(
+                lambda: self._client()
+                    .table("settlement_entries")
+                    .upsert(rows, on_conflict="cycle_id,member_name")
+                    .execute(),
+                label="push_settlement_entries",
+            )
+        except APIError as exc:
+            if self._is_missing_table_error(exc):
+                LOGGER.warning(
+                    "Supabase settlement_entries table missing; skipping push. "
+                    "Run docs/supabase_schema.sql in the Supabase SQL Editor."
+                )
+                return 0
+            raise
+        return len(rows)
+
+    def pull_settlement_cycles(self, since_updated_at: str | None = None) -> list[dict[str, Any]]:
+        LOGGER.info("Supabase pull_settlement_cycles: since=%s", since_updated_at or "beginning")
+
+        def _run():
+            query = self._client().table("settlement_cycles").select("*")
+            if since_updated_at:
+                query = query.gt("updated_at", since_updated_at)
+            return query.order("updated_at").execute()
+
+        try:
+            result = _retry_on_transient(_run, label="pull_settlement_cycles")
+        except APIError as exc:
+            if self._is_missing_table_error(exc):
+                LOGGER.warning(
+                    "Supabase settlement_cycles table missing; treating pull as empty."
+                )
+                return []
+            raise
+        return result.data or []
+
+    def pull_settlement_entries(self, since_updated_at: str | None = None) -> list[dict[str, Any]]:
+        LOGGER.info("Supabase pull_settlement_entries: since=%s", since_updated_at or "beginning")
+
+        def _run():
+            query = self._client().table("settlement_entries").select("*")
+            if since_updated_at:
+                query = query.gt("updated_at", since_updated_at)
+            return query.order("updated_at").execute()
+
+        try:
+            result = _retry_on_transient(_run, label="pull_settlement_entries")
+        except APIError as exc:
+            if self._is_missing_table_error(exc):
+                LOGGER.warning(
+                    "Supabase settlement_entries table missing; treating pull as empty."
+                )
+                return []
+            raise
         return result.data or []

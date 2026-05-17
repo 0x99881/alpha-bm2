@@ -48,6 +48,7 @@ class StoreApplication:
     def get_online_active_members(self): return self._context.query_service.get_online_active_members()
     def get_online_score_summary(self): return self._context.query_service.get_online_score_summary()
     def get_online_wear_sheet_view(self): return self._context.query_service.get_online_wear_sheet_view()
+    def get_online_cycle_wear_summary(self): return self._context.query_service.get_online_cycle_wear_summary()
     def get_online_next_score_date(self): return self._context.query_service.get_online_next_score_date()
     def get_mobile_overview(self): return self._context.query_service.get_mobile_overview()
     def is_supabase_configured(self): return self._context.command_service.is_supabase_configured()

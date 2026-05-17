@@ -656,6 +656,12 @@ class SmokeCheckRunner:
                     self.score_rows = rows
                     return len(rows)
 
+                def push_settlement_cycles(self, rows):
+                    return len(rows)
+
+                def push_settlement_entries(self, rows):
+                    return len(rows)
+
             temp_dir = TEST_TEMP_ROOT / "supabase_profit_column"
             if temp_dir.exists():
                 shutil.rmtree(temp_dir)
@@ -1054,6 +1060,12 @@ class SmokeCheckRunner:
                 def pull_score_entries(self, since_updated_at=None):
                     return [self.row]
 
+                def pull_settlement_cycles(self, since_updated_at=None):
+                    return []
+
+                def pull_settlement_entries(self, since_updated_at=None):
+                    return []
+
             fake = FakeSupabase()
             writer = SupabaseEntryWriter(fake)
             writer.save_scores_and_wear(
@@ -1085,6 +1097,184 @@ class SmokeCheckRunner:
                 shutil.rmtree(temp_dir, ignore_errors=True)
 
         self.check("online manual wear syncs to local", _run)
+
+    def check_cycle_push_pull_roundtrip(self) -> None:
+        def _run():
+            from bm2.local_database import LocalDatabase
+
+            class FakeSupabase:
+                def __init__(self) -> None:
+                    self.pushed_cycles: list[dict] = []
+                    self.pushed_entries: list[dict] = []
+
+                def ensure_score_entries_schema(self) -> None:
+                    return None
+
+                def push_members(self, rows):
+                    return len(rows)
+
+                def push_score_entries(self, rows):
+                    return len(rows)
+
+                def push_settlement_cycles(self, rows):
+                    self.pushed_cycles = list(rows)
+                    return len(rows)
+
+                def push_settlement_entries(self, rows):
+                    self.pushed_entries = list(rows)
+                    return len(rows)
+
+                def pull_score_entries(self, since_updated_at=None):
+                    return []
+
+                def mark_score_entries_deleted(self, rows):
+                    return len(rows)
+
+            class FakePullSupabase:
+                def __init__(self, cycles, entries) -> None:
+                    self._cycles = cycles
+                    self._entries = entries
+
+                def pull_members(self, since_updated_at=None):
+                    return []
+
+                def pull_score_entries(self, since_updated_at=None):
+                    return []
+
+                def pull_settlement_cycles(self, since_updated_at=None):
+                    return self._cycles
+
+                def pull_settlement_entries(self, since_updated_at=None):
+                    return self._entries
+
+            temp_dir = TEST_TEMP_ROOT / "cycle_push_pull_roundtrip"
+            if temp_dir.exists():
+                shutil.rmtree(temp_dir)
+            (temp_dir / "source").mkdir(parents=True)
+            (temp_dir / "sink").mkdir(parents=True)
+            try:
+                # Source DB writes a cycle locally and pushes to fake Supabase.
+                source_db = LocalDatabase(temp_dir / "source")
+                cycle_id = source_db.create_settlement_cycle("2026-05-01")
+                source_db.save_settlement_entries(
+                    cycle_id,
+                    [{"member_name": "alice", "start_balance": "100", "end_balance": ""}],
+                )
+                fake = FakeSupabase()
+                source_db.push_to_supabase(fake, force_full=True)
+                if not fake.pushed_cycles:
+                    raise ValueError("cycles were not pushed")
+                if not fake.pushed_entries:
+                    raise ValueError("cycle entries were not pushed")
+                pushed_cycle = fake.pushed_cycles[0]
+                for required in ("id", "name", "start_date", "version", "deleted", "source"):
+                    if required not in pushed_cycle:
+                        raise ValueError(f"cycle missing column: {required}")
+                pushed_entry = fake.pushed_entries[0]
+                for required in (
+                    "cycle_id", "member_name", "start_balance",
+                    "version", "deleted", "source",
+                ):
+                    if required not in pushed_entry:
+                        raise ValueError(f"cycle entry missing column: {required}")
+
+                # Sink DB pulls the same payload and verifies LWW merge.
+                sink_db = LocalDatabase(temp_dir / "sink")
+                sink_db.pull_from_supabase(
+                    FakePullSupabase(fake.pushed_cycles, fake.pushed_entries)
+                )
+                pulled_cycles = sink_db.get_settlement_cycles()
+                if not pulled_cycles:
+                    raise ValueError("cycle was not merged into sink DB")
+                if pulled_cycles[0]["start_date"] != "2026-05-01":
+                    raise ValueError("cycle start_date did not survive sync")
+                pulled_entries = sink_db.get_settlement_entries(cycle_id)
+                if "alice" not in pulled_entries:
+                    raise ValueError("cycle entry was not merged into sink DB")
+                if pulled_entries["alice"]["start_balance"] != "100":
+                    raise ValueError("cycle entry start_balance did not sync")
+                return f"cycle={pulled_cycles[0]['start_date']} balance={pulled_entries['alice']['start_balance']}"
+            finally:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+
+        self.check("cycle push pull roundtrip", _run)
+
+    def check_online_wear_uses_cycle_window(self) -> None:
+        def _run():
+            from datetime import date, timedelta
+            from bm2.services.application_service import ApplicationService
+
+            cycle_start = (date.today() - timedelta(days=30)).strftime("%Y-%m-%d")
+            today = date.today().strftime("%Y-%m-%d")
+
+            class FakeSupabase:
+                def is_configured(self) -> bool:
+                    return True
+
+                def pull_members(self, since_updated_at=None):
+                    return [
+                        {
+                            "id": "member:alice",
+                            "name": "alice",
+                            "status": "启用",
+                            "note": "",
+                            "sort_order": 1,
+                            "created_at": "2026-04-01 00:00:00",
+                            "disabled_at": "",
+                            "updated_at": "2026-04-01 00:00:00",
+                            "version": 1,
+                            "deleted": 0,
+                        }
+                    ]
+
+                def pull_score_entries(self, since_updated_at=None):
+                    return [
+                        {
+                            "id": f"score:{today}:alice",
+                            "member_id": "member:alice",
+                            "member_name": "alice",
+                            "score_date": today,
+                            "score": 17,
+                            "manual_wear": "2",
+                            "updated_at": f"{today} 00:00:00",
+                            "version": 1,
+                            "deleted": 0,
+                        }
+                    ]
+
+                def pull_settlement_cycles(self, since_updated_at=None):
+                    return [
+                        {
+                            "id": "cycle-1",
+                            "name": "周期05-01",
+                            "start_date": cycle_start,
+                            "settle_date": "",
+                            "settled": 0,
+                            "created_at": "2026-05-01 00:00:00",
+                            "updated_at": "2026-05-01 00:00:00",
+                            "version": 1,
+                            "deleted": 0,
+                            "source": "local",
+                        }
+                    ]
+
+            service = ApplicationService(None, FakeSupabase(), lambda: today)
+            view = service.online_wear_sheet_view()
+            # Cycle window is 30+ days; legacy fallback is exactly 15 columns.
+            if view["column_count"] <= 17:  # 15 dates + total + name + avg = 18
+                raise ValueError(
+                    f"wear view still uses 15-day window (column_count={view['column_count']})"
+                )
+            summary = service.online_cycle_wear_summary()
+            if not summary["has_cycle"]:
+                raise ValueError("cycle summary did not detect synced cycle")
+            if summary["start_date"] != cycle_start:
+                raise ValueError(
+                    f"cycle summary start_date mismatch: {summary['start_date']} vs {cycle_start}"
+                )
+            return f"cols={view['column_count']} start={summary['start_date']}"
+
+        self.check("online wear uses cycle window", _run)
 
     def check_recent_low_score_format(self) -> None:
         def _run():
@@ -1197,6 +1387,8 @@ class SmokeCheckRunner:
             self.check_delete_score_date_rolls_back_on_export_error()
             self.check_supabase_push_saves_posted_entry_once()
             self.check_online_manual_wear_syncs_to_local()
+            self.check_cycle_push_pull_roundtrip()
+            self.check_online_wear_uses_cycle_window()
             self.check_recent_low_score_format()
             self.check_architecture_rules()
         finally:

@@ -33,8 +33,8 @@ class SQLiteCycleRepositoryMixin:
                 """
                 INSERT INTO settlement_cycles (
                     id, name, start_date, settle_date, settled,
-                    created_at, updated_at, deleted
-                ) VALUES (?, ?, ?, '', 0, ?, ?, 0)
+                    created_at, updated_at, version, deleted, source
+                ) VALUES (?, ?, ?, '', 0, ?, ?, 1, 0, 'local')
                 """,
                 (cycle_id, self._short_cycle_name(cleaned_start), cleaned_start, now, now),
             )
@@ -53,7 +53,9 @@ class SQLiteCycleRepositoryMixin:
         connection = self._connect()
         try:
             connection.execute(
-                "UPDATE settlement_cycles SET deleted = 1, updated_at = ? WHERE id = ?",
+                "UPDATE settlement_cycles "
+                "SET deleted = 1, updated_at = ?, version = version + 1 "
+                "WHERE id = ?",
                 (now, cleaned_cycle),
             )
             connection.commit()
@@ -73,7 +75,8 @@ class SQLiteCycleRepositoryMixin:
             connection.execute(
                 """
                 UPDATE settlement_cycles
-                SET settle_date = ?, settled = 1, updated_at = ?
+                SET settle_date = ?, settled = 1, updated_at = ?,
+                    version = version + 1
                 WHERE id = ? AND deleted = 0
                 """,
                 (cleaned_settle, now, cleaned_cycle),
@@ -95,7 +98,8 @@ class SQLiteCycleRepositoryMixin:
             connection.execute(
                 """
                 UPDATE settlement_cycles
-                SET settle_date = '', settled = 0, updated_at = ?
+                SET settle_date = '', settled = 0, updated_at = ?,
+                    version = version + 1
                 WHERE id = ? AND deleted = 0
                 """,
                 (now, cleaned_cycle),
