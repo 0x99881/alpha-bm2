@@ -177,6 +177,152 @@ def _enumerate_dates(start_iso: str, end_iso: str) -> list[str]:
     return out
 
 
+_BLOCK_TERMINATORS = {CYCLE_TOTAL_LABEL, CYCLE_AVG_LABEL, WEAR_DAILY_AVG_LABEL}
+
+
+def _parse_banner_dates(banner_text: str) -> tuple[str, str]:
+    """Extract (start_iso, end_iso) from a banner like
+    ``═══ 周期 名字  2026-05-10 ~ 2026-05-15  ═══`` (Chinese full-width
+    spaces / regular spaces both accepted). End may be ``进行中`` for
+    open cycles, in which case ``end_iso`` is returned as empty.
+    """
+    import re
+
+    matches = re.findall(r"(\d{4}-\d{2}-\d{2})", banner_text or "")
+    if not matches:
+        return "", ""
+    start_iso = matches[0]
+    end_iso = matches[1] if len(matches) >= 2 else ""
+    return start_iso, end_iso
+
+
+def _mmdd_to_iso(mmdd: str, start_iso: str, end_iso: str, today_iso: str) -> str:
+    """Resolve a 4-digit MMDD column header to an ISO date.
+
+    Within a cycle window: use the start_iso's year; bump to start_year+1
+    if the resulting date falls outside the window (handles year wrap-
+    over). Without a window (active block, no banner): use the current
+    year, falling back to previous year if the date would be in the
+    future.
+    """
+    text = str(mmdd or "").strip()
+    if len(text) != 4 or not text.isdigit():
+        return ""
+    month = int(text[:2])
+    day = int(text[2:])
+    if start_iso:
+        try:
+            start_year = int(start_iso[:4])
+        except ValueError:
+            start_year = datetime.now().year
+        for year_offset in (0, 1):
+            try:
+                cand = _date_cls(start_year + year_offset, month, day).strftime("%Y-%m-%d")
+            except ValueError:
+                continue
+            if start_iso <= cand and (not end_iso or cand <= end_iso):
+                return cand
+    # Active-block fallback when no banner is available.
+    year = int(today_iso[:4]) if today_iso else datetime.now().year
+    for year_offset in (0, -1):
+        try:
+            cand = _date_cls(year + year_offset, month, day).strftime("%Y-%m-%d")
+        except ValueError:
+            continue
+        if cand <= (today_iso or cand):
+            return cand
+    return ""
+
+
+def iter_blocks(sheet, name_header: str, total_header: str | None) -> list[dict[str, Any]]:
+    """Walk a value sheet rendered by ``rewrite_value_sheet_with_blocks``
+    and yield each block's structure.
+
+    Each entry has:
+      - ``banner_row``: int or None (None for the active block on row 1)
+      - ``start_iso`` / ``end_iso``: from the banner (both '' for active)
+      - ``header_row``: int (the row with date / total / name headers)
+      - ``name_col``: int — name column within this block
+      - ``date_by_col``: {col -> ISO date}
+      - ``data_rows``: list of int (member rows)
+    Returns [] if the sheet doesn't appear to use the block layout.
+    """
+    max_row = sheet.max_row
+    max_col = sheet.max_column
+    today_iso = _date_cls.today().strftime("%Y-%m-%d")
+
+    # Locate all banner rows (historical blocks).
+    banner_rows: list[int] = []
+    for row in range(1, max_row + 1):
+        first = str(sheet.cell(row, 1).value or "")
+        if first.startswith(CYCLE_BANNER_PREFIX):
+            banner_rows.append(row)
+
+    # Active block sits on row 1 (header). Historical blocks start at
+    # banner_row + 1. block_headers is a list of (banner_row|None,
+    # header_row, block_end_inclusive).
+    block_starts: list[tuple[int | None, int]] = [(None, 1)] + [(br, br + 1) for br in banner_rows]
+
+    blocks: list[dict[str, Any]] = []
+    for index, (banner_row, header_row) in enumerate(block_starts):
+        if index + 1 < len(block_starts):
+            block_end = block_starts[index + 1][0] - 1  # one before next banner
+        else:
+            block_end = max_row
+
+        # Resolve the cycle window from the banner.
+        if banner_row is not None:
+            banner_text = str(sheet.cell(banner_row, 1).value or "")
+            start_iso, end_iso = _parse_banner_dates(banner_text)
+        else:
+            start_iso, end_iso = "", ""
+
+        # Find the name column within THIS block by scanning the header row.
+        name_col = None
+        for col in range(1, max_col + 1):
+            if str(sheet.cell(header_row, col).value or "") == name_header:
+                name_col = col
+                break
+        if name_col is None:
+            continue
+
+        # Date columns: numeric MMDD headers in the header row, before name_col,
+        # excluding the total_header column.
+        date_by_col: dict[int, str] = {}
+        for col in range(1, name_col):
+            raw = sheet.cell(header_row, col).value
+            if total_header is not None and raw == total_header:
+                continue
+            mmdd = str(raw or "").strip()
+            iso = _mmdd_to_iso(mmdd, start_iso, end_iso, today_iso)
+            if iso:
+                date_by_col[col] = iso
+
+        # Data rows: rows past the header, until the block end, skipping
+        # blank-name rows and summary terminator rows.
+        data_rows: list[int] = []
+        for row in range(header_row + 1, block_end + 1):
+            if bool(sheet.row_dimensions[row].hidden):
+                continue
+            name_val = str(sheet.cell(row, name_col).value or "").strip()
+            if not name_val:
+                continue
+            if name_val in _BLOCK_TERMINATORS:
+                continue
+            data_rows.append(row)
+
+        blocks.append({
+            "banner_row": banner_row,
+            "start_iso": start_iso,
+            "end_iso": end_iso,
+            "header_row": header_row,
+            "name_col": name_col,
+            "date_by_col": date_by_col,
+            "data_rows": data_rows,
+        })
+    return blocks
+
+
 def _synthetic_block(
     by_date: dict[str, list[dict[str, Any]]],
     sheet_type: str,

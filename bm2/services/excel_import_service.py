@@ -5,7 +5,7 @@ from typing import Callable
 
 from ..constants import DATA_START_ROW, META_SHEET, NAME_HEADER, TOTAL_HEADER, WORKBOOK_FILENAME_PREFIX
 from ..excel.header_locator import find_column
-from ..excel.sheet_metadata import meta_to_date_map, normalize_day_code_date_text, read_sheet_meta
+from ..excel.sheet_metadata import read_sheet_meta
 from ..excel.value_normalizer import normalize_expense, normalize_income, normalize_wear
 from ..excel.value_sheet_spec import get_value_sheet_spec
 from ..ui_text import MESSAGES
@@ -204,66 +204,45 @@ class ExcelImportService:
         finally:
             workbook.close()
 
-    def _value_sheet_date_map(self, workbook, sheet_type: str, sheet) -> dict[int, str]:
-        spec = get_value_sheet_spec(sheet_type)
-        by_number = meta_to_date_map(workbook, spec["meta_sheet"])
-        cycle_start = self._workbook_cycle_start()
-        year_hint = datetime.strptime(cycle_start, "%Y-%m-%d").year if cycle_start else datetime.now().year
-        result: dict[int, str] = {}
-        helpers = self._excel_store.value_sheet_helpers_for(sheet_type)
-        for number, col in helpers.columns_getter(sheet):
-            if number in by_number:
-                result[col] = by_number[number]
-                continue
-            header_text = str(sheet.cell(1, col).value or "").strip()
-            result[col] = normalize_day_code_date_text(header_text.zfill(4) if header_text.isdigit() else header_text, year_hint)
-        return result
-
     def _read_value_sheet_fields(self, workbook, sheet_type: str) -> dict[tuple[str, str], str]:
+        """Read user-edited values across every cycle block on the sheet.
+
+        Each block (active at top, historical below) has its own local
+        header row with date columns, so edits in any block — even a
+        long-settled one — get picked up by refresh-from-Excel.
+        """
+        from ..excel.cycle_block_sheets import iter_blocks
+
         helpers = self._excel_store.value_sheet_helpers_for(sheet_type)
         sheet = helpers.sheet_getter(workbook)
         spec = get_value_sheet_spec(sheet_type)
-        name_col = find_column(sheet, spec["name_header"])
-        if name_col is None:
-            return {}
-        date_by_col = self._value_sheet_date_map(workbook, sheet_type, sheet)
         normalizer = {
             "wear": normalize_wear,
             "income": normalize_income,
             "expense": normalize_expense,
         }[sheet_type]
-        # Refresh-from-Excel only mirrors what the user can sensibly edit:
-        # the active cycle's table on row 2..K. Historical cycle blocks below
-        # are read-only outputs whose columns don't align with row 1's date
-        # headers, so we stop scanning at the first block boundary.
-        from ..excel.cycle_block_sheets import (
-            CYCLE_AVG_LABEL,
-            CYCLE_BANNER_PREFIX,
-            CYCLE_TOTAL_LABEL,
-            WEAR_DAILY_AVG_LABEL,
-        )
-        block_terminators = {CYCLE_TOTAL_LABEL, CYCLE_AVG_LABEL, WEAR_DAILY_AVG_LABEL}
         values: dict[tuple[str, str], str] = {}
-        for row_index in range(DATA_START_ROW, sheet.max_row + 1):
-            first_cell = str(sheet.cell(row_index, 1).value or "").strip()
-            if first_cell.startswith(CYCLE_BANNER_PREFIX):
-                break
-            member_name = str(sheet.cell(row_index, name_col).value or "").strip()
-            if not member_name:
-                continue
-            if member_name in block_terminators:
-                break
-            for col, score_date in date_by_col.items():
-                raw_value = sheet.cell(row_index, col).value
-                if raw_value in (None, ""):
+        for block in iter_blocks(sheet, spec["name_header"], spec["total_header"]):
+            for row_index in block["data_rows"]:
+                member_name = str(sheet.cell(row_index, block["name_col"]).value or "").strip()
+                if not member_name:
                     continue
-                try:
-                    numeric = normalizer(raw_value)
-                except (TypeError, ValueError):
-                    continue
-                if numeric == 0:
-                    continue
-                values[(member_name, score_date)] = str(numeric)
+                for col, score_date in block["date_by_col"].items():
+                    raw_value = sheet.cell(row_index, col).value
+                    if raw_value in (None, ""):
+                        continue
+                    try:
+                        numeric = normalizer(raw_value)
+                    except (TypeError, ValueError):
+                        continue
+                    if numeric == 0:
+                        continue
+                    # Last-write-wins across blocks. In practice a (member,
+                    # date) pair belongs to a single cycle so collisions
+                    # shouldn't happen, but if a user copy-pastes between
+                    # blocks the later block wins, matching what the
+                    # daily-save flow would produce.
+                    values[(member_name, score_date)] = str(numeric)
         return values
 
     def _attach_value_sheet_fields(self, workbook, rows: list[dict[str, object]]) -> None:
