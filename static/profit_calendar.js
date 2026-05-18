@@ -211,6 +211,14 @@
             }).join("");
         };
 
+        // Snapshot the server-rendered board so range-clear can restore the
+        // cycle-scoped board the backend computed, instead of re-aggregating
+        // all calendar buttons (which would mix in OTHER cycles' breakdown
+        // data and produce wrong totals).
+        const serverBoardHTML = boardBodyNode ? boardBodyNode.innerHTML : "";
+        const serverBoardTitle = boardTitleNode ? boardTitleNode.textContent : "";
+        const serverProfitTitle = boardProfitHeaderNode ? boardProfitHeaderNode.textContent : "";
+
         const resetMonthlySummary = () => {
             if (rangeTextNode) {
                 setText(rangeTextNode, emptyRangeText);
@@ -229,8 +237,13 @@
             }
             setProfitCard(monthProfitTitle, defaultIncome, defaultWear, defaultExpense);
             setAverageCard(defaultAverageWear, getMonthButtons());
-            if (boardRoot) {
-                renderBoardRows(aggregateBoardRows(getMonthButtons()), boardMonthTitle);
+            // Restore the server-rendered board (cycle-scoped) rather than
+            // re-aggregating all month buttons, which would clobber the
+            // current-cycle data with other cycles' contributions.
+            if (boardBodyNode && serverBoardHTML) {
+                boardBodyNode.innerHTML = serverBoardHTML;
+                if (boardTitleNode) setText(boardTitleNode, serverBoardTitle);
+                if (boardProfitHeaderNode) setText(boardProfitHeaderNode, serverProfitTitle);
             }
         };
 
