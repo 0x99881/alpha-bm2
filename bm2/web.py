@@ -70,22 +70,34 @@ def register_routes(app, store) -> None:
     def wear_entry():
         if read_only_mode:
             return render_template('wear.html', wear_sheet=store.get_online_wear_sheet_view())
+        cycle_id_arg = (request.args.get('cycle') or '').strip() or None
+        cycles = store.get_all_cycles()
+        cycle_window = store.get_cycle_window(cycle_id_arg)
         return render_template(
             'wear.html',
             wear_sheet=store.get_wear_sheet_view(),
-            cycle_wear=store.get_current_cycle_wear_summary(),
+            cycle_wear=store.get_current_cycle_wear_summary(cycle_id_arg),
+            cycles=cycles,
+            selected_cycle_id=cycle_window.get('cycle_id', ''),
         )
 
     def _render_value_chart(sheet_type, page_title, page_hint, total_label, marked_hint, marker_class):
-        range_mode = (request.args.get('range') or 'cycle').strip()
-        if range_mode not in ('cycle', 'all'):
-            range_mode = 'cycle'
-        cycle_window = store.get_cycle_window()
-        # If there is no cycle yet, fall back to "all" silently so the page
-        # still shows the full history rather than an empty chart.
-        if not cycle_window.get('has_cycle'):
-            range_mode = 'all'
-        effective_window = cycle_window if range_mode == 'cycle' else None
+        cycle_id_arg = (request.args.get('cycle') or '').strip()
+        cycles = store.get_all_cycles()
+        # ``cycle=all`` shows the whole history; an empty / specific id resolves
+        # to that cycle's window (default: current cycle).
+        if cycle_id_arg == 'all':
+            cycle_window = store.get_cycle_window()  # current, for the hint text
+            effective_window = None  # no filter
+            selected_cycle_id = 'all'
+        else:
+            cycle_window = store.get_cycle_window(cycle_id_arg or None)
+            if not cycle_window.get('has_cycle'):
+                effective_window = None
+                selected_cycle_id = 'all'
+            else:
+                effective_window = cycle_window
+                selected_cycle_id = cycle_window.get('cycle_id', '')
         return render_template(
             'value_chart.html',
             value_sheet=store.get_value_sheet_view(sheet_type, cycle_window=effective_window),
@@ -94,7 +106,8 @@ def register_routes(app, store) -> None:
             total_label=total_label,
             marked_hint=marked_hint,
             marker_class=marker_class,
-            range_mode=range_mode,
+            cycles=cycles,
+            selected_cycle_id=selected_cycle_id,
             cycle_window=cycle_window,
         )
 

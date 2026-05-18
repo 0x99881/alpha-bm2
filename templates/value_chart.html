@@ -22,14 +22,19 @@
     <div class="section-title">
         <h3>{{ ui.chart_recent_days }}</h3>
         <p>{{ ui.excel_preview_hint }}</p>
-        {% if cycle_window is defined and cycle_window and cycle_window.has_cycle %}
-        <div class="chart-range-switch">
-            <a href="?range=cycle" class="chart-range-btn {% if range_mode == 'cycle' %}active{% endif %}">{{ ui.chart_range_cycle }}</a>
-            <a href="?range=all" class="chart-range-btn {% if range_mode == 'all' %}active{% endif %}">{{ ui.chart_range_all }}</a>
-            {% if range_mode == 'cycle' %}
-            <span class="chart-range-hint">{{ ui.chart_range_window_hint.format(start=cycle_window.start_date, end=cycle_window.end_date) }}</span>
+        {% if cycles %}
+        <form method="get" class="chart-range-switch">
+            <label>{{ ui.calendar_cycle_label }}</label>
+            <select name="cycle" onchange="this.form.submit()">
+                {% for cycle in cycles %}
+                <option value="{{ cycle.id }}" {% if cycle.id == selected_cycle_id %}selected{% endif %}>{{ cycle.name }}{% if cycle.settled %} ({{ ui.cycle_settled_badge }}){% endif %}</option>
+                {% endfor %}
+                <option value="all" {% if selected_cycle_id == 'all' %}selected{% endif %}>{{ ui.chart_range_all }}</option>
+            </select>
+            {% if selected_cycle_id != 'all' and cycle_window and cycle_window.has_cycle %}
+            <span class="chart-range-hint">{{ cycle_window.start_date }} ~ {{ cycle_window.end_date }}</span>
             {% endif %}
-        </div>
+        </form>
         {% endif %}
     </div>
     <div class="value-chart-bars">
