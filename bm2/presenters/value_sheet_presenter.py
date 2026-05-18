@@ -66,6 +66,93 @@ class ValueSheetPresenter:
             return self.store.format_income_value
         return self.store.format_expense_value
 
+    def build_sheet_view_for_cycle(
+        self,
+        sheet_type: str,
+        *,
+        score_rows: list,
+        member_order: list,
+        start_iso: str,
+        end_iso: str,
+    ) -> dict:
+        """Rebuild the chart-page view from SQLite for a cycle window.
+
+        Used by the income/expense chart pages so the Excel-style preview
+        table actually changes when the user picks a different cycle.
+        Empty bounds ⇒ full history (= 全部历史 view).
+        """
+        spec = VALUE_SHEET_SPECS[sheet_type]
+        name_header = spec["name_header"]
+        normalizer = self._normalizer(sheet_type)
+        field_key = {"income": "income", "expense": "other_expense"}[sheet_type]
+
+        date_set: set[str] = set()
+        per_cell: dict[tuple[str, str], float] = {}
+        for row in score_rows:
+            d = str(row.get("score_date") or "").strip()
+            if not d:
+                continue
+            if start_iso and end_iso and not (start_iso <= d <= end_iso):
+                continue
+            name = str(row.get("member_name") or "").strip()
+            if not name:
+                continue
+            raw = str(row.get(field_key) or "").strip()
+            if not raw:
+                continue
+            v = to_float_or_none(raw)
+            if v is None or v == 0:
+                continue
+            per_cell[(name, d)] = normalizer(v)
+            date_set.add(d)
+
+        dates = sorted(date_set)
+        date_headers = [d[5:].replace("-", "") for d in dates]
+        headers = list(date_headers) + [name_header, self._total_label(sheet_type)]
+        value_col_indices = list(range(len(date_headers)))
+        column_kinds = [self._column_kind(h, i, value_col_indices, name_header) for i, h in enumerate(headers)]
+
+        date_totals = {i: 0.0 for i in value_col_indices}
+        marked_count = 0
+        rows = []
+        for name in member_order:
+            row_cells = []
+            row_total = 0.0
+            for i, d in enumerate(dates):
+                v = per_cell.get((name, d))
+                cell_val = v if v is not None else None
+                has = v is not None and v != 0
+                if has:
+                    row_total += float(v)
+                    date_totals[i] += float(v)
+                    marked_count += 1
+                row_cells.append(self._cell(value=cell_val, is_marked=has, kind=column_kinds[i]))
+            row_cells.append(self._cell(value=name, is_marked=False, kind="name"))
+            row_cells.append(self._cell(value=normalizer(row_total), is_marked=row_total != 0, kind="total"))
+            rows.append(row_cells)
+
+        chart_items = [
+            {"label": str(headers[i] or ""), "value": normalizer(t), "is_marked": t != 0}
+            for i, t in date_totals.items()
+        ]
+        max_chart = max((abs(float(it["value"] or 0)) for it in chart_items), default=0.0)
+        for it in chart_items:
+            it["percent"] = 0 if max_chart == 0 else max(6, abs(float(it["value"] or 0)) / max_chart * 100)
+
+        total_value = normalizer(sum(float(it["value"] or 0) for it in chart_items))
+
+        return {
+            "headers": headers,
+            "column_kinds": column_kinds,
+            "rows": rows,
+            "chart_items": chart_items,
+            "row_count": len(rows),
+            "column_count": len(headers),
+            "marked_count": marked_count,
+            "total_value": total_value,
+            "sheet_type": sheet_type,
+        }
+
     def build_sheet_view(
         self,
         sheet_type: str,

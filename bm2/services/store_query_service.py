@@ -131,6 +131,17 @@ class StoreQueryService:
             sheet_type, cycle_window=cycle_window
         )
 
+    def get_value_sheet_view_for_cycle(self, sheet_type: str, *, start_iso: str, end_iso: str):
+        score_rows = self._context.local_db.get_score_rows()
+        member_order = [m['name'] for m in self.get_active_members()]
+        return self._context.value_sheet_presenter.build_sheet_view_for_cycle(
+            sheet_type,
+            score_rows=score_rows,
+            member_order=member_order,
+            start_iso=start_iso,
+            end_iso=end_iso,
+        )
+
     def get_member_profit_calendar(self, name: str, year: int, month: int):
         return self._context.profit_calendar_presenter.build_member_profit_calendar(name=name, year=year, month=month)
 

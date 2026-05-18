@@ -37,6 +37,7 @@ class StoreApplication:
     def get_wear_sheet_view(self): return self._context.query_service.get_wear_sheet_view()
     def get_wear_sheet_view_for_cycle(self, *, start_iso, end_iso): return self._context.query_service.get_wear_sheet_view_for_cycle(start_iso=start_iso, end_iso=end_iso)
     def get_value_sheet_view(self, sheet_type: str, *, cycle_window=None): return self._context.query_service.get_value_sheet_view(sheet_type, cycle_window=cycle_window)
+    def get_value_sheet_view_for_cycle(self, sheet_type: str, *, start_iso, end_iso): return self._context.query_service.get_value_sheet_view_for_cycle(sheet_type, start_iso=start_iso, end_iso=end_iso)
     def get_member_profit_calendar(self, name, year, month): return self._context.query_service.get_member_profit_calendar(name, year, month)
     def get_member_profit_calendar_for_cycle(self, name, cycle_window, cycles): return self._context.query_service.get_member_profit_calendar_for_cycle(name, cycle_window, cycles)
     def get_all_cycles(self): return self._context.query_service.get_all_cycles()

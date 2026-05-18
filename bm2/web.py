@@ -100,23 +100,29 @@ def register_routes(app, store) -> None:
     def _render_value_chart(sheet_type, page_title, page_hint, total_label, marked_hint, marker_class):
         cycle_id_arg = (request.args.get('cycle') or '').strip()
         cycles = store.get_all_cycles()
-        # ``cycle=all`` shows the whole history; an empty / specific id resolves
-        # to that cycle's window (default: current cycle).
+        # ``cycle=all`` ⇒ no filter (entire history). Otherwise resolve to the
+        # chosen cycle's window (default: current/latest).
         if cycle_id_arg == 'all':
-            cycle_window = store.get_cycle_window()  # current, for the hint text
-            effective_window = None  # no filter
+            cycle_window = store.get_cycle_window()
+            start_iso, end_iso = '', ''
             selected_cycle_id = 'all'
         else:
             cycle_window = store.get_cycle_window(cycle_id_arg or None)
             if not cycle_window.get('has_cycle'):
-                effective_window = None
+                start_iso, end_iso = '', ''
                 selected_cycle_id = 'all'
             else:
-                effective_window = cycle_window
+                start_iso = cycle_window.get('start_date', '')
+                end_iso = cycle_window.get('end_date', '')
                 selected_cycle_id = cycle_window.get('cycle_id', '')
+        # Build chart + preview from SQLite so BOTH respect the selected
+        # cycle (the legacy snapshot-based path only filtered chart bars).
+        value_sheet = store.get_value_sheet_view_for_cycle(
+            sheet_type, start_iso=start_iso, end_iso=end_iso,
+        )
         return render_template(
             'value_chart.html',
-            value_sheet=store.get_value_sheet_view(sheet_type, cycle_window=effective_window),
+            value_sheet=value_sheet,
             page_title=page_title,
             page_hint=page_hint,
             total_label=total_label,
