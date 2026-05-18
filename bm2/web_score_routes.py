@@ -186,7 +186,7 @@ def register_score_routes(
             flash(MESSAGES["score_date_deleted"].format(date=selected_date), "success")
             flash_remote_sync_needed()
         else:
-            flash(MESSAGES["score_date_delete_empty"].format(date=selected_date), "success")
+            flash(MESSAGES["score_date_delete_empty"].format(date=selected_date), "info")
         return redirect(url_for("score_entry", date=selected_date))
 
     @app.post("/scores/refresh-from-excel")

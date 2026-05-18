@@ -11,6 +11,7 @@
                 {% for cycle in cycles %}
                 <option value="{{ cycle.id }}" {% if cycle.id == selected_cycle_id %}selected{% endif %}>{{ cycle.name }}{% if cycle.settled %} ({{ ui.cycle_settled_badge }}){% endif %}</option>
                 {% endfor %}
+                <option value="all" {% if selected_cycle_id == 'all' %}selected{% endif %}>{{ ui.chart_range_all }}</option>
             </select>
         </form>
         {% endif %}

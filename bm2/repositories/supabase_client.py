@@ -94,14 +94,16 @@ class SupabaseClient:
     def __init__(self, base_dir: Path) -> None:
         self.base_dir = Path(base_dir)
         self._env_cache: dict[str, str] | None = None
+        self._env_cache_mtime: float | None = None
         self._client_cache = None
         self._schema_ok = False
 
     def _load_env_file(self) -> dict[str, str]:
-        if self._env_cache is not None:
+        path = self.base_dir / ".env.local"
+        env_mtime = path.stat().st_mtime if path.exists() else None
+        if self._env_cache is not None and self._env_cache_mtime == env_mtime:
             return self._env_cache
         env: dict[str, str] = {}
-        path = self.base_dir / ".env.local"
         if path.exists():
             for line in path.read_text(encoding="utf-8").splitlines():
                 line = line.strip()
@@ -110,6 +112,9 @@ class SupabaseClient:
                 key, value = line.split("=", 1)
                 env[key.strip()] = value.strip().strip('"').strip("'")
         self._env_cache = env
+        self._env_cache_mtime = env_mtime
+        self._client_cache = None
+        self._schema_ok = False
         return env
 
     def _env(self, key: str) -> str:

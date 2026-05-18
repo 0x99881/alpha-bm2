@@ -22,6 +22,7 @@ from ..constants import (
     EXPENSE_NAME_HEADER,
     INCOME_NAME_HEADER,
     NAME_HEADER,
+    RESERVED_MEMBER_NAMES,
     WEAR_NAME_HEADER,
     WEAR_TOTAL_HEADER,
 )
@@ -146,7 +147,7 @@ def build_cycle_blocks(
                 if not name:
                     continue
                 value = _resolve_value(row, sheet_type)
-                if value is None or value == 0:
+                if value is None:
                     continue
                 member_values.setdefault(name, {})[date_text] = value
 
@@ -177,7 +178,7 @@ def _enumerate_dates(start_iso: str, end_iso: str) -> list[str]:
     return out
 
 
-_BLOCK_TERMINATORS = {CYCLE_TOTAL_LABEL, CYCLE_AVG_LABEL, WEAR_DAILY_AVG_LABEL}
+_BLOCK_TERMINATORS = set(RESERVED_MEMBER_NAMES)
 
 
 def _parse_banner_dates(banner_text: str) -> tuple[str, str]:
@@ -232,6 +233,16 @@ def _mmdd_to_iso(mmdd: str, start_iso: str, end_iso: str, today_iso: str) -> str
         if cand <= (today_iso or cand):
             return cand
     return ""
+
+
+def _looks_like_summary_row(sheet, row: int, name_col: int) -> bool:
+    name_cell = sheet.cell(row, name_col)
+    if not bool(getattr(name_cell.font, "bold", False)):
+        return False
+    for col in range(1, name_col):
+        if bool(getattr(sheet.cell(row, col).font, "bold", False)):
+            return True
+    return False
 
 
 def iter_blocks(sheet, name_header: str, total_header: str | None) -> list[dict[str, Any]]:
@@ -289,6 +300,7 @@ def iter_blocks(sheet, name_header: str, total_header: str | None) -> list[dict[
         # Date columns: numeric MMDD headers in the header row, before name_col,
         # excluding the total_header column.
         date_by_col: dict[int, str] = {}
+        unresolved_headers: list[str] = []
         for col in range(1, name_col):
             raw = sheet.cell(header_row, col).value
             if total_header is not None and raw == total_header:
@@ -297,6 +309,16 @@ def iter_blocks(sheet, name_header: str, total_header: str | None) -> list[dict[
             iso = _mmdd_to_iso(mmdd, start_iso, end_iso, today_iso)
             if iso:
                 date_by_col[col] = iso
+            elif len(mmdd) == 4 and mmdd.isdigit():
+                unresolved_headers.append(mmdd)
+        if unresolved_headers:
+            from ..ui_text import MESSAGES
+
+            raise ValueError(
+                MESSAGES["excel_cycle_block_date_unresolved"].format(
+                    columns=", ".join(unresolved_headers)
+                )
+            )
 
         # Data rows: rows past the header, until the block end, skipping
         # blank-name rows and summary terminator rows.
@@ -307,7 +329,7 @@ def iter_blocks(sheet, name_header: str, total_header: str | None) -> list[dict[
             name_val = str(sheet.cell(row, name_col).value or "").strip()
             if not name_val:
                 continue
-            if name_val in _BLOCK_TERMINATORS:
+            if name_val in _BLOCK_TERMINATORS and _looks_like_summary_row(sheet, row, name_col):
                 continue
             data_rows.append(row)
 
@@ -336,7 +358,7 @@ def _synthetic_block(
             if not name:
                 continue
             value = _resolve_value(row, sheet_type)
-            if value is None or value == 0:
+            if value is None:
                 continue
             member_values.setdefault(name, {})[date_text] = value
             date_set.add(date_text)

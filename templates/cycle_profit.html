@@ -12,12 +12,16 @@
         </div>
         <div class="stat-card" title="{{ ui.cycle_tip_profit_flow }}">
             <span>{{ ui.cycle_total_profit_flow }} <em class="help-mark">?</em></span>
+            {% if cycle_data.totals.profit_flow is not none %}
             <strong class="{% if cycle_data.totals.profit_flow >= 0 %}cycle-profit-positive{% else %}cycle-profit-negative{% endif %}">{{ cycle_data.totals.profit_flow }}</strong>
+            {% else %}
+            <strong>{{ ui.incomplete }}</strong>
+            {% endif %}
         </div>
         {% if cycle_data.is_settled %}
         <div class="stat-card" title="{{ ui.cycle_tip_profit_delta }}">
             <span>{{ ui.cycle_total_delta }} <em class="help-mark">?</em></span>
-            <strong>{{ cycle_data.totals.profit_delta }}</strong>
+            <strong>{{ cycle_data.totals.profit_delta if cycle_data.totals.profit_delta is not none else ui.incomplete }}</strong>
         </div>
         {% endif %}
         <div class="stat-card">
@@ -26,7 +30,7 @@
         </div>
         <div class="stat-card">
             <span>{{ ui.cycle_total_wear }}</span>
-            <strong>{{ cycle_data.totals.wear }}</strong>
+            <strong>{{ cycle_data.totals.wear if cycle_data.totals.wear is not none else ui.incomplete }}</strong>
         </div>
         <div class="stat-card">
             <span>{{ ui.cycle_total_redpacket }}</span>
@@ -95,7 +99,7 @@
         <span class="cycle-drag-hint">{{ ui.cycle_drag_hint }}</span>
     </div>
 
-    <form method="post" action="{% if cycle_data.is_settled %}{{ url_for('settle_cycle_profit') }}{% else %}{{ url_for('save_cycle_profit') }}{% endif %}">
+    <form method="post" action="{% if cycle_data.is_settled %}{{ url_for('settle_cycle_profit') }}{% else %}{{ url_for('save_cycle_profit') }}{% endif %}" {% if cycle_data.is_settled %}onsubmit="return confirm('{{ ui.cycle_settle_confirm_message }}')"{% endif %}>
         <input type="hidden" name="cycle_id" value="{{ cycle_data.selected_cycle.id }}">
         {% if cycle_data.is_settled %}
         <div class="cycle-settle-date-row">
@@ -138,7 +142,7 @@
                         <td class="cycle-redpacket-cell">{{ row.redpacket_by_date.get(d, '') or '' }}</td>
                         {% endfor %}
                         <td class="cycle-redpacket-total-cell">{{ row.redpacket_total if row.redpacket_total else '' }}</td>
-                        <td class="cycle-wear">{{ row.wear_total if row.wear_total else '' }}</td>
+                        <td class="cycle-wear">{{ ui.incomplete if row.wear_incomplete else (row.wear_total if row.wear_total else '') }}</td>
                         <td class="cycle-income">{{ row.income_total if row.income_total else '' }}</td>
                         <td class="cycle-profit-flow-cell">
                             {% if row.profit_flow is not none %}
@@ -189,7 +193,7 @@
     <details class="cycle-settle-section" id="cycle-settle-next" {% if cycle_data.rows %}open{% endif %}>
         <summary>{{ ui.cycle_settle_and_create_next_open }}</summary>
         <p class="cycle-settle-hint">{{ ui.cycle_settle_and_create_next_hint }}</p>
-        <form method="post" action="{{ url_for('settle_and_create_next_cycle') }}" class="cycle-settle-form">
+        <form method="post" action="{{ url_for('settle_and_create_next_cycle') }}" class="cycle-settle-form" onsubmit="return confirm('{{ ui.cycle_settle_next_confirm_message }}')">
             <input type="hidden" name="cycle_id" value="{{ cycle_data.selected_cycle.id }}">
             <div class="cycle-settle-date-row">
                 <label>{{ ui.cycle_settle_date_label }}</label>

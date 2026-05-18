@@ -258,8 +258,12 @@ class SmokeCheckRunner:
             missing = [asset for asset in referenced_assets if not (PROJECT_ROOT / "static" / asset).exists()]
             if missing:
                 raise FileNotFoundError(", ".join(missing))
-            if not (PROJECT_ROOT / "static" / "app.js").exists():
+            app_js_path = PROJECT_ROOT / "static" / "app.js"
+            if not app_js_path.exists():
                 raise FileNotFoundError("static/app.js")
+            app_js = app_js_path.read_text(encoding="utf-8")
+            if "initSubmitLock" not in app_js or "aria-busy" not in app_js:
+                raise ValueError("submit lock script is missing")
             return f"assets={len(referenced_assets)}"
 
         self.check("模板静态资源", _run)
@@ -291,7 +295,7 @@ class SmokeCheckRunner:
                     if response.status_code != 200:
                         failures.append(f"{route}={response.status_code}")
                     if route == "/scores":
-                        if response.data.count(b"data-risk-confirm") != 3:
+                        if response.data.count(b"data-risk-confirm") != 4:
                             failures.append("/scores risk confirmation buttons missing")
                 if failures:
                     raise ValueError(", ".join(failures))
@@ -522,6 +526,237 @@ class SmokeCheckRunner:
                 shutil.rmtree(temp_dir, ignore_errors=True)
 
         self.check("excel refresh side effect guards", _run)
+
+    def check_excel_refresh_does_not_delete_missing_snapshot_rows(self) -> None:
+        def _run():
+            from bm2.services.store_application import StoreApplication
+
+            temp_dir = TEST_TEMP_ROOT / "excel_refresh_missing_rows"
+            if temp_dir.exists():
+                shutil.rmtree(temp_dir)
+            temp_dir.mkdir(parents=True)
+            try:
+                store = StoreApplication(temp_dir)
+                db = store._context.local_db
+                members = store.get_active_members()
+                old_name = members[0]["name"]
+                date_one = "2026-05-01"
+                date_two = "2026-05-02"
+                date_three = "2026-05-03"
+                db.record_score_entries(date_one, [{"name": old_name, "score": "7"}])
+                for date_text in (date_one, date_two, date_three):
+                    db.record_score_entries(date_text, [{"name": members[1]["name"], "score": "1"}])
+
+                db.replace_score_entries_from_snapshot([
+                    {"member_name": members[1]["name"], "score_date": date_one, "score": 1},
+                    {"member_name": members[1]["name"], "score_date": date_three, "score": 1},
+                ])
+
+                rows = db.get_score_rows(include_deleted=True)
+                deleted_by_key = {
+                    (row["member_name"], row["score_date"]): int(row.get("deleted", 0) or 0)
+                    for row in rows
+                }
+                if deleted_by_key[(old_name, date_one)]:
+                    raise ValueError("missing member row was deleted during refresh")
+                if deleted_by_key[(members[1]["name"], date_two)]:
+                    raise ValueError("missing date column was deleted during refresh")
+                return "missing snapshot rows preserved"
+            finally:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+
+        self.check("excel refresh missing rows are preserved", _run)
+
+    def check_cross_year_score_date_metadata(self) -> None:
+        def _run():
+            from datetime import date, timedelta
+
+            from openpyxl import load_workbook
+
+            from bm2.constants import META_SHEET
+            from bm2.services.store_application import StoreApplication
+
+            temp_dir = TEST_TEMP_ROOT / "cross_year_score_meta"
+            if temp_dir.exists():
+                shutil.rmtree(temp_dir)
+            temp_dir.mkdir(parents=True)
+            try:
+                store = StoreApplication(temp_dir)
+                members = store.get_active_members()
+                start = date(2025, 12, 28)
+                dates = [(start + timedelta(days=offset)).strftime("%Y-%m-%d") for offset in range(9)]
+                for offset, target_date in enumerate(dates, start=1):
+                    form_data = {f"score_{member['name']}": str(offset) for member in members}
+                    result = store.daily_entry_service.process_submission(members, form_data, target_date)
+                    if not result.get("ok"):
+                        raise ValueError(result.get("error"))
+                store.export_to_excel(dates[-1])
+
+                workbook = load_workbook(store.workbook_path)
+                try:
+                    date_map = store._context.excel_import_service._score_date_map_from_workbook(workbook)
+                    actual = [date_map[col] for col in sorted(date_map)]
+                    if actual != dates:
+                        raise ValueError(f"cross-year score dates mismatch: {actual}")
+                finally:
+                    workbook.close()
+
+                broken = load_workbook(store.workbook_path)
+                try:
+                    if META_SHEET in broken.sheetnames:
+                        del broken[META_SHEET]
+                    broken.save(store.workbook_path)
+                finally:
+                    broken.close()
+                try:
+                    store.refresh_local_database()
+                except ValueError as exc:
+                    if "D1" not in str(exc):
+                        raise ValueError(f"unexpected missing-meta error: {exc}") from exc
+                    return "cross-year meta ok; missing meta rejected"
+                raise ValueError("cross-year score sheet without metadata was accepted")
+            finally:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+
+        self.check("cross-year score date metadata", _run)
+
+    def check_historical_cycle_block_refresh_updates_values(self) -> None:
+        def _run():
+            from openpyxl import load_workbook
+
+            from bm2.constants import WEAR_NAME_HEADER, WEAR_SHEET, WEAR_TOTAL_HEADER
+            from bm2.excel.cycle_block_sheets import iter_blocks
+            from bm2.services.store_application import StoreApplication
+
+            temp_dir = TEST_TEMP_ROOT / "historical_cycle_block_refresh"
+            if temp_dir.exists():
+                shutil.rmtree(temp_dir)
+            temp_dir.mkdir(parents=True)
+            try:
+                store = StoreApplication(temp_dir)
+                members = store.get_active_members()
+                member_name = members[0]["name"]
+                cycle_id = store.create_settlement_cycle("2026-05-01")
+                form_data = {f"score_{member['name']}": "1" for member in members}
+                form_data[f"manual_wear_{member_name}"] = "5"
+                result = store.daily_entry_service.process_submission(members, form_data, "2026-05-01")
+                if not result.get("ok"):
+                    raise ValueError(result.get("error"))
+                store.settle_and_create_next_cycle(cycle_id, "2026-05-01", {})
+                store.export_to_excel("2026-05-02")
+
+                def _edit_historical_wear(value: int) -> None:
+                    workbook = load_workbook(store.workbook_path)
+                    try:
+                        sheet = workbook[WEAR_SHEET]
+                        block = next(
+                            block for block in iter_blocks(sheet, WEAR_NAME_HEADER, WEAR_TOTAL_HEADER)
+                            if block["start_iso"] == "2026-05-01"
+                        )
+                        date_col = next(col for col, date_text in block["date_by_col"].items() if date_text == "2026-05-01")
+                        member_row = next(
+                            row for row in block["data_rows"]
+                            if str(sheet.cell(row, block["name_col"]).value or "").strip() == member_name
+                        )
+                        sheet.cell(member_row, date_col, value)
+                        workbook.save(store.workbook_path)
+                    finally:
+                        workbook.close()
+
+                _edit_historical_wear(7)
+                store.refresh_local_database()
+                row = next(row for row in store.get_score_rows_for_date("2026-05-01") if row["member_name"] == member_name)
+                if float(row["manual_wear"]) != 7.0:
+                    raise ValueError(f"historical wear edit not imported: {row['manual_wear']}")
+
+                _edit_historical_wear(0)
+                store.refresh_local_database()
+                row = next(row for row in store.get_score_rows_for_date("2026-05-01") if row["member_name"] == member_name)
+                if float(row["manual_wear"]) != 0.0:
+                    raise ValueError(f"historical wear zero edit not imported: {row['manual_wear']}")
+                return "historical block edits imported"
+            finally:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+
+        self.check("historical cycle block refresh updates values", _run)
+
+    def check_deleted_score_column_does_not_delete_database_rows(self) -> None:
+        def _run():
+            from openpyxl import load_workbook
+
+            from bm2.constants import SCORE_SHEET
+            from bm2.services.store_application import StoreApplication
+
+            temp_dir = TEST_TEMP_ROOT / "deleted_score_column"
+            if temp_dir.exists():
+                shutil.rmtree(temp_dir)
+            temp_dir.mkdir(parents=True)
+            try:
+                store = StoreApplication(temp_dir)
+                members = store.get_active_members()
+                target_date = "2026-05-02"
+                for date_text in ("2026-05-01", target_date, "2026-05-03"):
+                    form_data = {f"score_{member['name']}": "5" for member in members}
+                    result = store.daily_entry_service.process_submission(members, form_data, date_text)
+                    if not result.get("ok"):
+                        raise ValueError(result.get("error"))
+                store.export_to_excel("2026-05-03")
+                before_count = len(store.get_score_rows_for_date(target_date))
+
+                workbook = load_workbook(store.workbook_path)
+                try:
+                    sheet = workbook[SCORE_SHEET]
+                    target_col = next(
+                        col for col in range(1, sheet.max_column + 1)
+                        if str(sheet.cell(1, col).value or "") == target_date[5:]
+                    )
+                    sheet.delete_cols(target_col, 1)
+                    workbook.save(store.workbook_path)
+                finally:
+                    workbook.close()
+
+                try:
+                    store.refresh_local_database()
+                except ValueError:
+                    pass
+                after_count = len(store.get_score_rows_for_date(target_date))
+                if after_count != before_count:
+                    raise ValueError("deleted Excel score column deleted database rows")
+                return "deleted score column caused no data loss"
+            finally:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+
+        self.check("deleted score column does not delete database rows", _run)
+
+    def check_member_rename_refresh_preserves_old_rows(self) -> None:
+        def _run():
+            from bm2.constants import DISABLED
+            from bm2.services.store_application import StoreApplication
+
+            temp_dir = TEST_TEMP_ROOT / "member_rename_refresh"
+            if temp_dir.exists():
+                shutil.rmtree(temp_dir)
+            temp_dir.mkdir(parents=True)
+            try:
+                store = StoreApplication(temp_dir)
+                members = store.get_active_members()
+                old_name = members[0]["name"]
+                new_name = f"{old_name}新"
+                target_date = "2026-05-01"
+                store._context.local_db.record_score_entries(target_date, [{"name": old_name, "score": "9"}])
+                store.member_service.update_member(old_name, "", status=DISABLED)
+                store.member_service.add_member(new_name)
+                store.export_to_excel(target_date)
+                store.refresh_local_database()
+                rows = store._context.local_db.get_score_rows_for_date(target_date, include_deleted=True)
+                old_row = next(row for row in rows if row["member_name"] == old_name)
+                if int(old_row.get("deleted", 0) or 0):
+                    raise ValueError("disabled old-name row was deleted by refresh")
+                return f"{old_name}->{new_name}"
+            finally:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+
+        self.check("member rename refresh preserves old rows", _run)
 
     def check_member_status_survives_excel_refresh(self) -> None:
         def _run():
@@ -810,6 +1045,135 @@ class SmokeCheckRunner:
 
         self.check("wear daily member average row", _run)
 
+    def check_daily_entry_rejects_incomplete_balance_pair(self) -> None:
+        def _run():
+            from bm2.services.store_application import StoreApplication
+
+            temp_dir = TEST_TEMP_ROOT / "daily_incomplete_balance"
+            if temp_dir.exists():
+                shutil.rmtree(temp_dir)
+            temp_dir.mkdir(parents=True)
+            try:
+                store = StoreApplication(temp_dir)
+                members = store.get_active_members()
+                first_name = members[0]["name"]
+                target_date = "2026-05-02"
+                form_data = {f"score_{member['name']}": "1" for member in members}
+                form_data[f"before_{first_name}"] = "10"
+                result = store.daily_entry_service.process_submission(members, form_data, target_date)
+                if result.get("ok"):
+                    raise ValueError("incomplete balance pair was accepted")
+                if first_name not in str(result.get("error", "")):
+                    raise ValueError(f"error did not name member: {result.get('error')}")
+                if store.get_score_rows_for_date(target_date):
+                    raise ValueError("rejected incomplete entry was saved")
+                return result.get("error")
+            finally:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+
+        self.check("daily entry incomplete balance rejected", _run)
+
+    def check_invalid_save_date_is_rejected(self) -> None:
+        def _run():
+            from bm2.services.sqlite_entry_writer import SQLiteEntryWriter
+
+            class FakeLocalDb:
+                def record_score_entries(self, saved_date, entries, *, source="local"):
+                    raise ValueError("writer should reject date before saving")
+
+            writer = SQLiteEntryWriter(FakeLocalDb())
+            try:
+                writer.save_scores_and_wear("2026-99-99", [{"name": "a", "score": "1"}])
+            except ValueError as exc:
+                if "日期" not in str(exc):
+                    raise ValueError(f"unexpected error: {exc}") from exc
+                return "invalid date rejected"
+            raise ValueError("invalid save date was accepted")
+
+        self.check("invalid save date rejected", _run)
+
+    def check_cycle_block_dates_and_reserved_member_names(self) -> None:
+        def _run():
+            from openpyxl import Workbook
+
+            from bm2.constants import NAME_HEADER, RESERVED_MEMBER_NAMES
+            from bm2.excel.cycle_block_sheets import CYCLE_BANNER_PREFIX, build_cycle_blocks, iter_blocks
+            from bm2.services.store_application import StoreApplication
+
+            workbook = Workbook()
+            sheet = workbook.active
+            sheet.cell(1, 1, f"{CYCLE_BANNER_PREFIX} test 2023-12-25 ~ 2024-03-15")
+            sheet.cell(2, 1, "0229")
+            sheet.cell(2, 2, NAME_HEADER)
+            sheet.cell(3, 1, 5)
+            sheet.cell(3, 2, RESERVED_MEMBER_NAMES[0])
+            blocks = iter_blocks(sheet, NAME_HEADER, None)
+            if blocks[0]["date_by_col"].get(1) != "2024-02-29":
+                raise ValueError("leap-year 0229 did not resolve inside cycle window")
+            if blocks[0]["data_rows"] != [3]:
+                raise ValueError("member name colliding with summary label was skipped")
+
+            bad_workbook = Workbook()
+            bad_sheet = bad_workbook.active
+            bad_sheet.cell(1, 1, f"{CYCLE_BANNER_PREFIX} test 2025-12-25 ~ 2026-03-15")
+            bad_sheet.cell(2, 1, "0229")
+            bad_sheet.cell(2, 2, NAME_HEADER)
+            bad_sheet.cell(3, 1, 5)
+            bad_sheet.cell(3, 2, "alice")
+            try:
+                iter_blocks(bad_sheet, NAME_HEADER, None)
+            except ValueError as exc:
+                if "0229" not in str(exc):
+                    raise ValueError(f"unexpected invalid date error: {exc}") from exc
+            else:
+                raise ValueError("invalid 0229 column was silently accepted")
+
+            temp_dir = TEST_TEMP_ROOT / "reserved_member_names"
+            if temp_dir.exists():
+                shutil.rmtree(temp_dir)
+            temp_dir.mkdir(parents=True)
+            try:
+                store = StoreApplication(temp_dir)
+                try:
+                    store.member_service.add_member(RESERVED_MEMBER_NAMES[0])
+                except ValueError:
+                    pass
+                else:
+                    raise ValueError("reserved global member name was accepted")
+                cycle_id = store.create_settlement_cycle("2026-05-01")
+                try:
+                    store.add_cycle_member(cycle_id, RESERVED_MEMBER_NAMES[1])
+                except ValueError:
+                    pass
+                else:
+                    raise ValueError("reserved cycle member name was accepted")
+
+                class FakeLocalDb:
+                    def get_settlement_cycles(self):
+                        return [{"id": "cycle", "start_date": "2026-05-01", "settle_date": "2026-05-01", "settled": 1}]
+
+                    def get_score_rows(self):
+                        return [
+                            {
+                                "member_name": "alice",
+                                "score_date": "2026-05-01",
+                                "income": "0",
+                                "manual_wear": "",
+                                "before_balance": "",
+                                "after_balance": "",
+                                "other_expense": "",
+                            }
+                        ]
+
+                block = build_cycle_blocks(local_db=FakeLocalDb(), sheet_type="income", member_order=["alice"])[0]
+                if block["member_values"]["alice"].get("2026-05-01") != 0.0:
+                    raise ValueError("explicit zero value was hidden from cycle block")
+                return "cycle dates and reserved names ok"
+            finally:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+
+        self.check("cycle block dates and reserved member names", _run)
+
     def check_excel_refresh_rejects_unknown_score_date(self) -> None:
         def _run():
             from openpyxl import load_workbook
@@ -861,6 +1225,47 @@ class SmokeCheckRunner:
                 shutil.rmtree(temp_dir, ignore_errors=True)
 
         self.check("excel unknown score date rejected", _run)
+
+    def check_excel_refresh_rejects_missing_score_date_meta(self) -> None:
+        def _run():
+            from openpyxl import load_workbook
+
+            from bm2.constants import META_SHEET
+            from bm2.services.store_application import StoreApplication
+
+            temp_dir = TEST_TEMP_ROOT / "excel_missing_score_meta"
+            if temp_dir.exists():
+                shutil.rmtree(temp_dir)
+            temp_dir.mkdir(parents=True)
+            try:
+                store = StoreApplication(temp_dir)
+                members = store.get_active_members()
+                target_date = "2025-12-28"
+                form_data = {f"score_{member['name']}": "3" for member in members}
+                result = store.daily_entry_service.process_submission(members, form_data, target_date)
+                if not result.get("ok"):
+                    raise ValueError(result.get("error"))
+                store.export_to_excel(target_date)
+
+                workbook = load_workbook(store.workbook_path)
+                try:
+                    if META_SHEET in workbook.sheetnames:
+                        del workbook[META_SHEET]
+                    workbook.save(store.workbook_path)
+                finally:
+                    workbook.close()
+
+                try:
+                    store.refresh_local_database()
+                except ValueError as exc:
+                    if "D1" not in str(exc):
+                        raise ValueError(f"unexpected error text: {exc}") from exc
+                    return "missing score metadata rejected"
+                raise ValueError("score date without metadata was accepted")
+            finally:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+
+        self.check("excel missing score date metadata rejected", _run)
 
     def check_delete_score_date(self) -> None:
         def _run():
@@ -952,6 +1357,40 @@ class SmokeCheckRunner:
                 shutil.rmtree(temp_dir, ignore_errors=True)
 
         self.check("delete score date rollback on export error", _run)
+
+    def check_empty_delete_score_date_uses_info_flash(self) -> None:
+        def _run():
+            from flask import Flask
+
+            from bm2.services.store_application import StoreApplication
+            from bm2.web import register_routes
+
+            temp_dir = TEST_TEMP_ROOT / "delete_date_empty_flash"
+            if temp_dir.exists():
+                shutil.rmtree(temp_dir)
+            temp_dir.mkdir(parents=True)
+            try:
+                store = StoreApplication(temp_dir)
+                app = Flask(
+                    __name__,
+                    template_folder=str(PROJECT_ROOT / "templates"),
+                    static_folder=str(PROJECT_ROOT / "static"),
+                )
+                app.secret_key = "smoke"
+                register_routes(app, store)
+                client = app.test_client()
+                response = client.post("/scores/delete-date", data={"date": "2026-05-13"})
+                if response.status_code != 302:
+                    raise ValueError(f"unexpected status: {response.status_code}")
+                with client.session_transaction() as session:
+                    flashes = session.get("_flashes", [])
+                if not flashes or flashes[-1][0] != "info":
+                    raise ValueError(f"empty delete did not flash info: {flashes}")
+                return "empty delete info flash"
+            finally:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+
+        self.check("empty delete score date uses info flash", _run)
 
     def check_supabase_push_saves_posted_entry_once(self) -> None:
         def _run():
@@ -1097,6 +1536,507 @@ class SmokeCheckRunner:
                 shutil.rmtree(temp_dir, ignore_errors=True)
 
         self.check("online manual wear syncs to local", _run)
+
+    def check_blank_online_detail_fields_do_not_churn(self) -> None:
+        def _run():
+            from bm2.local_database import LocalDatabase
+
+            temp_dir = TEST_TEMP_ROOT / "blank_online_detail_churn"
+            if temp_dir.exists():
+                shutil.rmtree(temp_dir)
+            temp_dir.mkdir(parents=True)
+            try:
+                db = LocalDatabase(temp_dir)
+                db.record_score_entries("2026-05-13", [{"name": "online-user", "score": "8"}], source="online")
+                before = db.get_score_rows_for_date("2026-05-13")[0]
+                db.record_score_entries("2026-05-13", [{"name": "online-user", "score": "8"}], source="local")
+                after = db.get_score_rows_for_date("2026-05-13")[0]
+                for key in ("manual_wear", "income", "other_expense"):
+                    if after[key] != "":
+                        raise ValueError(f"blank {key} became {after[key]!r}")
+                if after["version"] != before["version"]:
+                    raise ValueError("unchanged blank details incremented version")
+
+                db.record_score_entries(
+                    "2026-05-13",
+                    [{"name": "online-user", "score": "8", "income": "0"}],
+                    source="local",
+                )
+                explicit_zero = db.get_score_rows_for_date("2026-05-13")[0]
+                if explicit_zero["income"] != "0":
+                    raise ValueError("explicit zero income was not saved")
+                return "blank details stable; explicit zero saved"
+            finally:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+
+        self.check("blank online detail fields do not churn", _run)
+
+    def check_supabase_remote_reentry_restores_local_tombstone(self) -> None:
+        def _run():
+            from bm2.entry_helpers import member_id, score_entry_id
+            from bm2.local_database import LocalDatabase
+
+            class FakePullSupabase:
+                def __init__(self, row) -> None:
+                    self.row = row
+
+                def pull_members(self, since_updated_at=None):
+                    return []
+
+                def pull_score_entries(self, since_updated_at=None):
+                    return [self.row]
+
+                def pull_settlement_cycles(self, since_updated_at=None):
+                    return []
+
+                def pull_settlement_entries(self, since_updated_at=None):
+                    return []
+
+            temp_dir = TEST_TEMP_ROOT / "supabase_remote_reentry"
+            if temp_dir.exists():
+                shutil.rmtree(temp_dir)
+            temp_dir.mkdir(parents=True)
+            try:
+                db = LocalDatabase(temp_dir)
+                db.record_score_entries("2026-05-13", [{"name": "online-user", "score": "1"}])
+                db.delete_score_entries_for_date("2026-05-13")
+                remote_row = {
+                    "id": score_entry_id("online-user", "2026-05-13"),
+                    "member_id": member_id("online-user"),
+                    "member_name": "online-user",
+                    "score_date": "2026-05-13",
+                    "score": 8,
+                    "before_balance": "",
+                    "after_balance": "",
+                    "manual_wear": "3",
+                    "income": "",
+                    "other_expense": "",
+                    "profit": "0",
+                    "updated_at": "2026-05-13 12:00:00",
+                    "version": 99,
+                    "deleted": 0,
+                    "source": "online",
+                }
+                db.pull_from_supabase(FakePullSupabase(remote_row), force_full=True)
+                saved = db.get_score_rows_for_date("2026-05-13")
+                if not saved:
+                    raise ValueError("remote re-entry did not restore local row")
+                if int(saved[0]["score"]) != 8 or str(saved[0]["manual_wear"]) != "3":
+                    raise ValueError("restored row did not use remote data")
+                return saved[0]["score"]
+            finally:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+
+        self.check("supabase remote re-entry restores local tombstone", _run)
+
+    def check_supabase_pull_overlap_and_force_full(self) -> None:
+        def _run():
+            from bm2.local_database import LocalDatabase
+
+            class CapturingSupabase:
+                def __init__(self) -> None:
+                    self.calls: list[str | None] = []
+
+                def pull_members(self, since_updated_at=None):
+                    self.calls.append(since_updated_at)
+                    return []
+
+                def pull_score_entries(self, since_updated_at=None):
+                    self.calls.append(since_updated_at)
+                    return []
+
+                def pull_settlement_cycles(self, since_updated_at=None):
+                    self.calls.append(since_updated_at)
+                    return []
+
+                def pull_settlement_entries(self, since_updated_at=None):
+                    self.calls.append(since_updated_at)
+                    return []
+
+            temp_dir = TEST_TEMP_ROOT / "supabase_pull_overlap"
+            if temp_dir.exists():
+                shutil.rmtree(temp_dir)
+            temp_dir.mkdir(parents=True)
+            try:
+                db = LocalDatabase(temp_dir)
+                db._set_sync_state("supabase_last_pull", "2026-05-13 10:00:00")
+                incremental = CapturingSupabase()
+                db.pull_from_supabase(incremental)
+                if set(incremental.calls) != {"2026-05-13 09:00:00"}:
+                    raise ValueError(f"pull overlap not applied: {incremental.calls}")
+
+                full = CapturingSupabase()
+                db.pull_from_supabase(full, force_full=True)
+                if any(call is not None for call in full.calls):
+                    raise ValueError(f"force_full pull used incremental since: {full.calls}")
+                return "overlap and full pull ok"
+            finally:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+
+        self.check("supabase pull overlap and force full", _run)
+
+    def check_supabase_clock_skew_row_is_pulled(self) -> None:
+        def _run():
+            from bm2.entry_helpers import member_id, score_entry_id
+            from bm2.local_database import LocalDatabase
+
+            class FilteringSupabase:
+                def __init__(self, row) -> None:
+                    self.row = row
+
+                def pull_members(self, since_updated_at=None):
+                    return []
+
+                def pull_score_entries(self, since_updated_at=None):
+                    if since_updated_at is None or self.row["updated_at"] > since_updated_at:
+                        return [self.row]
+                    return []
+
+                def pull_settlement_cycles(self, since_updated_at=None):
+                    return []
+
+                def pull_settlement_entries(self, since_updated_at=None):
+                    return []
+
+            temp_dir = TEST_TEMP_ROOT / "supabase_clock_skew"
+            if temp_dir.exists():
+                shutil.rmtree(temp_dir)
+            temp_dir.mkdir(parents=True)
+            try:
+                db = LocalDatabase(temp_dir)
+                db._set_sync_state("supabase_last_pull", "2026-05-13 10:00:00")
+                row = {
+                    "id": score_entry_id("mobile-user", "2026-05-13"),
+                    "member_id": member_id("mobile-user"),
+                    "member_name": "mobile-user",
+                    "score_date": "2026-05-13",
+                    "score": 8,
+                    "before_balance": "",
+                    "after_balance": "",
+                    "manual_wear": "",
+                    "income": "",
+                    "other_expense": "",
+                    "profit": "0",
+                    "updated_at": "2026-05-13 09:55:00",
+                    "version": 2,
+                    "deleted": 0,
+                    "source": "online",
+                }
+                db.pull_from_supabase(FilteringSupabase(row))
+                saved = db.get_score_rows_for_date("2026-05-13")
+                if not saved or saved[0]["member_name"] != "mobile-user":
+                    raise ValueError("clock-skewed row was missed by incremental pull")
+                return saved[0]["updated_at"]
+            finally:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+
+        self.check("supabase clock skew row is pulled", _run)
+
+    def check_supabase_delete_push_reinsert_pull_roundtrip(self) -> None:
+        def _run():
+            from bm2.entry_helpers import score_entry_id
+            from bm2.local_database import LocalDatabase
+
+            class MemorySupabase:
+                def __init__(self) -> None:
+                    self.members = {}
+                    self.scores = {}
+
+                def ensure_score_entries_schema(self):
+                    return None
+
+                def push_members(self, rows):
+                    for row in rows:
+                        self.members[row["id"]] = dict(row)
+                    return len(rows)
+
+                def push_score_entries(self, rows):
+                    for row in rows:
+                        self.scores[row["id"]] = dict(row)
+                    return len(rows)
+
+                def push_settlement_cycles(self, rows):
+                    return len(rows)
+
+                def push_settlement_entries(self, rows):
+                    return len(rows)
+
+                def pull_score_entries(self, since_updated_at=None):
+                    return list(self.scores.values())
+
+                def pull_members(self, since_updated_at=None):
+                    return list(self.members.values())
+
+                def pull_settlement_cycles(self, since_updated_at=None):
+                    return []
+
+                def pull_settlement_entries(self, since_updated_at=None):
+                    return []
+
+                def mark_score_entries_deleted(self, rows):
+                    for row in rows:
+                        self.scores[row["id"]] = dict(row)
+                    return len(rows)
+
+            temp_dir = TEST_TEMP_ROOT / "supabase_delete_reinsert"
+            if temp_dir.exists():
+                shutil.rmtree(temp_dir)
+            temp_dir.mkdir(parents=True)
+            try:
+                db = LocalDatabase(temp_dir)
+                remote = MemorySupabase()
+                member_name = "mobile-user"
+                target_date = "2026-05-13"
+                entry_id = score_entry_id(member_name, target_date)
+                db.record_score_entries(target_date, [{"name": member_name, "score": "1"}])
+                db.push_to_supabase(remote, force_full=True)
+                db.delete_score_entries_for_date(target_date)
+                db.push_to_supabase(remote, force_full=True)
+                if int(remote.scores[entry_id]["deleted"]) != 1:
+                    raise ValueError("local delete was not pushed as tombstone")
+
+                remote_row = dict(remote.scores[entry_id])
+                remote_row.update({
+                    "score": 9,
+                    "manual_wear": "3",
+                    "updated_at": "2026-05-13 12:00:00",
+                    "version": int(remote_row["version"]) + 1,
+                    "deleted": 0,
+                    "source": "online",
+                })
+                remote.scores[entry_id] = remote_row
+                db.pull_from_supabase(remote, force_full=True)
+                saved = db.get_score_rows_for_date(target_date)
+                if not saved or int(saved[0]["score"]) != 9 or saved[0]["manual_wear"] != "3":
+                    raise ValueError("mobile reinsert did not restore local row")
+                return "delete push reinsert pull ok"
+            finally:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+
+        self.check("supabase delete push reinsert pull roundtrip", _run)
+
+    def check_supabase_env_file_reloads(self) -> None:
+        def _run():
+            import time
+
+            from bm2.repositories.supabase_client import SupabaseClient
+
+            temp_dir = TEST_TEMP_ROOT / "supabase_env_reload"
+            if temp_dir.exists():
+                shutil.rmtree(temp_dir)
+            temp_dir.mkdir(parents=True)
+            try:
+                client = SupabaseClient(temp_dir)
+                if client.is_configured():
+                    raise ValueError("empty env dir should not be configured")
+                env_path = temp_dir / ".env.local"
+                env_path.write_text(
+                    "SUPABASE_URL=https://example.supabase.co\n"
+                    "SUPABASE_SERVICE_ROLE_KEY=service-role-key\n",
+                    encoding="utf-8",
+                )
+                time.sleep(0.02)
+                if not client.is_configured():
+                    raise ValueError("updated .env.local was not reloaded")
+                return "env reloaded"
+            finally:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+
+        self.check("supabase env file reloads", _run)
+
+    def check_cycle_extra_member_reactivation_normalizes_flag(self) -> None:
+        def _run():
+            from bm2.constants import DISABLED, ENABLED
+            from bm2.services.store_application import StoreApplication
+
+            temp_dir = TEST_TEMP_ROOT / "cycle_extra_reactivation"
+            if temp_dir.exists():
+                shutil.rmtree(temp_dir)
+            temp_dir.mkdir(parents=True)
+            try:
+                store = StoreApplication(temp_dir)
+                member_name = store.get_active_members()[0]["name"]
+                cycle_id = store.create_settlement_cycle("2026-05-01")
+                store.member_service.update_member(member_name, "", status=DISABLED)
+                store.add_cycle_member(cycle_id, member_name)
+                extra_entry = store._context.local_db.get_settlement_entries(cycle_id)[member_name]
+                if int(extra_entry.get("is_extra", 0) or 0) != 1:
+                    raise ValueError("disabled member was not added as cycle extra")
+
+                store.member_service.update_member(member_name, "", status=ENABLED)
+                store.save_cycle_settlement(cycle_id, {})
+                restored_entry = store._context.local_db.get_settlement_entries(cycle_id)[member_name]
+                if int(restored_entry.get("is_extra", 0) or 0) != 0:
+                    raise ValueError("reactivated member kept stale extra flag")
+                row = next(
+                    row for row in store.get_cycle_profit_view(cycle_id)["rows"]
+                    if row["member_name"] == member_name
+                )
+                if row["is_extra"]:
+                    raise ValueError("reactivated member is still displayed as extra")
+                return member_name
+            finally:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+
+        self.check("cycle extra member reactivation normalizes flag", _run)
+
+    def check_cycle_settle_confirmation_rendered(self) -> None:
+        def _run():
+            from flask import Flask
+
+            from bm2.services.store_application import StoreApplication
+            from bm2.web import register_routes
+
+            temp_dir = TEST_TEMP_ROOT / "cycle_settle_confirm"
+            if temp_dir.exists():
+                shutil.rmtree(temp_dir)
+            temp_dir.mkdir(parents=True)
+            try:
+                store = StoreApplication(temp_dir)
+                cycle_id = store.create_settlement_cycle("2026-05-01")
+                app = Flask(
+                    __name__,
+                    template_folder=str(PROJECT_ROOT / "templates"),
+                    static_folder=str(PROJECT_ROOT / "static"),
+                )
+                app.secret_key = "smoke"
+                register_routes(app, store)
+                response = app.test_client().get(f"/cycle-profit?cycle={cycle_id}")
+                if response.status_code != 200:
+                    raise ValueError(f"unexpected status: {response.status_code}")
+                text = response.get_data(as_text=True)
+                if "cycle_settle_next_confirm_message" in text:
+                    raise ValueError("raw template key leaked")
+                if "confirm(" not in text:
+                    raise ValueError("settle confirmation is missing")
+                return "settle confirmation rendered"
+            finally:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+
+        self.check("cycle settle confirmation rendered", _run)
+
+    def check_settle_and_create_next_rolls_back_on_regen_error(self) -> None:
+        def _run():
+            import logging
+
+            from bm2.services.store_application import StoreApplication
+
+            temp_dir = TEST_TEMP_ROOT / "settle_next_rollback"
+            if temp_dir.exists():
+                shutil.rmtree(temp_dir)
+            temp_dir.mkdir(parents=True)
+            try:
+                store = StoreApplication(temp_dir)
+                member_name = store.get_active_members()[0]["name"]
+                cycle_id = store.create_settlement_cycle("2026-05-01")
+                store.save_cycle_settlement(cycle_id, {f"end_balance_{member_name}": "old"})
+
+                def _fail_regen(cycles_data):
+                    raise PermissionError("workbook locked")
+
+                store._context.cycle_service._on_overview_regen = _fail_regen
+                cycle_logger = logging.getLogger("bm2.services.cycle_service")
+                previous_disabled = cycle_logger.disabled
+                cycle_logger.disabled = True
+                try:
+                    try:
+                        store.settle_and_create_next_cycle(cycle_id, "2026-05-02", {member_name: "100"})
+                    except PermissionError:
+                        pass
+                    else:
+                        raise ValueError("settle-and-next succeeded despite regen failure")
+                finally:
+                    cycle_logger.disabled = previous_disabled
+
+                cycle = store._context.local_db.get_settlement_cycle(cycle_id)
+                if int(cycle.get("settled", 0) or 0) != 0:
+                    raise ValueError("failed settle left original cycle settled")
+                cycles = store._context.local_db.get_settlement_cycles()
+                if len(cycles) != 1:
+                    raise ValueError(f"failed settle left extra cycles: {len(cycles)}")
+                entry = store._context.local_db.get_settlement_entries(cycle_id)[member_name]
+                if str(entry.get("end_balance", "")) != "old":
+                    raise ValueError("failed settle did not restore end balance")
+                return "rollback ok"
+            finally:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+
+        self.check("settle and create next rollback on regen error", _run)
+
+    def check_new_cycle_first_day_entry_counts_in_new_window(self) -> None:
+        def _run():
+            from bm2.services.store_application import StoreApplication
+
+            temp_dir = TEST_TEMP_ROOT / "new_cycle_first_day"
+            if temp_dir.exists():
+                shutil.rmtree(temp_dir)
+            temp_dir.mkdir(parents=True)
+            try:
+                store = StoreApplication(temp_dir)
+                members = store.get_active_members()
+                member_name = members[0]["name"]
+                old_cycle_id = store.create_settlement_cycle("2026-05-01")
+                new_cycle_id = store.settle_and_create_next_cycle(old_cycle_id, "2026-05-01", {})
+                form_data = {f"score_{member['name']}": "1" for member in members}
+                form_data[f"manual_wear_{member_name}"] = "2"
+                form_data[f"income_{member_name}"] = "10"
+                form_data[f"other_expense_{member_name}"] = "4"
+                result = store.daily_entry_service.process_submission(members, form_data, "2026-05-02")
+                if not result.get("ok"):
+                    raise ValueError(result.get("error"))
+
+                new_view = store.get_cycle_profit_view(new_cycle_id)
+                old_view = store.get_cycle_profit_view(old_cycle_id)
+                if "2026-05-02" not in new_view["redpacket_dates"]:
+                    raise ValueError("new cycle first day redpacket date missing")
+                if "2026-05-02" in old_view["redpacket_dates"]:
+                    raise ValueError("new cycle first day leaked into old cycle")
+                row = next(row for row in new_view["rows"] if row["member_name"] == member_name)
+                if row["wear_total"] != 2.0 or row["income_total"] != 10.0 or row["redpacket_total"] != 4.0:
+                    raise ValueError("new cycle first day totals are wrong")
+                return "new cycle first day counted"
+            finally:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+
+        self.check("new cycle first day entry counts in new window", _run)
+
+    def check_mobile_row_then_desktop_completion_updates_cycle_profit(self) -> None:
+        def _run():
+            from bm2.services.store_application import StoreApplication
+
+            temp_dir = TEST_TEMP_ROOT / "mobile_then_desktop_cycle"
+            if temp_dir.exists():
+                shutil.rmtree(temp_dir)
+            temp_dir.mkdir(parents=True)
+            try:
+                store = StoreApplication(temp_dir)
+                member_name = store.get_active_members()[0]["name"]
+                cycle_id = store.create_settlement_cycle("2026-05-01")
+                db = store._context.local_db
+                db.record_score_entries("2026-05-01", [{"name": member_name, "score": "8"}], source="online")
+                view = store.get_cycle_profit_view(cycle_id)
+                row = next(row for row in view["rows"] if row["member_name"] == member_name)
+                if row["wear_total"] != 0.0:
+                    raise ValueError(f"blank mobile wear should count as 0, got {row['wear_total']}")
+                before = db.get_score_rows_for_date("2026-05-01")[0]
+
+                db.record_score_entries(
+                    "2026-05-01",
+                    [{"name": member_name, "score": "8", "before_balance": "10", "after_balance": "7"}],
+                    source="local",
+                )
+                after = db.get_score_rows_for_date("2026-05-01")[0]
+                if int(after["version"]) != int(before["version"]) + 1:
+                    raise ValueError("desktop completion did not increment version once")
+                view = store.get_cycle_profit_view(cycle_id)
+                row = next(row for row in view["rows"] if row["member_name"] == member_name)
+                if row["wear_total"] != 3.0:
+                    raise ValueError(f"completed balance wear not reflected: {row['wear_total']}")
+                return "mobile blank then desktop completion ok"
+            finally:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+
+        self.check("mobile row then desktop completion updates cycle profit", _run)
 
     def check_cycle_push_pull_roundtrip(self) -> None:
         def _run():
@@ -1376,17 +2316,38 @@ class SmokeCheckRunner:
             self.check_read_only_routes_do_not_open_excel()
             self.check_excel_date_notes_import()
             self.check_excel_refresh_side_effect_guards()
+            self.check_excel_refresh_does_not_delete_missing_snapshot_rows()
+            self.check_cross_year_score_date_metadata()
+            self.check_historical_cycle_block_refresh_updates_values()
+            self.check_deleted_score_column_does_not_delete_database_rows()
+            self.check_member_rename_refresh_preserves_old_rows()
             self.check_member_status_survives_excel_refresh()
             self.check_existing_config_members_are_not_reseeded()
             self.check_supabase_profit_uses_formal_column()
             self.check_online_entry_reports_supabase_request_failure()
             self.check_wear_threshold_uses_saved_config()
             self.check_wear_daily_member_average_row()
+            self.check_daily_entry_rejects_incomplete_balance_pair()
+            self.check_invalid_save_date_is_rejected()
+            self.check_cycle_block_dates_and_reserved_member_names()
             self.check_excel_refresh_rejects_unknown_score_date()
+            self.check_excel_refresh_rejects_missing_score_date_meta()
             self.check_delete_score_date()
             self.check_delete_score_date_rolls_back_on_export_error()
+            self.check_empty_delete_score_date_uses_info_flash()
             self.check_supabase_push_saves_posted_entry_once()
             self.check_online_manual_wear_syncs_to_local()
+            self.check_blank_online_detail_fields_do_not_churn()
+            self.check_supabase_remote_reentry_restores_local_tombstone()
+            self.check_supabase_pull_overlap_and_force_full()
+            self.check_supabase_clock_skew_row_is_pulled()
+            self.check_supabase_delete_push_reinsert_pull_roundtrip()
+            self.check_supabase_env_file_reloads()
+            self.check_cycle_extra_member_reactivation_normalizes_flag()
+            self.check_cycle_settle_confirmation_rendered()
+            self.check_settle_and_create_next_rolls_back_on_regen_error()
+            self.check_new_cycle_first_day_entry_counts_in_new_window()
+            self.check_mobile_row_then_desktop_completion_updates_cycle_profit()
             self.check_cycle_push_pull_roundtrip()
             self.check_online_wear_uses_cycle_window()
             self.check_recent_low_score_format()

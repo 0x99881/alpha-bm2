@@ -19,6 +19,7 @@
                 {% for cycle in calendar_data.cycles %}
                 <option value="{{ cycle.id }}" {% if cycle.id == calendar_data.cycle_id %}selected{% endif %}>{{ cycle.name }}{% if cycle.settled %} ({{ ui.cycle_settled_badge }}){% endif %}</option>
                 {% endfor %}
+                <option value="all" {% if calendar_data.cycle_id == 'all' %}selected{% endif %}>{{ ui.chart_range_all }}</option>
             </select>
         </label>
         {% else %}

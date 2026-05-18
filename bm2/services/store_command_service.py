@@ -135,5 +135,5 @@ class StoreCommandService:
         except SupabaseSchemaError as exc:
             raise ValueError(MESSAGES["supabase_schema_missing_columns"]) from exc
 
-    def supabase_pull(self) -> dict[str, int]:
-        return self._context.sync_service.pull()
+    def supabase_pull(self, *, force_full: bool = False) -> dict[str, int]:
+        return self._context.sync_service.pull(force_full=force_full)

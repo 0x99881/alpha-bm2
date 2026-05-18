@@ -35,6 +35,7 @@ class StoreApplication:
     def get_score_summary(self): return self._context.query_service.get_score_summary()
     def get_score_sheet_view(self): return self._context.query_service.get_score_sheet_view()
     def get_wear_sheet_view(self): return self._context.query_service.get_wear_sheet_view()
+    def get_wear_sheet_view_for_cycle(self, *, start_iso, end_iso): return self._context.query_service.get_wear_sheet_view_for_cycle(start_iso=start_iso, end_iso=end_iso)
     def get_value_sheet_view(self, sheet_type: str, *, cycle_window=None): return self._context.query_service.get_value_sheet_view(sheet_type, cycle_window=cycle_window)
     def get_member_profit_calendar(self, name, year, month): return self._context.query_service.get_member_profit_calendar(name, year, month)
     def get_member_profit_calendar_for_cycle(self, name, cycle_window, cycles): return self._context.query_service.get_member_profit_calendar_for_cycle(name, cycle_window, cycles)
@@ -68,7 +69,7 @@ class StoreApplication:
     def export_to_excel(self, date_text=None): return self._context.export_service.export_to_excel(date_text)
     def delete_score_date(self, date_text): return self._context.command_service.delete_score_date(date_text)
     def supabase_push(self, *, force_full=True): return self._context.command_service.supabase_push(force_full=force_full)
-    def supabase_pull(self): return self._context.command_service.supabase_pull()
+    def supabase_pull(self, *, force_full=False): return self._context.command_service.supabase_pull(force_full=force_full)
 
 
 __all__ = ["StoreApplication"]

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ..constants import DISABLED, ENABLED, normalize_status
+from ..constants import DISABLED, ENABLED, RESERVED_MEMBER_NAMES, normalize_status
 from ..ui_text import MESSAGES
 
 
@@ -29,6 +29,8 @@ class MemberService:
         cleaned_name = name.strip()
         if not cleaned_name:
             raise ValueError(MESSAGES['member_name_required'])
+        if cleaned_name in RESERVED_MEMBER_NAMES:
+            raise ValueError(MESSAGES["member_name_reserved"].format(name=cleaned_name))
         members = self._members_provider()
         if any(item['name'] == cleaned_name for item in members):
             raise ValueError(MESSAGES['member_exists'])

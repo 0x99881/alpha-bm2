@@ -6,6 +6,7 @@ from typing import Any
 
 from ..constants import WINDOW_SIZE
 from ..entry_helpers import count_wear_entries
+from ..ui_text import MESSAGES
 
 LOGGER = logging.getLogger(__name__)
 
@@ -24,8 +25,8 @@ class SQLiteEntryWriter:
     def _resolve_save_date(self, date_text: str) -> str:
         try:
             return datetime.strptime(date_text.strip(), "%Y-%m-%d").strftime("%Y-%m-%d")
-        except ValueError:
-            return date_text
+        except ValueError as exc:
+            raise ValueError(MESSAGES["score_date_invalid"]) from exc
 
     def save_scores_and_wear(
         self,

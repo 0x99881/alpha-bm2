@@ -113,6 +113,19 @@ class StoreQueryService:
     def get_wear_sheet_view(self):
         return self._context.wear_presenter.build_wear_sheet_view()
 
+    def get_wear_sheet_view_for_cycle(self, *, start_iso: str, end_iso: str):
+        """Cycle-scoped wear view rebuilt from SQLite. Empty bounds = all-history."""
+        score_rows = self._context.local_db.get_score_rows()
+        member_order = [m['name'] for m in self.get_active_members()]
+        threshold = self._context.get_wear_abnormal_threshold()
+        return self._context.wear_presenter.build_wear_sheet_view_for_cycle(
+            score_rows=score_rows,
+            member_order=member_order,
+            start_iso=start_iso,
+            end_iso=end_iso,
+            threshold=threshold,
+        )
+
     def get_value_sheet_view(self, sheet_type: str, *, cycle_window=None):
         return self._context.value_sheet_presenter.build_sheet_view(
             sheet_type, cycle_window=cycle_window

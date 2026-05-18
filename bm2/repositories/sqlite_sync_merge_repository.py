@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta
 from typing import Any
 
 LOGGER = logging.getLogger(__name__)
@@ -182,11 +183,21 @@ class SQLiteSyncMergeRepositoryMixin:
             "score_entries_deleted": deleted_count,
         }
 
-    def pull_from_supabase(self, supabase_sync) -> dict[str, int]:
+    @staticmethod
+    def _incremental_pull_since(last_pull: str | None) -> str | None:
+        if not last_pull:
+            return None
+        try:
+            parsed = datetime.strptime(last_pull, "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            return None
+        return (parsed - timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S")
+
+    def pull_from_supabase(self, supabase_sync, *, force_full: bool = False) -> dict[str, int]:
         """Pull rows from Supabase (since last pull), merge into local SQLite
         with last-writer-wins on (version, updated_at). Delete tombstones
-        are sticky: once a row is deleted on either side, the deletion
-        state survives the merge.
+        follow the same ordering rule, so a newer explicit re-entry can
+        restore a row that an older local tombstone deleted.
 
         Tables pulled: members, score_entries, settlement_cycles,
         settlement_entries. Cycle pulls are best-effort; if the online
@@ -194,7 +205,9 @@ class SQLiteSyncMergeRepositoryMixin:
         returns no rows and we keep going."""
         if self.read_only:
             return self._empty_sync_result()
-        since = self._get_sync_state("supabase_last_pull") or None
+        since = None if force_full else self._incremental_pull_since(
+            self._get_sync_state("supabase_last_pull") or None
+        )
         remote_members = supabase_sync.pull_members(since_updated_at=since)
         remote_scores = supabase_sync.pull_score_entries(since_updated_at=since)
         remote_cycles = supabase_sync.pull_settlement_cycles(since_updated_at=since)
@@ -236,10 +249,6 @@ class SQLiteSyncMergeRepositoryMixin:
 
     @staticmethod
     def _remote_wins(remote: dict, local: dict) -> bool:
-        rd = int(remote.get("deleted", 0) or 0)
-        ld = int(local.get("deleted", 0) or 0)
-        if rd != ld:
-            return rd > ld
         rv, ra = int(remote["version"]), str(remote["updated_at"])
         lv, la = int(local["version"]), str(local["updated_at"])
         return rv > lv or (rv == lv and ra > la)

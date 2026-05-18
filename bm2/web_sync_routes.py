@@ -93,8 +93,9 @@ def register_sync_routes(app, store, *, read_only_mode: bool) -> None:
             abort(403)
         if not _ensure_supabase_configured():
             return _redirect_back_to_score_entry()
+        force_full = request.form.get("force_full", "").strip() == "1"
         try:
-            pull = store.supabase_pull()
+            pull = store.supabase_pull(force_full=force_full)
         except SUPABASE_REQUEST_ERRORS:
             app.logger.exception("Supabase pull failed")
             flash(MESSAGES["supabase_download_failed"], "error")

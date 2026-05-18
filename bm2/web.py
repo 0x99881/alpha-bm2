@@ -49,7 +49,7 @@ def register_routes(app, store) -> None:
         return {
             'excel_filename': store.workbook_path.name,
             'quick_scores': store.get_quick_scores(),
-            'asset_version': '20260515-01',
+            'asset_version': '20260518-01',
             'ui': UI_TEXT,
             'js_ui_text': JS_UI_TEXT,
             'enabled_status': ENABLED,
@@ -74,15 +74,27 @@ def register_routes(app, store) -> None:
                 wear_sheet=store.get_online_wear_sheet_view(),
                 cycle_wear=store.get_online_cycle_wear_summary(),
             )
-        cycle_id_arg = (request.args.get('cycle') or '').strip() or None
+        cycle_id_arg = (request.args.get('cycle') or '').strip()
         cycles = store.get_all_cycles()
-        cycle_window = store.get_cycle_window(cycle_id_arg)
+        # ``cycle=all`` ⇒ no date filter (entire history). Anything else ⇒ that
+        # cycle's window (default: current/latest cycle).
+        if cycle_id_arg == 'all':
+            cycle_window = store.get_cycle_window()  # for hint text only
+            start_iso, end_iso = '', ''
+            selected_cycle_id = 'all'
+            cycle_wear = store.get_current_cycle_wear_summary(None)
+        else:
+            cycle_window = store.get_cycle_window(cycle_id_arg or None)
+            start_iso = cycle_window.get('start_date', '')
+            end_iso = cycle_window.get('end_date', '')
+            selected_cycle_id = cycle_window.get('cycle_id', '')
+            cycle_wear = store.get_current_cycle_wear_summary(cycle_id_arg or None)
         return render_template(
             'wear.html',
-            wear_sheet=store.get_wear_sheet_view(),
-            cycle_wear=store.get_current_cycle_wear_summary(cycle_id_arg),
+            wear_sheet=store.get_wear_sheet_view_for_cycle(start_iso=start_iso, end_iso=end_iso),
+            cycle_wear=cycle_wear,
             cycles=cycles,
-            selected_cycle_id=cycle_window.get('cycle_id', ''),
+            selected_cycle_id=selected_cycle_id,
         )
 
     def _render_value_chart(sheet_type, page_title, page_hint, total_label, marked_hint, marker_class):
@@ -171,17 +183,30 @@ def register_routes(app, store) -> None:
 
         # Cycle-mode is now the default. We fall back to legacy month-mode only
         # when no cycle exists yet, so the page stays usable on a fresh install.
+        # ``cycle=all`` ⇒ span every cycle that has ever existed.
         cycle_id_arg = (request.args.get('cycle') or '').strip()
-        cycle_window = store.get_cycle_window(cycle_id_arg or None)
-        if cycle_window.get('has_cycle'):
-            all_cycles = store.get_all_cycles()
-            calendar_data = store.get_member_profit_calendar_for_cycle(
-                selected_name, cycle_window, all_cycles,
-            )
+        all_cycles = store.get_all_cycles()
+        if cycle_id_arg == 'all' and all_cycles:
+            # Build a synthetic window covering the earliest start_date through
+            # today / the latest settle_date.
+            from datetime import date as _d
+            starts = [str(c.get('start_date') or '').strip() for c in all_cycles if str(c.get('start_date') or '').strip()]
+            ends = [str(c.get('settle_date') or '').strip() or _d.today().strftime('%Y-%m-%d') for c in all_cycles]
+            cycle_window = {
+                'has_cycle': True, 'cycle_id': 'all', 'is_settled': False,
+                'start_date': min(starts) if starts else '',
+                'end_date': max(ends) if ends else '',
+            }
+            calendar_data = store.get_member_profit_calendar_for_cycle(selected_name, cycle_window, all_cycles)
+            calendar_data['cycle_id'] = 'all'
         else:
-            year = request.args.get('year', type=int) or datetime.now().year
-            month = request.args.get('month', type=int) or datetime.now().month
-            calendar_data = store.get_member_profit_calendar(selected_name, year, month)
+            cycle_window = store.get_cycle_window(cycle_id_arg or None)
+            if cycle_window.get('has_cycle'):
+                calendar_data = store.get_member_profit_calendar_for_cycle(selected_name, cycle_window, all_cycles)
+            else:
+                year = request.args.get('year', type=int) or datetime.now().year
+                month = request.args.get('month', type=int) or datetime.now().month
+                calendar_data = store.get_member_profit_calendar(selected_name, year, month)
         return render_template(
             'profit_calendar.html',
             members=members,

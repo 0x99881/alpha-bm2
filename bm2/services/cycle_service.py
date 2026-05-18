@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+import logging
 from datetime import date, datetime, timedelta
 from typing import Any, Callable
 
-from ..excel.value_normalizer import normalize_expense, normalize_income, normalize_wear
+from ..constants import RESERVED_MEMBER_NAMES
+from ..domain.rules.daily_entry import IncompleteBalanceInput, resolve_wear_value
+from ..excel.value_normalizer import normalize_expense, normalize_income, normalize_wear, parse_decimal
 from ..value_utils import to_float_or_none
+
+LOGGER = logging.getLogger(__name__)
 
 
 class CycleService:
@@ -55,15 +60,25 @@ class CycleService:
     def _today_iso() -> str:
         return date.today().strftime("%Y-%m-%d")
 
-    def _resolve_wear(self, row: dict[str, Any]) -> float:
-        manual = to_float_or_none(self._text(row.get("manual_wear")))
-        if manual is not None:
-            return manual
-        before = to_float_or_none(self._text(row.get("before_balance")))
-        after = to_float_or_none(self._text(row.get("after_balance")))
-        if before is None or after is None:
-            return 0.0
-        return before - after
+    def _resolve_wear(self, row: dict[str, Any]) -> float | None:
+        try:
+            value = resolve_wear_value(
+                before_text=self._text(row.get("before_balance")),
+                after_text=self._text(row.get("after_balance")),
+                manual_wear_text=self._text(row.get("manual_wear")),
+                parse_decimal=parse_decimal,
+                manual_field="manual_wear",
+                before_field="before_balance",
+                after_field="after_balance",
+            )
+        except (IncompleteBalanceInput, ValueError):
+            return None
+        return None if value is None else normalize_wear(value)
+
+    def _has_incomplete_balance(self, row: dict[str, Any]) -> bool:
+        before = self._text(row.get("before_balance"))
+        after = self._text(row.get("after_balance"))
+        return bool(before) != bool(after)
 
     # ---- mutations ----------------------------------------------------------
 
@@ -122,6 +137,7 @@ class CycleService:
                 "member_name": name,
                 "start_balance": self._text(prior.get("start_balance", "")),
                 "end_balance": self._text(prior.get("end_balance", "")),
+                "is_extra": "0" if name in active_names else self._text(prior.get("is_extra", "0")),
             }
             start_key = f"start_balance_{name}"
             end_key = f"end_balance_{name}"
@@ -160,7 +176,16 @@ class CycleService:
         if self._on_overview_regen is not None:
             remaining = self._build_cycles_data(exclude_cycle_id=cleaned_cycle)
             self._on_overview_regen(remaining)
-        self._local_db.delete_settlement_cycle(cleaned_cycle)
+        try:
+            self._local_db.delete_settlement_cycle(cleaned_cycle)
+        except Exception as exc:
+            LOGGER.exception(
+                "Cycle delete failed after Excel regeneration; cycle_id=%s",
+                cleaned_cycle,
+            )
+            from ..ui_text import MESSAGES
+
+            raise ValueError(MESSAGES["cycle_delete_db_failed_after_excel"]) from exc
 
     # ---- current-cycle window helpers --------------------------------------
 
@@ -243,7 +268,10 @@ class CycleService:
             name = self._text(row.get("member_name"))
             if not name:
                 continue
-            wear_by_member[name] = wear_by_member.get(name, 0.0) + self._resolve_wear(row)
+            wear_value = self._resolve_wear(row)
+            if wear_value is None:
+                continue
+            wear_by_member[name] = wear_by_member.get(name, 0.0) + wear_value
 
         total = normalize_wear(sum(wear_by_member.values()))
         contributing = sum(1 for value in wear_by_member.values() if value)
@@ -310,17 +338,29 @@ class CycleService:
         # ---- apply DB mutations -----
         applied_end_balances = bool(synthetic_form)
         new_cycle_id: str | None = None
+        stage = "prepare"
         try:
             if applied_end_balances:
                 # save_settlement also calls _notify_change which regens Excel;
                 # suppress that here so we can do a single regen at the end.
+                stage = "save_end_balances"
                 self._save_settlement_no_notify(cleaned_cycle, synthetic_form)
+            stage = "settle_cycle"
             self._local_db.settle_settlement_cycle(cleaned_cycle, cleaned_settle)
+            stage = "create_next_cycle"
             new_cycle_id = self._local_db.create_settlement_cycle(next_start)
             # ---- Excel regen (the only operation that can plausibly fail) ----
             if self._on_overview_regen is not None:
+                stage = "regenerate_excel"
                 self._on_overview_regen(self._build_cycles_data())
         except Exception:
+            LOGGER.exception(
+                "Settle-and-create-next failed; cycle_id=%s settle_date=%s stage=%s new_cycle_id=%s",
+                cleaned_cycle,
+                cleaned_settle,
+                stage,
+                new_cycle_id or "",
+            )
             # Roll back in reverse order. Each repo call is best-effort.
             if new_cycle_id is not None:
                 self._local_db.delete_settlement_cycle(new_cycle_id)
@@ -344,6 +384,7 @@ class CycleService:
                 "member_name": name,
                 "start_balance": self._text(prior.get("start_balance", "")),
                 "end_balance": self._text(prior.get("end_balance", "")),
+                "is_extra": "0" if name in active_names else self._text(prior.get("is_extra", "0")),
             }
             start_key = f"start_balance_{name}"
             end_key = f"end_balance_{name}"
@@ -369,6 +410,10 @@ class CycleService:
             from ..ui_text import MESSAGES
 
             raise ValueError(MESSAGES["cycle_member_name_required"])
+        if cleaned_name in RESERVED_MEMBER_NAMES:
+            from ..ui_text import MESSAGES
+
+            raise ValueError(MESSAGES["member_name_reserved"].format(name=cleaned_name))
         cycle = self._local_db.get_settlement_cycle(cleaned_cycle)
         if cycle is None:
             from ..ui_text import MESSAGES
@@ -466,7 +511,12 @@ class CycleService:
         start_balance = to_float_or_none(start_balance_text)
         end_balance = to_float_or_none(end_balance_text)
 
-        wear_total = normalize_wear(sum(self._resolve_wear(row) for row in range_rows))
+        wear_incomplete = any(self._has_incomplete_balance(row) for row in range_rows)
+        wear_values = [
+            value for value in (self._resolve_wear(row) for row in range_rows)
+            if value is not None
+        ]
+        wear_total = None if wear_incomplete else normalize_wear(sum(wear_values))
         income_sum = 0.0
         for row in range_rows:
             amount = to_float_or_none(self._text(row.get("income")))
@@ -485,18 +535,22 @@ class CycleService:
         has_balances = start_balance is not None and end_balance is not None
         # 目前盈亏 (流水法) is computable any time daily-entry data exists — show
         # it during the cycle as a running estimate, not only after settle.
-        profit_flow = normalize_income(income_total - wear_total - redpacket_total)
+        profit_flow = None
         profit = None
         profit_delta = None
+        if wear_total is not None:
+            profit_flow = normalize_income(income_total - wear_total - redpacket_total)
         if is_settled and has_balances:
             profit = normalize_income(end_balance - start_balance - redpacket_total)
-            profit_delta = normalize_income(profit - profit_flow)
+            if profit_flow is not None:
+                profit_delta = normalize_income(profit - profit_flow)
 
         return {
             "member_name": member_name,
             "start_balance": start_balance_text,
             "end_balance": end_balance_text,
             "wear_total": wear_total,
+            "wear_incomplete": wear_incomplete,
             "income_total": income_total,
             "redpacket_by_date": redpacket_by_date,
             "redpacket_total": redpacket_total,
@@ -530,7 +584,7 @@ class CycleService:
                 "rows": [],
                 "totals": {
                     "profit": 0.0, "profit_flow": 0.0, "profit_delta": 0.0,
-                    "wear": 0.0, "income": 0.0, "redpacket": 0.0,
+                    "wear": 0.0, "wear_incomplete": False, "income": 0.0, "redpacket": 0.0,
                 },
             }
 
@@ -564,6 +618,7 @@ class CycleService:
         total_profit_flow = 0.0
         total_profit_delta = 0.0
         total_wear = 0.0
+        any_wear_incomplete = False
         total_income = 0.0
         total_redpacket = 0.0
         for member_name in ordered_names:
@@ -577,7 +632,10 @@ class CycleService:
             )
             rows.append(member_row)
             all_dates.update(member_row["redpacket_by_date"].keys())
-            total_wear += member_row["wear_total"]
+            if member_row["wear_incomplete"]:
+                any_wear_incomplete = True
+            if member_row["wear_total"] is not None:
+                total_wear += member_row["wear_total"]
             total_income += member_row["income_total"]
             total_redpacket += member_row["redpacket_total"]
             if member_row["profit"] is not None:
@@ -634,9 +692,10 @@ class CycleService:
             "rows": rows,
             "totals": {
                 "profit": normalize_income(total_profit) if is_settled else 0.0,
-                "profit_flow": normalize_income(total_profit_flow),
-                "profit_delta": normalize_income(total_profit_delta) if is_settled else 0.0,
-                "wear": normalize_wear(total_wear),
+                "profit_flow": None if any_wear_incomplete else normalize_income(total_profit_flow),
+                "profit_delta": None if (is_settled and any_wear_incomplete) else (normalize_income(total_profit_delta) if is_settled else 0.0),
+                "wear": None if any_wear_incomplete else normalize_wear(total_wear),
+                "wear_incomplete": any_wear_incomplete,
                 "income": normalize_income(total_income),
                 "redpacket": normalize_expense(total_redpacket),
             },

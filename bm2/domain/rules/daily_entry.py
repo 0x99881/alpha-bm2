@@ -47,3 +47,12 @@ def find_invalid_score_member(entries: list[dict[str, str]]) -> str | None:
         except ValueError:
             return entry['name']
     return None
+
+
+def find_incomplete_balance_member(entries: list[dict[str, str]]) -> str | None:
+    for entry in entries:
+        before_text = str(entry.get("before_balance", "") or "").strip()
+        after_text = str(entry.get("after_balance", "") or "").strip()
+        if bool(before_text) != bool(after_text):
+            return entry["name"]
+    return None

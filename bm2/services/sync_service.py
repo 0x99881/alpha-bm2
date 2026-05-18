@@ -26,10 +26,13 @@ class SyncService:
             score_profit_map=score_profit_map,
         )
 
-    def pull(self) -> dict[str, int]:
+    def pull(self, *, force_full: bool = False) -> dict[str, int]:
         if not self.is_configured():
             return {"members": 0, "score_entries": 0}
-        result = self._local_database.pull_from_supabase(self._supabase_client)
+        result = self._local_database.pull_from_supabase(
+            self._supabase_client,
+            force_full=force_full,
+        )
         changed = result.get("score_entries", 0) > 0 or result.get("members", 0) > 0
         if changed and self._after_pull is not None:
             self._after_pull()

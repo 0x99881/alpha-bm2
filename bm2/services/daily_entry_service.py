@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from ..domain.rules.daily_entry import find_invalid_score_member
+from ..domain.rules.daily_entry import find_incomplete_balance_member, find_invalid_score_member
 from ..ui_text import MESSAGES
 
 
@@ -92,6 +92,9 @@ class DailyEntryService:
         invalid_member = find_invalid_score_member(entries)
         if invalid_member is not None:
             return MESSAGES['score_must_integer'].format(name=invalid_member)
+        incomplete_balance_member = find_incomplete_balance_member(entries)
+        if incomplete_balance_member is not None:
+            return MESSAGES["balance_pair_required"].format(name=incomplete_balance_member)
         return None
 
     def validate_submission(

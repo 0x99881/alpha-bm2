@@ -70,7 +70,16 @@
         const activeMemberCount = toNumber(averageCard?.dataset.activeMemberCount, 0);
         const defaultAverageWear = toNumber(averageCard?.dataset.defaultWear, 0);
 
-        const getMonthButtons = () => calendarButtons.filter((button) => !monthPrefix || (button.dataset.date || "").startsWith(monthPrefix));
+        const getMonthButtons = () => calendarButtons.filter((button) => {
+            const date = button.dataset.date || "";
+            if (!date) {
+                return false;
+            }
+            if (monthPrefix) {
+                return date.startsWith(monthPrefix);
+            }
+            return !button.classList.contains("out-of-cycle");
+        });
 
         const renderBreakdownRows = (button, expanded) => {
             if (!modalBreakdownSection || !modalBreakdownList) {

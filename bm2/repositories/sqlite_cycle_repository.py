@@ -168,13 +168,15 @@ class SQLiteCycleRepositoryMixin:
                     continue
                 connection.execute(
                     """
-                    INSERT INTO settlement_entries (
-                        cycle_id, member_name, start_date, start_balance,
-                        settle_date, end_balance, updated_at, version, deleted, source
-                    ) VALUES (?, ?, '', ?, '', ?, ?, 1, 0, 'local')
-                    ON CONFLICT(cycle_id, member_name) DO UPDATE SET
+                INSERT INTO settlement_entries (
+                    cycle_id, member_name, start_date, start_balance,
+                    settle_date, end_balance, updated_at, version, deleted, source,
+                    is_extra
+                ) VALUES (?, ?, '', ?, '', ?, ?, 1, 0, 'local', ?)
+                ON CONFLICT(cycle_id, member_name) DO UPDATE SET
                         start_balance=excluded.start_balance,
                         end_balance=excluded.end_balance,
+                        is_extra=excluded.is_extra,
                         updated_at=excluded.updated_at,
                         version=settlement_entries.version + 1,
                         deleted=0,
@@ -186,6 +188,7 @@ class SQLiteCycleRepositoryMixin:
                         self._cycle_text(entry.get("start_balance")),
                         self._cycle_text(entry.get("end_balance")),
                         updated_at,
+                        int(entry.get("is_extra", 0) or 0),
                     ),
                 )
             connection.commit()

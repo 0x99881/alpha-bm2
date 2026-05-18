@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-from datetime import date, datetime
 from typing import Callable
 
-from ..constants import DATA_START_ROW, META_SHEET, NAME_HEADER, TOTAL_HEADER, WORKBOOK_FILENAME_PREFIX
+from ..constants import DATA_START_ROW, META_SHEET, NAME_HEADER, TOTAL_HEADER
 from ..excel.header_locator import find_column
 from ..excel.sheet_metadata import read_sheet_meta
 from ..excel.value_normalizer import normalize_expense, normalize_income, normalize_wear
@@ -64,36 +63,6 @@ class ExcelImportService:
     def after_supabase_pull(self) -> None:
         self._excel_exporter.export_missing_dates(self._excel_store)
 
-    @staticmethod
-    def _parse_score_header_date(header_text: str, year: int) -> date | None:
-        try:
-            return datetime.strptime(f"{year:04d}-{header_text}", "%Y-%m-%d").date()
-        except ValueError:
-            return None
-
-    def _score_header_date_map(self, workbook, used_columns: list[tuple[int, int]]) -> dict[int, str]:
-        score_sheet = self._excel_store.score_sheet_for(workbook)
-        cycle_start = self._workbook_cycle_start()
-        if cycle_start:
-            year_hint = datetime.strptime(cycle_start, "%Y-%m-%d").year
-        else:
-            year_hint = datetime.now().year
-
-        result: dict[int, str] = {}
-        previous: date | None = None
-        for _, column_index in used_columns:
-            header_text = str(score_sheet.cell(1, column_index).value or "").strip()
-            if not self._excel_store.score_sheet.is_date_header(header_text):
-                continue
-            current = self._parse_score_header_date(header_text, year_hint)
-            if current is None:
-                continue
-            while previous is not None and current <= previous:
-                current = date(current.year + 1, current.month, current.day)
-            result[column_index] = current.strftime("%Y-%m-%d")
-            previous = current
-        return result
-
     def _score_date_map_from_workbook(self, workbook) -> dict[int, str]:
         score_sheet = self._excel_store.score_sheet_for(workbook)
         meta_by_number: dict[int, list[str]] = {}
@@ -115,16 +84,12 @@ class ExcelImportService:
 
         score_date_map: dict[int, str] = {}
         unresolved: list[tuple[int, int]] = []
-        header_date_map = self._score_header_date_map(workbook, used_columns)
         for number, column_index in used_columns:
             saved_dates = {item.strip() for item in meta_by_number.get(number, []) if item.strip()}
             saved_date = next(iter(saved_dates)) if len(saved_dates) == 1 else ""
-            header_date = header_date_map.get(column_index, "")
             header_text = str(score_sheet.cell(1, column_index).value or "").strip()
             if saved_date and (not header_text or saved_date[5:] == header_text):
                 score_date_map[column_index] = saved_date
-            elif header_date:
-                score_date_map[column_index] = header_date
             else:
                 unresolved.append((number, column_index))
 
@@ -268,21 +233,3 @@ class ExcelImportService:
                     rows_by_key[key] = row
                 row[field_name] = value
 
-    def _workbook_cycle_start(self) -> str:
-        """Year-hint for score-sheet MMDD header parsing.
-
-        Returns the ISO date embedded in the workbook filename (e.g.
-        ``BM2记录_2026-04-24.xlsx`` -> ``2026-04-24``), or empty string if
-        the filename doesn't follow the convention. Used only as a year
-        hint when refreshing the score sheet — the cycle-block layout for
-        wear/income/expense gets its year from each block's banner instead.
-        """
-        stem = self._excel_store.workbook_path.stem
-        if stem.startswith(WORKBOOK_FILENAME_PREFIX):
-            suffix = stem[len(WORKBOOK_FILENAME_PREFIX):]
-            suffix = suffix.split("_", 1)[0].strip()
-            try:
-                return datetime.strptime(suffix, "%Y-%m-%d").strftime("%Y-%m-%d")
-            except ValueError:
-                return ""
-        return ""

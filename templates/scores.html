@@ -34,6 +34,7 @@
                 <button type="submit" formaction="{{ url_for('refresh_from_excel') }}" formmethod="post" class="secondary-btn" data-risk-confirm="{{ ui.refresh_from_excel }}">{{ ui.refresh_from_excel }}</button>
                 <button type="submit" formaction="{{ url_for('supabase_push_now') }}" formmethod="post" class="secondary-btn" data-risk-confirm="{{ ui.upload_web }}">{{ ui.upload_web }}</button>
                 <button type="submit" formaction="{{ url_for('supabase_pull_now') }}" formmethod="post" class="secondary-btn" data-risk-confirm="{{ ui.download_web }}">{{ ui.download_web }}</button>
+                <button type="submit" formaction="{{ url_for('supabase_pull_now') }}" formmethod="post" name="force_full" value="1" class="secondary-btn" data-risk-confirm="{{ ui.download_web_full }}">{{ ui.download_web_full }}</button>
                 <button type="submit" class="primary-btn">{{ ui.sync_excel }}</button>
             </div>
         </div>
