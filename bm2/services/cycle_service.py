@@ -209,14 +209,17 @@ class CycleService:
             "is_settled": is_settled,
         }
 
-    def get_current_cycle_wear_summary(self) -> dict[str, Any]:
-        """Wear total / per-member-avg for the current cycle window.
+    def get_current_cycle_wear_summary(self, cycle_id: str | None = None) -> dict[str, Any]:
+        """Wear total / per-member-avg for a cycle window.
 
         Used by the 磨损 page summary cards. Counts only members who have any
         wear entry within the window when computing the average, so an inactive
         member with no rows doesn't dilute the figure.
+
+        ``cycle_id`` selects a specific cycle (any cycle the user picked from
+        the dropdown); ``None`` falls back to the current/latest cycle.
         """
-        window = self.get_window()
+        window = self.get_window(cycle_id)
         if not window["has_cycle"]:
             return {
                 "has_cycle": False,

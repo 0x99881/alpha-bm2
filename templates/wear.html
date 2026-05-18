@@ -4,6 +4,16 @@
     <div>
         <h2>{{ ui.wear_page_title }}</h2>
         <p>{{ ui.wear_page_hint_online if read_only_mode else ui.wear_page_hint }}</p>
+        {% if not read_only_mode and cycles %}
+        <form method="get" action="{{ url_for('wear_entry') }}" class="cycle-picker-inline">
+            <label>{{ ui.calendar_cycle_label }}</label>
+            <select name="cycle" onchange="this.form.submit()">
+                {% for cycle in cycles %}
+                <option value="{{ cycle.id }}" {% if cycle.id == selected_cycle_id %}selected{% endif %}>{{ cycle.name }}{% if cycle.settled %} ({{ ui.cycle_settled_badge }}){% endif %}</option>
+                {% endfor %}
+            </select>
+        </form>
+        {% endif %}
     </div>
     <div class="page-head-stats">
         <div class="stat-card">

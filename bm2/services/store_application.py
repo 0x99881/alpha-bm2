@@ -41,7 +41,7 @@ class StoreApplication:
     def get_all_cycles(self): return self._context.query_service.get_all_cycles()
     def get_cycle_profit_view(self, cycle_id=None): return self._context.query_service.get_cycle_profit_view(cycle_id)
     def get_cycle_window(self, cycle_id=None): return self._context.cycle_service.get_window(cycle_id)
-    def get_current_cycle_wear_summary(self): return self._context.cycle_service.get_current_cycle_wear_summary()
+    def get_current_cycle_wear_summary(self, cycle_id=None): return self._context.cycle_service.get_current_cycle_wear_summary(cycle_id)
     def get_next_score_date(self): return self._context.query_service.get_next_score_date()
     def get_score_rows_for_date(self, score_date): return self._context.query_service.get_score_rows_for_date(score_date)
     def get_score_date_notes(self, score_date): return self._context.query_service.get_score_date_notes(score_date)
