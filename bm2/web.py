@@ -187,32 +187,24 @@ def register_routes(app, store) -> None:
         if selected_name not in ['all', *member_names]:
             selected_name = 'all'
 
-        # Cycle-mode is now the default. We fall back to legacy month-mode only
-        # when no cycle exists yet, so the page stays usable on a fresh install.
-        # ``cycle=all`` ⇒ span every cycle that has ever existed.
+        # Unified month-grid + cycle-overlay payload.
+        # - year/month from URL drives the visible calendar grid
+        # - cycle drives stats / 盈亏榜 + which days are "focused"
+        # - cycle=all ⇒ every day fully opaque, stats span all history
         cycle_id_arg = (request.args.get('cycle') or '').strip()
         all_cycles = store.get_all_cycles()
-        if cycle_id_arg == 'all' and all_cycles:
-            # Build a synthetic window covering the earliest start_date through
-            # today / the latest settle_date.
-            from datetime import date as _d
-            starts = [str(c.get('start_date') or '').strip() for c in all_cycles if str(c.get('start_date') or '').strip()]
-            ends = [str(c.get('settle_date') or '').strip() or _d.today().strftime('%Y-%m-%d') for c in all_cycles]
-            cycle_window = {
-                'has_cycle': True, 'cycle_id': 'all', 'is_settled': False,
-                'start_date': min(starts) if starts else '',
-                'end_date': max(ends) if ends else '',
-            }
-            calendar_data = store.get_member_profit_calendar_for_cycle(selected_name, cycle_window, all_cycles)
-            calendar_data['cycle_id'] = 'all'
+        year = request.args.get('year', type=int) or datetime.now().year
+        month = request.args.get('month', type=int) or datetime.now().month
+        if cycle_id_arg == 'all':
+            cycle_window = None  # 全部历史
         else:
             cycle_window = store.get_cycle_window(cycle_id_arg or None)
-            if cycle_window.get('has_cycle'):
-                calendar_data = store.get_member_profit_calendar_for_cycle(selected_name, cycle_window, all_cycles)
-            else:
-                year = request.args.get('year', type=int) or datetime.now().year
-                month = request.args.get('month', type=int) or datetime.now().month
-                calendar_data = store.get_member_profit_calendar(selected_name, year, month)
+            if not cycle_window.get('has_cycle'):
+                cycle_window = None  # 无周期 ⇒ 退化为全部
+        calendar_data = store.get_calendar_combo(
+            name=selected_name, year=year, month=month,
+            cycle_window=cycle_window, all_cycles=all_cycles,
+        )
         return render_template(
             'profit_calendar.html',
             members=members,

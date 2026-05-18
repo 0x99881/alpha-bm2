@@ -40,6 +40,7 @@ class StoreApplication:
     def get_value_sheet_view_for_cycle(self, sheet_type: str, *, start_iso, end_iso): return self._context.query_service.get_value_sheet_view_for_cycle(sheet_type, start_iso=start_iso, end_iso=end_iso)
     def get_member_profit_calendar(self, name, year, month): return self._context.query_service.get_member_profit_calendar(name, year, month)
     def get_member_profit_calendar_for_cycle(self, name, cycle_window, cycles): return self._context.query_service.get_member_profit_calendar_for_cycle(name, cycle_window, cycles)
+    def get_calendar_combo(self, *, name, year, month, cycle_window, all_cycles): return self._context.query_service.get_calendar_combo(name=name, year=year, month=month, cycle_window=cycle_window, all_cycles=all_cycles)
     def get_all_cycles(self): return self._context.query_service.get_all_cycles()
     def get_cycle_profit_view(self, cycle_id=None): return self._context.query_service.get_cycle_profit_view(cycle_id)
     def get_cycle_window(self, cycle_id=None): return self._context.cycle_service.get_window(cycle_id)

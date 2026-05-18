@@ -150,6 +150,12 @@ class StoreQueryService:
             name=name, cycle_window=cycle_window, cycles=cycles,
         )
 
+    def get_calendar_combo(self, *, name, year, month, cycle_window, all_cycles):
+        return self._context.profit_calendar_presenter.build_calendar_combo(
+            name=name, year=year, month=month,
+            cycle_window=cycle_window, all_cycles=all_cycles,
+        )
+
     def get_all_cycles(self) -> list[dict]:
         return self._context.local_db.get_settlement_cycles()
 

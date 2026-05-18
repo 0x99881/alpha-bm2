@@ -142,8 +142,9 @@
 .profit-day {
     min-height: 106px;
     border: 1px solid rgba(148, 163, 184, 0.2);
+    border-left: 4px solid var(--cycle-color, transparent);
     border-radius: 16px;
-    padding: 9px;
+    padding: 9px 9px 9px 9px;
     background: linear-gradient(180deg, rgba(30, 41, 59, 0.94) 0%, rgba(15, 23, 42, 0.98) 100%);
     color: #e2e8f0;
     display: flex;
@@ -153,7 +154,16 @@
     gap: 8px;
     text-align: left;
     box-shadow: inset 0 0 0 999px rgba(34, 197, 94, calc(var(--profit-intensity) * 0.35));
+    transition: opacity 0.18s ease;
 }
+
+/* 周期聚焦：选中周期天 100%，其他周期 40%，未归属任何周期 30% */
+.profit-day.cycle-focus-in { opacity: 1; }
+.profit-day.cycle-focus-other { opacity: 0.45; }
+.profit-day.cycle-focus-none { opacity: 0.3; }
+.profit-day.cycle-focus-all { opacity: 1; }  /* 全部历史模式 */
+.profit-day.cycle-focus-other:hover,
+.profit-day.cycle-focus-none:hover { opacity: 0.85; }
 
 .profit-day.has-data:hover {
     transform: translateY(-1px);
@@ -669,4 +679,51 @@ html[data-theme="dark"] .profit-day-hint {
 
 .profit-day.out-of-cycle:hover {
     opacity: 0.6;
+}
+
+/* ----- 月份导航 + 周期色图例 ----- */
+.profit-month-nav {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    margin-bottom: 12px;
+}
+
+.cycle-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 6px 0 12px;
+    font-size: 12px;
+}
+
+.cycle-legend-chip {
+    --cycle-color: transparent;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px 3px 8px;
+    border: 1px solid rgba(148, 163, 184, 0.3);
+    border-left: 4px solid var(--cycle-color);
+    border-radius: 999px;
+    color: #cbd5e1;
+    background: rgba(15, 23, 42, 0.6);
+    opacity: 0.55;
+    transition: opacity 0.18s ease;
+}
+
+.cycle-legend-chip.is-active {
+    opacity: 1;
+    color: #f8fafc;
+    border-color: rgba(148, 163, 184, 0.7);
+    border-left-color: var(--cycle-color);
+    background: rgba(30, 41, 59, 0.9);
+}
+
+.cycle-legend-swatch {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--cycle-color);
 }

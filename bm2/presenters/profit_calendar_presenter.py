@@ -1,10 +1,55 @@
 from __future__ import annotations
 
+import hashlib
 from datetime import date, datetime, timedelta
 from typing import Any
 
 from ..excel.value_normalizer import normalize_expense, normalize_income, normalize_wear
 from ..profit_calendar_utils import build_calendar_weeks, build_month_label, build_month_neighbors
+
+
+def _cycle_color(cycle_id: str) -> str:
+    """Stable HSL color from cycle id — same cycle always picks the same hue.
+
+    Saturation/lightness are fixed so the calendar legend stays calm; the
+    contrast between cycles comes from the hue distance alone.
+    """
+    digest = hashlib.md5((cycle_id or '').encode('utf-8')).hexdigest()
+    hue = int(digest[:6], 16) % 360
+    return f"hsl({hue}, 55%, 55%)"
+
+
+def _build_cycle_palette(cycles: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    today_iso = date.today().strftime('%Y-%m-%d')
+    palette: list[dict[str, Any]] = []
+    for c in cycles or []:
+        cid = str(c.get('id') or '')
+        if not cid:
+            continue
+        start = str(c.get('start_date') or '').strip()
+        settle = str(c.get('settle_date') or '').strip()
+        settled = bool(int(c.get('settled', 0) or 0))
+        end = settle if (settled and settle) else today_iso
+        palette.append({
+            'id': cid,
+            'name': str(c.get('name') or ''),
+            'settled': settled,
+            'start_iso': start,
+            'end_iso': end,
+            'color': _cycle_color(cid),
+        })
+    return palette
+
+
+def _cycle_for_date(date_iso: str, palette: list[dict[str, Any]]) -> dict[str, Any] | None:
+    if not date_iso:
+        return None
+    for entry in palette:
+        if not entry['start_iso']:
+            continue
+        if entry['start_iso'] <= date_iso <= entry['end_iso']:
+            return entry
+    return None
 
 
 def _iter_year_months(start_iso: str, end_iso: str):
@@ -132,6 +177,167 @@ class ProfitCalendarPresenter:
         board_rows = self._build_profit_board_rows(row_map)
         profit_positive_list, profit_negative_list = self._split_profit_board_rows(board_rows)
         return board_rows, profit_positive_list, profit_negative_list
+
+    def build_calendar_combo(
+        self,
+        *,
+        name: str,
+        year: int,
+        month: int,
+        cycle_window: dict[str, Any] | None,
+        all_cycles: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Single-month grid + cycle-scoped stats — the unified payload that
+        replaces the old "month mode" and "cycle mode" branches.
+
+        - The grid always shows the requested ``year/month`` (prev/next arrows
+          page through months freely).
+        - Each day cell carries ``cycle_id`` + ``cycle_color`` so the template
+          can render a left-edge stripe colored by which cycle owns that day.
+        - Stats / 盈亏榜 use ``cycle_window`` (the "current cycle" the user
+          picked from the dropdown). ``cycle_window=None`` ⇒ 全部历史 — every
+          day contributes and every day renders fully opaque.
+        """
+        active_members = self.repository.get_active_members()
+        active_names = {item['name'] for item in active_members}
+        stats_allowed = name == 'all' or name in active_names
+
+        dataset = (
+            self.repository.get_all_members_calendar_dataset(year, month)
+            if name == 'all'
+            else self.repository.get_member_calendar_dataset(name, year, month)
+        )
+        calendar_data = self._build_calendar_payload(dataset=dataset)
+        month_records = calendar_data['records']
+
+        palette = _build_cycle_palette(all_cycles)
+        palette_by_id = {entry['id']: entry for entry in palette}
+        selected_cycle_id = (cycle_window or {}).get('cycle_id', '') if cycle_window else 'all'
+        view_all = (cycle_window is None) or selected_cycle_id == 'all'
+
+        # ---- Stats / board scope: cycle window if focused, else month ----
+        if view_all:
+            scope_records = month_records
+        else:
+            start = cycle_window.get('start_date', '')
+            end = cycle_window.get('end_date', '')
+            scope_records = [
+                r for r in month_records
+                if start <= str(r.get('date') or '') <= end
+            ]
+        # When the user is focused on a specific cycle, the stats card should
+        # aggregate THAT cycle's full window — not just the days that happen
+        # to land in the currently-viewed month. So we widen the source to
+        # cover every month inside the cycle window.
+        if not view_all and cycle_window and cycle_window.get('has_cycle'):
+            scope_records = self._collect_cycle_records(
+                name=name,
+                cycle_window=cycle_window,
+                fallback_month_records=month_records,
+                current_year=year,
+                current_month=month,
+            )
+
+        scope_income, scope_wear, scope_expense = self._sum_profit_calendar_totals(scope_records, stats_allowed)
+        active_member_count = self._count_profit_stats_members(name=name, stats_allowed=stats_allowed, active_members=active_members)
+        data_day_count = len(scope_records)
+        average_stats = self._build_profit_average_stats(
+            month_income=scope_income,
+            month_wear=scope_wear,
+            active_member_count=active_member_count,
+            data_day_count=data_day_count,
+        )
+        board_rows, profit_positive_list, profit_negative_list = (
+            self._build_profit_board_lists(scope_records, active_members)
+            if name == 'all'
+            else ([], [], [])
+        )
+
+        # ---- Annotate each day cell with cycle ownership + focus state ----
+        for week in calendar_data['weeks']:
+            for cell in week:
+                date_iso = cell.get('date') or ''
+                entry = _cycle_for_date(date_iso, palette)
+                cell['cycle_id'] = entry['id'] if entry else ''
+                cell['cycle_color'] = entry['color'] if entry else ''
+                cell['cycle_name'] = entry['name'] if entry else ''
+                if view_all:
+                    cell['cycle_focus'] = 'all'  # everything fully opaque
+                elif entry and entry['id'] == selected_cycle_id:
+                    cell['cycle_focus'] = 'in'   # bright
+                elif entry:
+                    cell['cycle_focus'] = 'other'  # dimmed-but-visible
+                else:
+                    cell['cycle_focus'] = 'none'   # darkest grey, no record
+
+        prev_year, prev_month, next_year, next_month = build_month_neighbors(year, month)
+
+        # window descriptor for stat-card title text
+        if view_all:
+            window_start, window_end = '', ''
+        else:
+            window_start = (cycle_window or {}).get('start_date', '')
+            window_end = (cycle_window or {}).get('end_date', '')
+
+        return {
+            'mode': 'combo',
+            'year': year,
+            'month': month,
+            'month_label': build_month_label(year, month),
+            'weeks': calendar_data['weeks'],
+            'month_blocks': [{
+                'year': year, 'month': month,
+                'month_label': build_month_label(year, month),
+                'weeks': calendar_data['weeks'],
+            }],
+            'prev_year': prev_year, 'prev_month': prev_month,
+            'next_year': next_year, 'next_month': next_month,
+            'records': scope_records,
+            'cycle_palette': palette,
+            'cycle_id': selected_cycle_id,
+            'cycles': all_cycles,
+            'cycle_start_date': window_start,
+            'cycle_end_date': window_end,
+            'is_settled': bool((cycle_window or {}).get('is_settled')),
+            'month_income_total': scope_income,
+            'month_wear_total': scope_wear,
+            'month_expense_total': scope_expense,
+            'month_profit_total': normalize_income(scope_income - scope_wear - scope_expense),
+            **average_stats,
+            'profit_board_rows': board_rows,
+            'profit_positive_list': profit_positive_list,
+            'profit_negative_list': profit_negative_list,
+            'today': datetime.now().strftime('%Y-%m-%d'),
+            'is_all_members': name == 'all',
+            'stats_allowed': stats_allowed,
+        }
+
+    def _collect_cycle_records(self, *, name, cycle_window, fallback_month_records, current_year, current_month):
+        """Records across every month in the cycle window (so cycle stats are
+        full-window, not clipped to the current viewing month)."""
+        start_iso = cycle_window.get('start_date', '')
+        end_iso = cycle_window.get('end_date', '')
+        if not start_iso or not end_iso:
+            return fallback_month_records
+        out: list[dict[str, Any]] = []
+        for year, month in _iter_year_months(start_iso, end_iso):
+            if year == current_year and month == current_month:
+                # Already have it via the visible month's dataset.
+                out.extend([
+                    r for r in fallback_month_records
+                    if start_iso <= str(r.get('date') or '') <= end_iso
+                ])
+                continue
+            dataset = (
+                self.repository.get_all_members_calendar_dataset(year, month)
+                if name == 'all'
+                else self.repository.get_member_calendar_dataset(name, year, month)
+            )
+            for item in dataset['month_records']:
+                date_text = str(item.get('date') or '')
+                if start_iso <= date_text <= end_iso:
+                    out.append(item)
+        return out
 
     def build_member_profit_calendar_for_cycle(
         self,

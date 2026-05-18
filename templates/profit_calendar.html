@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
-{% set is_cycle_mode = calendar_data.mode == 'cycle' %}
+{% set is_cycle_mode = calendar_data.mode in ('cycle', 'combo') %}
 <section class="calendar-toolbar">
     <form method="get" action="{{ url_for('profit_calendar') }}" class="member-picker-panel">
         <label>
@@ -22,10 +22,10 @@
                 <option value="all" {% if calendar_data.cycle_id == 'all' %}selected{% endif %}>{{ ui.chart_range_all }}</option>
             </select>
         </label>
-        {% else %}
+        {% endif %}
+        {# Year/month carried so toolbar form submits preserve the visible month #}
         <input type="hidden" name="year" value="{{ calendar_data.year }}">
         <input type="hidden" name="month" value="{{ calendar_data.month }}">
-        {% endif %}
     </form>
 
     <div class="calendar-stats">
@@ -131,9 +131,21 @@
 <div class="profit-content-row">
 <section class="profit-panel">
     {% for block in calendar_data.month_blocks %}
-    <div class="profit-header">
+    <div class="profit-header profit-month-nav">
+        <a class="month-arrow" href="{{ url_for('profit_calendar', name=selected_name, cycle=calendar_data.cycle_id, year=calendar_data.prev_year, month=calendar_data.prev_month) }}" title="上一月">&larr;</a>
         <strong>{{ block.month_label }}</strong>
+        <a class="month-arrow" href="{{ url_for('profit_calendar', name=selected_name, cycle=calendar_data.cycle_id, year=calendar_data.next_year, month=calendar_data.next_month) }}" title="下一月">&rarr;</a>
     </div>
+
+    {% if calendar_data.cycle_palette %}
+    <div class="cycle-legend">
+        {% for entry in calendar_data.cycle_palette %}
+        <span class="cycle-legend-chip{% if entry.id == calendar_data.cycle_id %} is-active{% endif %}" style="--cycle-color: {{ entry.color }}">
+            <span class="cycle-legend-swatch"></span>{{ entry.name }}{% if entry.settled %} ({{ ui.cycle_settled_badge }}){% endif %}
+        </span>
+        {% endfor %}
+    </div>
+    {% endif %}
 
     <div class="profit-weekdays">
         <div>{{ ui.weekday_sun }}</div>
@@ -148,10 +160,10 @@
     {% for week in block.weeks %}
     <div class="profit-calendar-grid">
         {% for cell in week %}
-        {% set out_of_cycle = is_cycle_mode and cell.date and (cell.date < calendar_data.cycle_start_date or cell.date > calendar_data.cycle_end_date) %}
+        {% set focus = cell.cycle_focus or 'all' %}
         <button
             type="button"
-            class="profit-day {% if not cell.in_month %}other-month{% endif %} {% if out_of_cycle %}out-of-cycle{% endif %} {% if cell.date == calendar_data.today %}today{% endif %} {% if cell.wear is not none or cell.income is not none %}has-data{% endif %}"
+            class="profit-day cycle-focus-{{ focus }} {% if not cell.in_month %}other-month{% endif %} {% if cell.date == calendar_data.today %}today{% endif %} {% if cell.wear is not none or cell.income is not none %}has-data{% endif %}"
             data-calendar-open="true"
             data-date="{{ cell.date }}"
             data-wear="{% if cell.wear is not none %}{{ cell.wear }}{% endif %}"
@@ -163,7 +175,9 @@
             data-avg-wear="{% if cell.avg_wear is not none %}{{ cell.avg_wear }}{% endif %}"
             data-avg-income="{% if cell.avg_income is not none %}{{ cell.avg_income }}{% endif %}"
             data-breakdown='{{ cell.breakdown | tojson }}'
-            style="--profit-intensity: {{ cell.intensity }}"
+            data-cycle-id="{{ cell.cycle_id or '' }}"
+            title="{% if cell.cycle_name %}{{ cell.cycle_name }}{% else %}未归属周期{% endif %}"
+            style="--profit-intensity: {{ cell.intensity }}; --cycle-color: {{ cell.cycle_color or 'transparent' }}"
         >
             <span class="profit-day-number">{{ cell.day }}</span>
             {% if cell.wear is not none or cell.income is not none %}
