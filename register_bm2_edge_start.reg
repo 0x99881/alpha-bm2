@@ -1,8 +1,0 @@
-Windows Registry Editor Version 5.00
-
-[HKEY_CURRENT_USER\Software\Classes\bm2]
-@="URL:BM2 Edge Local Starter"
-"URL Protocol"=""
-
-[HKEY_CURRENT_USER\Software\Classes\bm2\shell\open\command]
-@="\"C:\\Windows\\System32\\cmd.exe\" /c \"\"E:\\111debug\\alpha\\edge_start.bat\" \"%1\"\""

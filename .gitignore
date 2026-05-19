@@ -16,9 +16,11 @@ BM2记录_*.xlsx
 system_config.json
 
 # Local temp and quarantine
+.claude/
 .tmp/
 .tmp_*/
 .tmp_test_workspaces/
+xxxxx_待手动删除/
 pytest-cache-files-*/
 _legacy_quarantine_*/
 vendor/
