@@ -14,6 +14,11 @@ LOGGER = logging.getLogger(__name__)
 _T = TypeVar("_T")
 _RETRY_ATTEMPTS = 3
 _RETRY_DELAY_SECONDS = 1.5
+# PostgREST caps a single response at 1000 rows by default. Past this
+# threshold the pull silently truncates the tail of an ``order(...)``
+# result, which is what made the online /score-overview lag behind the
+# local one once score_entries grew past 1000.
+_PAGE_SIZE = 1000
 
 
 def _retry_on_transient(call: Callable[[], _T], *, label: str) -> _T:
@@ -136,6 +141,21 @@ class SupabaseClient:
             self._client_cache = create_client(self._url(), self._key())
         return self._client_cache
 
+    def _paginated_pull(self, build_query, *, label: str) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+        offset = 0
+        while True:
+            page_label = f"{label}[offset={offset}]"
+            result = _retry_on_transient(
+                lambda: build_query().range(offset, offset + _PAGE_SIZE - 1).execute(),
+                label=page_label,
+            )
+            data = list(result.data or [])
+            rows.extend(data)
+            if len(data) < _PAGE_SIZE:
+                return rows
+            offset += _PAGE_SIZE
+
     def ensure_score_entries_schema(self) -> None:
         if self._schema_ok:
             return
@@ -203,26 +223,24 @@ class SupabaseClient:
     def pull_members(self, since_updated_at: str | None = None) -> list[dict[str, Any]]:
         LOGGER.info("Supabase pull_members: since=%s", since_updated_at or "beginning")
 
-        def _run():
+        def _build():
             query = self._client().table("members").select("*")
             if since_updated_at:
                 query = query.gt("updated_at", since_updated_at)
-            return query.order("updated_at").execute()
+            return query.order("updated_at")
 
-        result = _retry_on_transient(_run, label="pull_members")
-        return result.data or []
+        return self._paginated_pull(_build, label="pull_members")
 
     def pull_score_entries(self, since_updated_at: str | None = None) -> list[dict[str, Any]]:
         LOGGER.info("Supabase pull_score_entries: since=%s", since_updated_at or "beginning")
 
-        def _run():
+        def _build():
             query = self._client().table("score_entries").select("*")
             if since_updated_at:
                 query = query.gt("updated_at", since_updated_at)
-            return query.order("updated_at").execute()
+            return query.order("updated_at")
 
-        result = _retry_on_transient(_run, label="pull_score_entries")
-        return result.data or []
+        return self._paginated_pull(_build, label="pull_score_entries")
 
     # ------------------------------------------------------------------
     # Settlement cycles + entries
@@ -282,14 +300,14 @@ class SupabaseClient:
     def pull_settlement_cycles(self, since_updated_at: str | None = None) -> list[dict[str, Any]]:
         LOGGER.info("Supabase pull_settlement_cycles: since=%s", since_updated_at or "beginning")
 
-        def _run():
+        def _build():
             query = self._client().table("settlement_cycles").select("*")
             if since_updated_at:
                 query = query.gt("updated_at", since_updated_at)
-            return query.order("updated_at").execute()
+            return query.order("updated_at")
 
         try:
-            result = _retry_on_transient(_run, label="pull_settlement_cycles")
+            return self._paginated_pull(_build, label="pull_settlement_cycles")
         except APIError as exc:
             if self._is_missing_table_error(exc):
                 LOGGER.warning(
@@ -297,19 +315,18 @@ class SupabaseClient:
                 )
                 return []
             raise
-        return result.data or []
 
     def pull_settlement_entries(self, since_updated_at: str | None = None) -> list[dict[str, Any]]:
         LOGGER.info("Supabase pull_settlement_entries: since=%s", since_updated_at or "beginning")
 
-        def _run():
+        def _build():
             query = self._client().table("settlement_entries").select("*")
             if since_updated_at:
                 query = query.gt("updated_at", since_updated_at)
-            return query.order("updated_at").execute()
+            return query.order("updated_at")
 
         try:
-            result = _retry_on_transient(_run, label="pull_settlement_entries")
+            return self._paginated_pull(_build, label="pull_settlement_entries")
         except APIError as exc:
             if self._is_missing_table_error(exc):
                 LOGGER.warning(
@@ -317,4 +334,3 @@ class SupabaseClient:
                 )
                 return []
             raise
-        return result.data or []
