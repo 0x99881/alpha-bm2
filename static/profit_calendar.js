@@ -12,6 +12,17 @@
     } = namespace;
 
     namespace.initProfitCalendar = () => {
+        // 双击周期图例即切换到该周期（等同于顶部“当前周期”下拉里选它）。
+        // 放在最前面、早于下面的日历弹窗早退，保证图例切换始终生效。
+        document.querySelectorAll("[data-cycle-switch-url]").forEach((chip) => {
+            chip.addEventListener("dblclick", () => {
+                const url = chip.getAttribute("data-cycle-switch-url");
+                if (url) {
+                    window.location.href = url;
+                }
+            });
+        });
+
         const calendarButtons = Array.from(document.querySelectorAll("[data-calendar-open]"));
         const calendarModal = document.querySelector("[data-calendar-modal]");
         if (!calendarButtons.length || !calendarModal) {

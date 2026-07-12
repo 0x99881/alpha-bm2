@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import time
 from datetime import date, datetime, timedelta
-from typing import Callable
+from typing import Any, Callable, TypeVar
 
 from ..constants import ENABLED, NAME_HEADER, PROFIT_HEADER, TOTAL_HEADER, WEAR_ABNORMAL_THRESHOLD, WEAR_TOTAL_HEADER
 from ..excel.value_normalizer import normalize_wear
@@ -9,12 +10,34 @@ from ..presenters.score_view_formatter import build_score_sheet_view, build_scor
 from ..ui_text import UI_TEXT
 from ..value_utils import to_float_or_none
 
+_T = TypeVar("_T")
+
+# Read-only online pages fan out into several full-table pulls each (the wear
+# page alone pulls score_entries 3-4×). This short TTL collapses the repeated
+# pulls within a request — and across warm serverless invocations a few seconds
+# apart — into one network call per table. Staleness is bounded by the TTL and
+# harmless: the online site only changes when the local machine pushes, which is
+# minutes/hours apart, never within these few seconds.
+_ONLINE_PULL_TTL_SECONDS = 8.0
+
 
 class ApplicationService:
     def __init__(self, local_database, supabase_client, local_next_score_date: Callable[[], str]) -> None:
         self._local_database = local_database
         self._supabase_client = supabase_client
         self._local_next_score_date = local_next_score_date
+        self._pull_cache: dict[str, tuple[float, Any]] = {}
+
+    def _cached_pull(self, key: str, producer: Callable[[], _T]) -> _T:
+        hit = self._pull_cache.get(key)
+        if hit is not None and (time.monotonic() - hit[0]) < _ONLINE_PULL_TTL_SECONDS:
+            return hit[1]
+        value = producer()
+        # Timestamp AFTER the fetch: a paginated pull can take several seconds,
+        # and TTL should measure how stale the data is, not how long ago we
+        # *started* fetching (which would expire a slow pull before it's reused).
+        self._pull_cache[key] = (time.monotonic(), value)
+        return value
 
     def uses_supabase_client(self, supabase_client) -> bool:
         return self._supabase_client is supabase_client
@@ -22,7 +45,8 @@ class ApplicationService:
     def _online_member_rows(self) -> list[dict]:
         if not self._supabase_client.is_configured():
             raise RuntimeError("\u7ebf\u4e0a\u6570\u636e\u5e93\u672a\u914d\u7f6e\uff0c\u4e0d\u80fd\u8bfb\u53d6\u7ebf\u4e0a\u6210\u5458\u6570\u636e\u3002")
-        rows = self._supabase_client.pull_members()
+        # Copy before sorting so we never mutate the shared cached list.
+        rows = list(self._cached_pull("members", self._supabase_client.pull_members))
         rows.sort(
             key=lambda item: (
                 int(item.get("deleted", 0) or 0),
@@ -35,7 +59,7 @@ class ApplicationService:
     def _online_score_rows(self) -> list[dict]:
         if not self._supabase_client.is_configured():
             raise RuntimeError("\u7ebf\u4e0a\u6570\u636e\u5e93\u672a\u914d\u7f6e\uff0c\u4e0d\u80fd\u8bfb\u53d6\u7ebf\u4e0a\u79ef\u5206\u6570\u636e\u3002")
-        return self._supabase_client.pull_score_entries()
+        return self._cached_pull("score_entries", self._supabase_client.pull_score_entries)
 
     def _online_current_cycle(self) -> dict | None:
         """Return the current cycle for online consumers, or ``None`` when
@@ -51,7 +75,7 @@ class ApplicationService:
         cycle-table migration yet.
         """
         try:
-            rows = self._supabase_client.pull_settlement_cycles()
+            rows = self._cached_pull("cycles", self._supabase_client.pull_settlement_cycles)
         except Exception:  # noqa: BLE001 - pull already retries; failing here is non-fatal
             return None
         live = [row for row in rows if int(row.get("deleted", 0) or 0) == 0]

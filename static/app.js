@@ -43,6 +43,9 @@
         if (typeof namespace.initCycleSort === "function") {
             namespace.initCycleSort();
         }
+        if (typeof namespace.initCashFlowPage === "function") {
+            namespace.initCashFlowPage();
+        }
     };
 
     if (document.readyState === "loading") {

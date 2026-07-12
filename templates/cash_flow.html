@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-head">
+    <div>
+        <h2>{{ ui.cash_flow_title }}</h2>
+        <p>{{ ui.cash_flow_hint }}</p>
+    </div>
+    <div class="page-head-stats">
+        <div class="stat-card">
+            <span>{{ ui.cash_flow_month_out }} <em class="cash-flow-month">{{ cash_flow.summary.month_label }}</em></span>
+            <strong>{{ cash_flow.summary.month_out }}</strong>
+        </div>
+        <div class="stat-card">
+            <span>{{ ui.cash_flow_total_out }}</span>
+            <strong>{{ cash_flow.summary.total_out }}</strong>
+        </div>
+        <div class="stat-card">
+            <span>{{ ui.cash_flow_total_in }}</span>
+            <strong>{{ cash_flow.summary.total_in }}</strong>
+        </div>
+        <div class="stat-card">
+            <span>{{ ui.cash_flow_net_out }}</span>
+            <strong>{{ cash_flow.summary.net_out }}</strong>
+        </div>
+    </div>
+</section>
+
+<section class="panel">
+    <form method="post" action="{{ url_for('add_cash_flow_route') }}" class="cash-flow-form">
+        <div class="cash-flow-field">
+            <label for="cf-date">{{ ui.cash_flow_date }}</label>
+            <input type="date" id="cf-date" name="entry_date" value="{{ cash_flow.today }}" required>
+        </div>
+        <div class="cash-flow-field">
+            <label for="cf-direction">{{ ui.cash_flow_direction }}</label>
+            <select id="cf-direction" name="direction">
+                <option value="out">{{ ui.cash_flow_out }}</option>
+                <option value="in">{{ ui.cash_flow_in }}</option>
+            </select>
+        </div>
+        <div class="cash-flow-field">
+            <label for="cf-amount">{{ ui.cash_flow_amount }}</label>
+            <input type="number" id="cf-amount" name="amount" step="any" min="0" inputmode="decimal" required>
+        </div>
+        <div class="cash-flow-field">
+            <label for="cf-category">{{ ui.cash_flow_category }}</label>
+            <select id="cf-category" name="category">
+                {% for category in cash_flow.categories %}
+                <option value="{{ category }}">{{ category }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="cash-flow-field cash-flow-field-note">
+            <label for="cf-note">{{ ui.cash_flow_note }}</label>
+            <input type="text" id="cf-note" name="note" maxlength="200" placeholder="{{ ui.cash_flow_note_placeholder }}">
+        </div>
+        <div class="cash-flow-field cash-flow-field-submit">
+            <button type="submit" class="primary-btn">{{ ui.cash_flow_submit }}</button>
+        </div>
+    </form>
+</section>
+
+<section class="panel">
+    <div class="table-scroll">
+        <table class="cash-flow-table">
+            <thead>
+                <tr>
+                    <th>{{ ui.cash_flow_date }}</th>
+                    <th>{{ ui.cash_flow_direction }}</th>
+                    <th class="cash-flow-amount-col">{{ ui.cash_flow_col_amount }}</th>
+                    <th>{{ ui.cash_flow_category }}</th>
+                    <th>{{ ui.cash_flow_note }}</th>
+                    <th class="cash-flow-action-col"></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in cash_flow.rows %}
+                <tr>
+                    <td>{{ row.entry_date }}</td>
+                    <td><span class="cash-flow-tag {% if row.is_out %}cash-flow-tag-out{% else %}cash-flow-tag-in{% endif %}">{{ row.direction_label }}</span></td>
+                    <td class="cash-flow-amount-col {% if row.is_out %}cash-flow-amount-out{% else %}cash-flow-amount-in{% endif %}">{% if row.is_out %}-{% else %}+{% endif %}{{ row.amount }}</td>
+                    <td>{{ row.category }}</td>
+                    <td class="cash-flow-note-cell">{{ row.note }}</td>
+                    <td class="cash-flow-action-col">
+                        <form method="post" action="{{ url_for('delete_cash_flow_route') }}" data-cashflow-delete>
+                            <input type="hidden" name="flow_id" value="{{ row.id }}">
+                            <button type="submit" class="danger-btn compact-btn">{{ ui.cash_flow_delete }}</button>
+                        </form>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="6" class="cash-flow-empty">{{ ui.cash_flow_empty }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

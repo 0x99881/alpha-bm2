@@ -721,9 +721,35 @@ html[data-theme="dark"] .profit-day-hint {
     background: rgba(30, 41, 59, 0.9);
 }
 
+/* 双击切换周期：给个手型 + 悬停微亮，提示可点。 */
+.cycle-legend-chip.is-switchable {
+    cursor: pointer;
+    user-select: none;
+}
+
+.cycle-legend-chip.is-switchable:hover {
+    opacity: 1;
+    filter: brightness(1.12);
+}
+
 .cycle-legend-swatch {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
     background: var(--cycle-color);
+}
+
+/* ---- 夜间模式:HSL 重算让色相在深背景下更亮/更鲜艳,色条加宽 ---- */
+html[data-theme="dark"] .profit-day {
+    border-left-width: 6px;
+    border-left-color: hsla(var(--cycle-hue, 0), 82%, 68%, var(--cycle-alpha, 0));
+}
+html[data-theme="dark"] .cycle-legend-chip {
+    border-left-width: 6px;
+    border-left-color: hsl(var(--cycle-hue, 0), 82%, 68%);
+}
+html[data-theme="dark"] .cycle-legend-swatch {
+    width: 14px;
+    height: 14px;
+    background: hsl(var(--cycle-hue, 0), 82%, 68%);
 }

@@ -140,7 +140,12 @@
     {% if calendar_data.cycle_palette %}
     <div class="cycle-legend">
         {% for entry in calendar_data.cycle_palette %}
-        <span class="cycle-legend-chip{% if entry.id == calendar_data.cycle_id %} is-active{% endif %}" style="--cycle-color: {{ entry.color }}">
+        {% set _sw_year = entry.start_iso[:4] if entry.start_iso else calendar_data.year %}
+        {% set _sw_month = entry.start_iso[5:7] if entry.start_iso else calendar_data.month %}
+        <span class="cycle-legend-chip is-switchable{% if entry.id == calendar_data.cycle_id %} is-active{% endif %}"
+            style="--cycle-color: {{ entry.color }}; --cycle-hue: {{ entry.hue }}"
+            data-cycle-switch-url="{{ url_for('profit_calendar', name=selected_name, cycle=entry.id, year=_sw_year, month=_sw_month) }}"
+            title="{{ ui.cycle_legend_switch_hint }}">
             <span class="cycle-legend-swatch"></span>{{ entry.name }}{% if entry.settled %} ({{ ui.cycle_settled_badge }}){% endif %}
         </span>
         {% endfor %}
@@ -177,7 +182,7 @@
             data-breakdown='{{ cell.breakdown | tojson }}'
             data-cycle-id="{{ cell.cycle_id or '' }}"
             title="{% if cell.cycle_name %}{{ cell.cycle_name }}{% else %}未归属周期{% endif %}"
-            style="--profit-intensity: {{ cell.intensity }}; --cycle-color: {{ cell.cycle_color or 'transparent' }}"
+            style="--profit-intensity: {{ cell.intensity }}; --cycle-color: {{ cell.cycle_color or 'transparent' }}; --cycle-hue: {{ cell.cycle_hue if cell.cycle_hue != '' else 0 }}; --cycle-alpha: {{ 1 if cell.cycle_id else 0 }}"
         >
             <span class="profit-day-number">{{ cell.day }}</span>
             {% if cell.wear is not none or cell.income is not none %}

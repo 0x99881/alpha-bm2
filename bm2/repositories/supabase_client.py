@@ -21,6 +21,30 @@ _RETRY_DELAY_SECONDS = 1.5
 _PAGE_SIZE = 1000
 
 
+# Substrings that mark an APIError as a transient gateway/DB blip worth
+# retrying. Anything NOT matching (schema errors, permission, PGRST logic
+# codes) is a permanent failure and re-raised immediately — retrying those
+# would just burn 3×1.5s before failing anyway.
+_TRANSIENT_API_HINTS = (
+    "timeout", "timed out", "temporarily unavailable", "unavailable",
+    "connection", "reset", "gateway", "overloaded", "too many",
+    "502", "503", "504",
+)
+
+
+def _is_transient_api_error(exc: APIError) -> bool:
+    """True for server-side/gateway blips (Supabase 5xx, connection resets,
+    DB restarts) that a retry can plausibly recover from."""
+    code = str(getattr(exc, "code", "") or "")
+    if code[:1] == "5":  # 5xx-style gateway/server error
+        return True
+    blob = " ".join(
+        str(getattr(exc, attr, "") or "")
+        for attr in ("message", "details", "hint", "code")
+    ).lower()
+    return any(hint in blob for hint in _TRANSIENT_API_HINTS)
+
+
 def _retry_on_transient(call: Callable[[], _T], *, label: str) -> _T:
     last_exc: Exception | None = None
     for attempt in range(1, _RETRY_ATTEMPTS + 1):
@@ -28,16 +52,22 @@ def _retry_on_transient(call: Callable[[], _T], *, label: str) -> _T:
             return call()
         except (httpx.TimeoutException, httpx.TransportError) as exc:
             last_exc = exc
-            LOGGER.warning(
-                "Supabase %s transient failure (attempt %d/%d): %s: %s",
-                label,
-                attempt,
-                _RETRY_ATTEMPTS,
-                type(exc).__name__,
-                exc,
-            )
-            if attempt < _RETRY_ATTEMPTS:
-                time.sleep(_RETRY_DELAY_SECONDS)
+        except APIError as exc:
+            # Permanent API errors (schema/permission/logic) fail fast; only
+            # transient server-side blips are worth another attempt.
+            if not _is_transient_api_error(exc):
+                raise
+            last_exc = exc
+        LOGGER.warning(
+            "Supabase %s transient failure (attempt %d/%d): %s: %s",
+            label,
+            attempt,
+            _RETRY_ATTEMPTS,
+            type(last_exc).__name__,
+            last_exc,
+        )
+        if attempt < _RETRY_ATTEMPTS:
+            time.sleep(_RETRY_DELAY_SECONDS)
     assert last_exc is not None
     raise last_exc
 

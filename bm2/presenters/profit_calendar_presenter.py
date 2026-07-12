@@ -8,15 +8,18 @@ from ..excel.value_normalizer import normalize_expense, normalize_income, normal
 from ..profit_calendar_utils import build_calendar_weeks, build_month_label, build_month_neighbors
 
 
-def _cycle_color(cycle_id: str) -> str:
-    """Stable HSL color from cycle id — same cycle always picks the same hue.
-
-    Saturation/lightness are fixed so the calendar legend stays calm; the
-    contrast between cycles comes from the hue distance alone.
-    """
+def _cycle_hue(cycle_id: str) -> int:
+    """Stable hue (0-359) derived from cycle id. Same id always maps to same hue."""
     digest = hashlib.md5((cycle_id or '').encode('utf-8')).hexdigest()
-    hue = int(digest[:6], 16) % 360
-    return f"hsl({hue}, 55%, 55%)"
+    return int(digest[:6], 16) % 360
+
+
+def _cycle_color(cycle_id: str) -> str:
+    """Stable HSL color for light theme. Dark theme overrides this in CSS by
+    re-deriving from the ``--cycle-hue`` custom property so the swatch is
+    bright enough against a near-black background.
+    """
+    return f"hsl({_cycle_hue(cycle_id)}, 55%, 55%)"
 
 
 def _build_cycle_palette(cycles: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -37,6 +40,7 @@ def _build_cycle_palette(cycles: list[dict[str, Any]]) -> list[dict[str, Any]]:
             'start_iso': start,
             'end_iso': end,
             'color': _cycle_color(cid),
+            'hue': _cycle_hue(cid),
         })
     return palette
 
@@ -260,6 +264,7 @@ class ProfitCalendarPresenter:
                 entry = _cycle_for_date(date_iso, palette)
                 cell['cycle_id'] = entry['id'] if entry else ''
                 cell['cycle_color'] = entry['color'] if entry else ''
+                cell['cycle_hue'] = entry['hue'] if entry else ''
                 cell['cycle_name'] = entry['name'] if entry else ''
                 if view_all:
                     cell['cycle_focus'] = 'all'  # everything fully opaque

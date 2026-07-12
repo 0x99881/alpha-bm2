@@ -1,6 +1,6 @@
 (() => {
     const namespace = window.BM2 || (window.BM2 = {});
-    const { getUiText, setText, setNegativeClass, formatOneDecimal } = namespace;
+    const { getUiText, setText, setNegativeClass, formatOneDecimal, cssEscape } = namespace;
 
     namespace.initScoresPage = () => {
         const draftForm = document.querySelector("[data-score-draft-form]");
@@ -180,7 +180,7 @@
         document.querySelectorAll("[data-score]").forEach((button) => {
             button.addEventListener("click", () => {
                 const targetName = button.dataset.target;
-                const targetInput = document.querySelector(`[name="${targetName}"]`);
+                const targetInput = document.querySelector(`[name="${cssEscape(targetName)}"]`);
                 if (targetInput) {
                     targetInput.value = button.dataset.score || "";
                     targetInput.dispatchEvent(new Event("input", { bubbles: true }));
@@ -203,11 +203,53 @@
             setText(resultNode, resultNode.dataset.emptyText || noRecordText);
             resultNode.classList.remove("negative");
             resultNode.classList.add("placeholder-result");
+            delete resultNode.dataset.wearValue;
+            recomputeWearSummary();
         };
 
-        const setWearStatus = (resultNode, text) => {
+        const setWearStatus = (resultNode, text, numericValue) => {
             setText(resultNode, text);
             resultNode.classList.remove("placeholder-result");
+            if (Number.isFinite(numericValue)) {
+                resultNode.dataset.wearValue = String(numericValue);
+            } else {
+                delete resultNode.dataset.wearValue;
+            }
+            recomputeWearSummary();
+        };
+
+        const summaryTotalNode = document.querySelector('[data-wear-summary="total"]');
+        const summaryCountNode = document.querySelector('[data-wear-summary="count"]');
+        const summaryAvgNode = document.querySelector('[data-wear-summary="avg"]');
+
+        const recomputeWearSummary = () => {
+            if (!summaryTotalNode || !summaryCountNode || !summaryAvgNode) {
+                return;
+            }
+            let total = 0;
+            let count = 0;
+            document.querySelectorAll("[data-wear-result]").forEach((node) => {
+                const raw = node.dataset.wearValue;
+                if (raw === undefined || raw === "") return;
+                const num = Number(raw);
+                if (!Number.isFinite(num)) return;
+                total += num;
+                count += 1;
+            });
+            if (count === 0) {
+                setText(summaryTotalNode, "—");
+                setText(summaryCountNode, "0");
+                setText(summaryAvgNode, "—");
+                summaryTotalNode.classList.remove("negative");
+                summaryAvgNode.classList.remove("negative");
+                return;
+            }
+            const avg = total / count;
+            setText(summaryTotalNode, formatOneDecimal(total));
+            setText(summaryCountNode, String(count));
+            setText(summaryAvgNode, formatOneDecimal(avg));
+            setNegativeClass(summaryTotalNode, total);
+            setNegativeClass(summaryAvgNode, avg);
         };
 
         const clearAllButton = document.querySelector("[data-clear-all]");
@@ -224,10 +266,11 @@
         }
 
         const updateWearResult = (groupName) => {
-            const beforeInput = document.querySelector(`[data-balance-group="${groupName}"][data-balance-role="before"]`);
-            const afterInput = document.querySelector(`[data-balance-group="${groupName}"][data-balance-role="after"]`);
-            const manualInput = document.querySelector(`[data-manual-wear="${groupName}"]`);
-            const resultNode = document.querySelector(`[data-wear-result="${groupName}"]`);
+            const safeGroup = cssEscape(groupName);
+            const beforeInput = document.querySelector(`[data-balance-group="${safeGroup}"][data-balance-role="before"]`);
+            const afterInput = document.querySelector(`[data-balance-group="${safeGroup}"][data-balance-role="after"]`);
+            const manualInput = document.querySelector(`[data-manual-wear="${safeGroup}"]`);
+            const resultNode = document.querySelector(`[data-wear-result="${safeGroup}"]`);
 
             if (!beforeInput || !afterInput || !manualInput || !resultNode) {
                 return;
@@ -241,7 +284,7 @@
                     resultNode.classList.remove("negative");
                     return;
                 }
-                setWearStatus(resultNode, formatOneDecimal(manualNumber));
+                setWearStatus(resultNode, formatOneDecimal(manualNumber), manualNumber);
                 setNegativeClass(resultNode, manualNumber);
                 return;
             }
@@ -262,7 +305,7 @@
             }
 
             const wearValue = beforeNumber - afterNumber;
-            setWearStatus(resultNode, formatOneDecimal(wearValue));
+            setWearStatus(resultNode, formatOneDecimal(wearValue), wearValue);
             setNegativeClass(resultNode, wearValue);
         };
 

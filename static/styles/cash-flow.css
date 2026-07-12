@@ -1,0 +1,165 @@
+/* 资金流水页：录入表单 + 流水表。复用 layout.css 的 panel / stat-card /
+   primary-btn / danger-btn，这里只补页面特有的排版与出入金配色。 */
+
+.cash-flow-month {
+    font-style: normal;
+    color: var(--muted);
+    font-weight: 600;
+}
+
+.cash-flow-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 14px;
+}
+
+.cash-flow-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    /* min-width:0 lets flex items shrink below their input's intrinsic width
+       so the row wraps instead of overflowing the page horizontally. */
+    min-width: 0;
+    flex: 1 1 130px;
+}
+
+.cash-flow-field label {
+    font-size: 13px;
+    color: var(--muted);
+}
+
+.cash-flow-field input,
+.cash-flow-field select {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+}
+
+.cash-flow-field-note {
+    flex: 2 1 200px;
+}
+
+.cash-flow-field-submit {
+    flex: 0 0 auto;
+    margin-left: auto;
+}
+
+/* Real horizontal-scroll box so a wide ledger table scrolls inside itself
+   instead of stretching the whole page (min-width:0 lets it shrink under the
+   table's intrinsic min-content within the flex content column). */
+.table-scroll {
+    overflow-x: auto;
+    min-width: 0;
+}
+
+/* table-layout:fixed keeps the table's intrinsic min-content small so it never
+   forces the whole page wider than the viewport (the .content grid item has
+   min-width:auto and would otherwise refuse to shrink under a wide auto table).
+   On truly narrow screens the .table-scroll wrapper scrolls it horizontally. */
+.cash-flow-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    /* Opt out of the global `table { min-width: 1080px }` (score-entry.css),
+       which is meant for the wide score sheets, not this compact ledger. */
+    min-width: 0;
+}
+
+.cash-flow-table th:nth-child(1) { width: 110px; }
+.cash-flow-table th:nth-child(2) { width: 72px; }
+.cash-flow-table th:nth-child(4) { width: 100px; }
+
+.cash-flow-table th,
+.cash-flow-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--line);
+    text-align: left;
+    font-size: 14px;
+}
+
+.cash-flow-table th {
+    color: var(--muted);
+    font-weight: 600;
+}
+
+.cash-flow-amount-col {
+    width: 110px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.cash-flow-action-col {
+    width: 84px;
+    text-align: right;
+    white-space: nowrap;
+}
+
+.cash-flow-note-cell {
+    color: var(--muted);
+    word-break: break-word;
+}
+
+.cash-flow-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.cash-flow-tag-out {
+    background: var(--danger-soft);
+    color: var(--danger);
+}
+
+.cash-flow-tag-in {
+    background: #dcfce7;
+    color: #15803d;
+}
+
+.cash-flow-amount-out {
+    color: var(--danger);
+    font-weight: 600;
+}
+
+.cash-flow-amount-in {
+    color: #15803d;
+    font-weight: 600;
+}
+
+.cash-flow-empty {
+    text-align: center;
+    color: var(--muted);
+    padding: 28px 12px;
+}
+
+html[data-theme="dark"] .cash-flow-tag-in {
+    background: #14331f;
+    color: #4ade80;
+}
+
+html[data-theme="dark"] .cash-flow-amount-in {
+    color: #4ade80;
+}
+
+@media (max-width: 760px) {
+    .cash-flow-form {
+        gap: 10px;
+    }
+    .cash-flow-field {
+        flex: 1 1 100%;
+    }
+    .cash-flow-field-submit {
+        margin-left: 0;
+    }
+    .cash-flow-field-submit .primary-btn {
+        width: 100%;
+    }
+}

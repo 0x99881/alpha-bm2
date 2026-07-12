@@ -12,6 +12,17 @@ from ..value_utils import to_float_or_none
 LOGGER = logging.getLogger(__name__)
 
 
+def _to_int(value: Any, default: int = 0) -> int:
+    """Tolerant int for DB flags (settled/is_extra/sort_order). Rows synced
+    from Supabase or touched by older versions can hold '' / None / stray
+    text; a flag read must never crash a settle or create mutation midway.
+    """
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
 class CycleService:
     """Business logic for 周期盈亏情况.
 
@@ -89,13 +100,14 @@ class CycleService:
         if not self._is_iso_date(cleaned):
             raise ValueError(MESSAGES["cycle_start_date_required"])
 
+        all_cycles = self._local_db.get_settlement_cycles()
+
         # Only one open cycle at a time. Without this guard a stray double-
         # click or stale browser tab can quietly create a duplicate cycle that
         # shares a start date with the existing one, which then makes every
         # downstream view (charts, calendar, settle dialog) ambiguous.
         existing_unsettled = [
-            c for c in self._local_db.get_settlement_cycles()
-            if not int(c.get("settled", 0) or 0)
+            c for c in all_cycles if not _to_int(c.get("settled"))
         ]
         if existing_unsettled:
             raise ValueError(MESSAGES["cycle_unsettled_exists"])
@@ -103,7 +115,6 @@ class CycleService:
         # Chronological ordering: the new cycle must start strictly after the
         # most recently settled cycle. Anything else creates overlapping
         # windows that produce nonsense per-cycle aggregations.
-        all_cycles = self._local_db.get_settlement_cycles()
         if all_cycles:
             latest_end = max(
                 (self._text(c.get("settle_date")) or self._text(c.get("start_date")))
@@ -115,6 +126,18 @@ class CycleService:
                 )
 
         cycle_id = self._local_db.create_settlement_cycle(cleaned)
+        # Carrying extras is a convenience; the cycle itself is already
+        # committed, so a failure here must not surface as a 500 that makes
+        # the user think creation failed (they'd retry and hit
+        # cycle_unsettled_exists). Log and let them add the member by hand.
+        try:
+            self._carry_prior_extra_members(cleaned, cycle_id, cycles=all_cycles)
+        except Exception:
+            LOGGER.exception(
+                "Carrying extra members into new cycle failed; cycle_id=%s start_date=%s",
+                cycle_id,
+                cleaned,
+            )
         self._notify_change(cycle_id)
         return cycle_id
 
@@ -125,42 +148,47 @@ class CycleService:
             from ..ui_text import MESSAGES
 
             raise ValueError(MESSAGES["cycle_not_found"])
-        existing = self._local_db.get_settlement_entries(cleaned_cycle)
-        active_names = [self._text(m["name"]) for m in self._get_active_members()]
-        names_to_save = list(active_names) + [
-            name for name in existing.keys() if name not in active_names
-        ]
-        entries = []
-        for name in names_to_save:
-            prior = existing.get(name, {})
-            entry = {
-                "member_name": name,
-                "start_balance": self._text(prior.get("start_balance", "")),
-                "end_balance": self._text(prior.get("end_balance", "")),
-                "is_extra": "0" if name in active_names else self._text(prior.get("is_extra", "0")),
-            }
-            start_key = f"start_balance_{name}"
-            end_key = f"end_balance_{name}"
-            if start_key in form_data:
-                entry["start_balance"] = self._text(form_data.get(start_key, ""))
-            if end_key in form_data:
-                entry["end_balance"] = self._text(form_data.get(end_key, ""))
-            entries.append(entry)
-        self._local_db.save_settlement_entries(cleaned_cycle, entries)
+        self._save_settlement_no_notify(cleaned_cycle, form_data)
         self._notify_change(cleaned_cycle)
 
     def settle_cycle(self, cycle_id: str, settle_date: str) -> None:
+        from ..ui_text import MESSAGES
+
         cleaned_cycle = self._text(cycle_id)
         cleaned_settle = self._text(settle_date)
         cycle = self._local_db.get_settlement_cycle(cleaned_cycle)
         if cycle is None:
-            from ..ui_text import MESSAGES
-
             raise ValueError(MESSAGES["cycle_not_found"])
         if not self._is_iso_date(cleaned_settle):
-            from ..ui_text import MESSAGES
-
             raise ValueError(MESSAGES["cycle_settle_date_required"])
+        # Same window-integrity checks the create/settle-and-create-next paths
+        # already enforce. We need them here too because the cycle_profit page
+        # lets the user 重新结算 (re-settle) an existing cycle with a new
+        # settle_date — without these guards the new value can dip before the
+        # cycle's own start or slide past the following cycle's start_date,
+        # which silently overlaps two windows and double-counts every
+        # score_entry in the overlap.
+        start_date = self._text(cycle.get("start_date"))
+        if start_date:
+            if cleaned_settle < start_date:
+                raise ValueError(MESSAGES["cycle_settle_before_start"])
+            # Without knowing this cycle's own start we cannot tell which
+            # cycles come "after" it, so the overlap check only runs when
+            # start_date is present — otherwise every cycle would qualify and
+            # the earliest one would wrongly block the re-settle.
+            next_start_candidates = [
+                self._text(c.get("start_date"))
+                for c in self._local_db.get_settlement_cycles()
+                if self._text(c.get("id")) != cleaned_cycle
+                and self._text(c.get("start_date"))
+                and self._text(c.get("start_date")) > start_date
+            ]
+            if next_start_candidates:
+                next_start = min(next_start_candidates)
+                if cleaned_settle >= next_start:
+                    raise ValueError(
+                        MESSAGES["cycle_settle_overlaps_next"].format(date=next_start)
+                    )
         self._local_db.settle_settlement_cycle(cleaned_cycle, cleaned_settle)
         self._notify_change(cleaned_cycle)
 
@@ -199,7 +227,7 @@ class CycleService:
             key=lambda c: self._text(c.get("start_date")) or self._text(c.get("created_at")),
         )
         for cycle in reversed(ordered):
-            if not int(cycle.get("settled", 0) or 0):
+            if not _to_int(cycle.get("settled")):
                 return cycle
         return ordered[-1]
 
@@ -223,7 +251,7 @@ class CycleService:
                 "is_settled": False,
             }
         start = self._text(cycle.get("start_date"))
-        is_settled = bool(int(cycle.get("settled", 0) or 0))
+        is_settled = bool(_to_int(cycle.get("settled")))
         settle = self._text(cycle.get("settle_date"))
         end = settle if (is_settled and settle) else self._today_iso()
         return {
@@ -309,7 +337,7 @@ class CycleService:
         cycle = self._local_db.get_settlement_cycle(cleaned_cycle)
         if cycle is None:
             raise ValueError(MESSAGES["cycle_not_found"])
-        if int(cycle.get("settled", 0) or 0):
+        if _to_int(cycle.get("settled")):
             raise ValueError(MESSAGES["cycle_already_settled"])
         if not self._is_iso_date(cleaned_settle):
             raise ValueError(MESSAGES["cycle_settle_date_required"])
@@ -349,6 +377,8 @@ class CycleService:
             self._local_db.settle_settlement_cycle(cleaned_cycle, cleaned_settle)
             stage = "create_next_cycle"
             new_cycle_id = self._local_db.create_settlement_cycle(next_start)
+            stage = "carry_extra_members"
+            self._copy_extra_members(cleaned_cycle, new_cycle_id)
             # ---- Excel regen (the only operation that can plausibly fail) ----
             if self._on_overview_regen is not None:
                 stage = "regenerate_excel"
@@ -402,6 +432,64 @@ class CycleService:
         for name, value in prior_end_balances.items():
             synthetic[f"end_balance_{name}"] = value
         self._save_settlement_no_notify(cycle_id, synthetic)
+
+    def _carry_prior_extra_members(
+        self,
+        new_start_date: str,
+        target_cycle_id: str,
+        *,
+        cycles: list[dict[str, Any]] | None = None,
+    ) -> None:
+        prior_cycle = self._latest_cycle_before(
+            new_start_date, exclude_cycle_id=target_cycle_id, cycles=cycles
+        )
+        if prior_cycle is None:
+            return
+        self._copy_extra_members(self._text(prior_cycle.get("id")), target_cycle_id)
+
+    def _latest_cycle_before(
+        self,
+        start_date: str,
+        *,
+        exclude_cycle_id: str = "",
+        cycles: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any] | None:
+        if cycles is None:
+            cycles = self._local_db.get_settlement_cycles()
+        candidates = [
+            cycle for cycle in cycles
+            if self._text(cycle.get("id")) != exclude_cycle_id
+            and self._text(cycle.get("start_date"))
+            and self._text(cycle.get("start_date")) < start_date
+        ]
+        if not candidates:
+            return None
+        return max(
+            candidates,
+            key=lambda cycle: (
+                self._text(cycle.get("start_date")),
+                self._text(cycle.get("created_at")),
+                self._text(cycle.get("id")),
+            ),
+        )
+
+    def _copy_extra_members(self, source_cycle_id: str, target_cycle_id: str) -> None:
+        if not source_cycle_id or not target_cycle_id:
+            return
+        active_names = {self._text(m["name"]) for m in self._get_active_members()}
+        source_entries = self._local_db.get_settlement_entries(source_cycle_id)
+        extras: list[tuple[int, int, str]] = []
+        for index, (name, entry) in enumerate(source_entries.items()):
+            clean_name = self._text(name)
+            if not clean_name or clean_name in active_names:
+                continue
+            if _to_int(entry.get("is_extra")) != 1:
+                continue
+            order = _to_int(entry.get("sort_order"))
+            extras.append((order, index, clean_name))
+        extras.sort(key=lambda item: (0, item[0]) if item[0] > 0 else (1, item[1]))
+        for _, _, name in extras:
+            self._local_db.add_cycle_extra_member(target_cycle_id, name)
 
     def add_extra_member(self, cycle_id: str, member_name: str) -> None:
         cleaned_cycle = self._text(cycle_id)
@@ -601,12 +689,12 @@ class CycleService:
         active_name_set = set(active_member_names)
         extra_names = [
             name for name, entry in settlements.items()
-            if int(entry.get("is_extra", 0) or 0) == 1 and name not in active_name_set
+            if _to_int(entry.get("is_extra")) == 1 and name not in active_name_set
         ]
         all_names = active_member_names + extra_names
 
         def sort_key(name: str) -> tuple[int, int]:
-            order = int((settlements.get(name) or {}).get("sort_order", 0) or 0)
+            order = _to_int((settlements.get(name) or {}).get("sort_order"))
             default_idx = all_names.index(name)
             return (0, order) if order > 0 else (1, default_idx)
 

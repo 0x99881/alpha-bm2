@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from .repositories.sqlite_cashflow_repository import SQLiteCashFlowRepositoryMixin
 from .repositories.sqlite_common_repository import SQLiteCommonRepositoryMixin
 from .repositories.sqlite_connection import connect_database
 from .repositories.sqlite_cycle_repository import SQLiteCycleRepositoryMixin
@@ -28,6 +29,7 @@ class LocalDatabase(
     SQLiteReportRepositoryMixin,
     SQLiteSyncMergeRepositoryMixin,
     SQLiteCycleRepositoryMixin,
+    SQLiteCashFlowRepositoryMixin,
 ):
     def __init__(self, base_dir: Path, *, read_only: bool = False) -> None:
         self.base_dir = Path(base_dir)

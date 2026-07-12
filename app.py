@@ -26,6 +26,7 @@ if sys.platform.startswith("win"):
 def create_app() -> Flask:
     static_folder = "static"
     app = Flask(__name__, static_folder=static_folder)
+    app.config["TEMPLATES_AUTO_RELOAD"] = True
     app.secret_key = "bm2-local-secret"
     asset_dir = BASE_DIR / static_folder
 
@@ -44,4 +45,4 @@ def create_app() -> Flask:
 app = create_app()
 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5000, debug=False, threaded=False)
+    app.run(host="127.0.0.1", port=5000, debug=False, threaded=True)

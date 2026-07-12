@@ -114,8 +114,8 @@ class ValueSheetPresenter:
 
         date_totals = {i: 0.0 for i in value_col_indices}
         marked_count = 0
-        rows = []
-        for name in member_order:
+        built_rows: list[tuple[float, int, list]] = []
+        for member_index, name in enumerate(member_order):
             row_cells = []
             row_total = 0.0
             for i, d in enumerate(dates):
@@ -129,7 +129,11 @@ class ValueSheetPresenter:
                 row_cells.append(self._cell(value=cell_val, is_marked=has, kind=column_kinds[i]))
             row_cells.append(self._cell(value=name, is_marked=False, kind="name"))
             row_cells.append(self._cell(value=normalizer(row_total), is_marked=row_total != 0, kind="total"))
-            rows.append(row_cells)
+            built_rows.append((row_total, member_index, row_cells))
+        # 预览表按各成员合计金额从大到小排，一眼看出谁多谁少；合计相同（含全为 0
+        # 的成员）时保持原成员顺序，保证排序稳定、可预期。
+        built_rows.sort(key=lambda item: (-item[0], item[1]))
+        rows = [cells for _, _, cells in built_rows]
 
         chart_items = [
             {"label": str(headers[i] or ""), "value": normalizer(t), "is_marked": t != 0}

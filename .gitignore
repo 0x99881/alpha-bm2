@@ -9,6 +9,7 @@ __pycache__/
 *.db
 *.db-shm
 *.db-wal
+*.db.bak_*
 
 # Generated Excel / local state
 ~$*.xlsx
