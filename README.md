@@ -1,6 +1,6 @@
 # 币安 Alpha 多号管理系统
 
-本项目是币安 Alpha 多号管理的本地单用户工具。（本地数据库、历史表格和浏览器草稿仍兼容旧前缀 `bm2` / `BM2记录_*.xlsx`，以免影响现有数据。）
+本项目是币安 Alpha 多号管理的本地单用户工具。
 
 ## 架构
 
@@ -14,6 +14,10 @@ Excel：只做导入、导出和旧数据兼容
 ```
 
 SQLite 是本地正式数据来源。Excel 不能再作为主要保存路径。
+
+## 数据安全
+
+升级后会继续识别现有本地数据库、历史 Excel 表格和浏览器草稿，不需要手动改名或搬动文件。
 
 ## 启动
 
@@ -48,11 +52,14 @@ python scripts/check_all.py
 
 ```text
 .env.local
-bm2_local.db
-BM2记录_*.xlsx
+*.db
+*.db-shm
+*.db-wal
+*记录_*.xlsx
 __pycache__/
 .tmp_*/
 public/
-bm2_cloud/
 _legacy_quarantine_*/
 ```
+
+退役的数据目录和隔离目录也不要重新放回正式程序中。
