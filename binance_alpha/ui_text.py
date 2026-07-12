@@ -375,3 +375,10 @@ JS_UI_TEXT = {
     'riskActionConfirmOne': '\u786e\u8ba4\u8981\u6267\u884c\u201c{action}\u201d\u5417\uff1f',
     'riskActionConfirmTwo': '\u8bf7\u518d\u6b21\u786e\u8ba4\uff1a\u8fd9\u4e2a\u64cd\u4f5c\u4f1a\u5f71\u54cd\u672c\u5730\u6216\u7f51\u9875\u6570\u636e\u3002',
 }
+
+
+def display_workbook_filename(filename: str) -> str:
+    legacy_prefix = 'BM2记录_'
+    if filename.startswith(legacy_prefix):
+        return f'币安Alpha记录_{filename[len(legacy_prefix):]}'
+    return filename

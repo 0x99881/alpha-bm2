@@ -33,7 +33,7 @@ class CashFlowService:
 
     单位是 U。写库成功后才尝试写 Excel；Excel 被占用时写库照样成功，只把
     异常带回给路由提示，绝不因为 Excel 没写成而回滚已落库的这一笔——这是
-    BM2 对真实数据一贯的稳妥做法。
+    本项目对真实数据一贯的稳妥做法。
     """
 
     def __init__(self, local_db, workbook_repository, *, today_provider) -> None:

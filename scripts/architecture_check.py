@@ -78,9 +78,9 @@ def check_workspace_artifacts() -> list[str]:
 
 def check_domain_dependencies() -> list[str]:
     failures: list[str] = []
-    blocked_prefixes = ('bm2.web', 'bm2.presenters', 'bm2.features')
+    blocked_prefixes = ('binance_alpha.web', 'binance_alpha.presenters', 'binance_alpha.features')
     blocked_exact = {'flask'}
-    for path in (PROJECT_ROOT / 'bm2' / 'domain').rglob('*.py'):
+    for path in (PROJECT_ROOT / 'binance_alpha' / 'domain').rglob('*.py'):
         if _is_ignored(path):
             continue
         for imported in _python_imports(path):
@@ -91,7 +91,7 @@ def check_domain_dependencies() -> list[str]:
 
 def check_feature_dependencies() -> list[str]:
     failures: list[str] = []
-    feature_root = PROJECT_ROOT / 'bm2' / 'features'
+    feature_root = PROJECT_ROOT / 'binance_alpha' / 'features'
     for feature_dir in feature_root.iterdir() if feature_root.exists() else []:
         if not feature_dir.is_dir() or feature_dir.name == '__pycache__':
             continue
@@ -100,7 +100,7 @@ def check_feature_dependencies() -> list[str]:
             if _is_ignored(path):
                 continue
             for imported in _python_imports(path):
-                if not imported.startswith('bm2.features.'):
+                if not imported.startswith('binance_alpha.features.'):
                     continue
                 parts = imported.split('.')
                 if len(parts) >= 3 and parts[2] != current_feature:
@@ -131,11 +131,11 @@ def check_retired_sync_keywords_in_source() -> list[str]:
         'json_sync',
         'blob_sync',
     )
-    for path in (PROJECT_ROOT / 'bm2').rglob('*.py'):
+    for path in (PROJECT_ROOT / 'binance_alpha').rglob('*.py'):
         if _is_ignored(path):
             continue
         rel = path.relative_to(PROJECT_ROOT)
-        if rel.parts[:2] == ('bm2', 'legacy'):
+        if rel.parts[:2] == ('binance_alpha', 'legacy'):
             continue
         text = _read_text(path)
         for keyword in retired:
@@ -147,7 +147,7 @@ def check_retired_sync_keywords_in_source() -> list[str]:
 def check_services_boundaries() -> list[str]:
     failures: list[str] = []
     blocked = ('openpyxl', 'sqlite3', 'supabase', 'flask')
-    for path in (PROJECT_ROOT / 'bm2' / 'services').rglob('*.py'):
+    for path in (PROJECT_ROOT / 'binance_alpha' / 'services').rglob('*.py'):
         if _is_ignored(path):
             continue
         for imported in _python_imports(path):
@@ -159,7 +159,7 @@ def check_services_boundaries() -> list[str]:
 def check_web_boundaries() -> list[str]:
     failures: list[str] = []
     web_paths = [
-        path for path in (PROJECT_ROOT / 'bm2').glob('web*.py')
+        path for path in (PROJECT_ROOT / 'binance_alpha').glob('web*.py')
         if path.is_file() and not _is_ignored(path)
     ]
     blocked_imports = ('sqlite3', 'openpyxl', 'supabase', 'json')
@@ -209,7 +209,7 @@ def check_public_matches_static() -> list[str]:
 
 def check_retired_write_wrappers() -> list[str]:
     failures: list[str] = []
-    for path in (PROJECT_ROOT / 'bm2').rglob('*.py'):
+    for path in (PROJECT_ROOT / 'binance_alpha').rglob('*.py'):
         if _is_ignored(path):
             continue
         rel = path.relative_to(PROJECT_ROOT)
@@ -220,22 +220,22 @@ def check_retired_write_wrappers() -> list[str]:
             failures.append(f'{rel} references retired score-save Excel side effect write_entries_to_excel')
         if 'process_score_submission' in text:
             failures.append(f'{rel} references retired score_service wrapper process_score_submission')
-    member_service = PROJECT_ROOT / 'bm2' / 'services' / 'member_service.py'
+    member_service = PROJECT_ROOT / 'binance_alpha' / 'services' / 'member_service.py'
     if member_service.exists():
         text = _read_text(member_service)
         for marker in ('sync_members_to_workbook', 'delete_member_from_workbook'):
             if marker in text:
-                failures.append(f'bm2/services/member_service.py still references Excel member write callback {marker}')
+                failures.append(f'binance_alpha/services/member_service.py still references Excel member write callback {marker}')
     return failures
 
 
 def check_retired_application_entries() -> list[str]:
     failures: list[str] = []
     retired_files = (
-        PROJECT_ROOT / 'bm2' / 'store.py',
-        PROJECT_ROOT / 'bm2' / 'services' / 'score_service.py',
-        PROJECT_ROOT / 'bm2' / 'store_reader_facade.py',
-        PROJECT_ROOT / 'bm2' / 'store_writer_facade.py',
+        PROJECT_ROOT / 'binance_alpha' / 'store.py',
+        PROJECT_ROOT / 'binance_alpha' / 'services' / 'score_service.py',
+        PROJECT_ROOT / 'binance_alpha' / 'store_reader_facade.py',
+        PROJECT_ROOT / 'binance_alpha' / 'store_writer_facade.py',
     )
     for path in retired_files:
         if path.exists():
@@ -245,7 +245,7 @@ def check_retired_application_entries() -> list[str]:
 
 def check_magic_forwarding_removed() -> list[str]:
     failures: list[str] = []
-    for path in (PROJECT_ROOT / 'bm2').rglob('*.py'):
+    for path in (PROJECT_ROOT / 'binance_alpha').rglob('*.py'):
         if _is_ignored(path):
             continue
         text = _read_text(path)
@@ -256,9 +256,9 @@ def check_magic_forwarding_removed() -> list[str]:
 
 def check_store_base_retired() -> list[str]:
     failures: list[str] = []
-    if (PROJECT_ROOT / 'bm2' / 'store_base.py').exists():
-        failures.append('bm2/store_base.py is retired and must stay in quarantine')
-    for path in (PROJECT_ROOT / 'bm2').rglob('*.py'):
+    if (PROJECT_ROOT / 'binance_alpha' / 'store_base.py').exists():
+        failures.append('binance_alpha/store_base.py is retired and must stay in quarantine')
+    for path in (PROJECT_ROOT / 'binance_alpha').rglob('*.py'):
         if _is_ignored(path):
             continue
         rel = path.relative_to(PROJECT_ROOT)
@@ -270,7 +270,7 @@ def check_store_base_retired() -> list[str]:
 
 def check_local_database_is_composition_entry() -> list[str]:
     failures: list[str] = []
-    path = PROJECT_ROOT / 'bm2' / 'local_database.py'
+    path = PROJECT_ROOT / 'binance_alpha' / 'local_database.py'
     if not path.exists():
         return failures
     tree = ast.parse(_read_text(path))
@@ -279,7 +279,7 @@ def check_local_database_is_composition_entry() -> list[str]:
         if isinstance(node, ast.ClassDef) and node.name == 'LocalDatabase':
             for item in node.body:
                 if isinstance(item, ast.FunctionDef) and item.name not in allowed_methods:
-                    failures.append(f'bm2/local_database.py defines logic method {item.name}; keep only connection/composition')
+                    failures.append(f'binance_alpha/local_database.py defines logic method {item.name}; keep only connection/composition')
     text = _read_text(path)
     forbidden_markers = (
         'sync_scores_from_workbook',
@@ -292,38 +292,38 @@ def check_local_database_is_composition_entry() -> list[str]:
     )
     for marker in forbidden_markers:
         if marker in text:
-            failures.append(f'bm2/local_database.py contains forbidden non-composition marker: {marker}')
+            failures.append(f'binance_alpha/local_database.py contains forbidden non-composition marker: {marker}')
     return failures
 
 
 def check_store_facade_removed() -> list[str]:
     failures: list[str] = []
-    path = PROJECT_ROOT / 'bm2' / 'store.py'
+    path = PROJECT_ROOT / 'binance_alpha' / 'store.py'
     if path.exists():
-        failures.append('bm2/store.py is retired; use bm2/services/store_application.py')
+        failures.append('binance_alpha/store.py is retired; use binance_alpha/services/store_application.py')
     return failures
 
 
 def check_store_application_is_thin_coordinator() -> list[str]:
     failures: list[str] = []
-    path = PROJECT_ROOT / 'bm2' / 'services' / 'store_application.py'
+    path = PROJECT_ROOT / 'binance_alpha' / 'services' / 'store_application.py'
     if not path.exists():
         return failures
     text = _read_text(path)
     lines = text.splitlines()
     if len(lines) >= 100:
-        failures.append(f'bm2/services/store_application.py has {len(lines)} lines; keep it under 100 lines')
+        failures.append(f'binance_alpha/services/store_application.py has {len(lines)} lines; keep it under 100 lines')
     forbidden_imports = (
-        'bm2.repositories',
-        'bm2.excel',
-        'bm2.local_database',
-        'bm2.sqlite_to_excel_exporter',
+        'binance_alpha.repositories',
+        'binance_alpha.excel',
+        'binance_alpha.local_database',
+        'binance_alpha.sqlite_to_excel_exporter',
         'supabase',
         'openpyxl',
     )
     for imported in _python_imports(path):
         if imported in forbidden_imports or any(imported.startswith(f'{item}.') for item in forbidden_imports):
-            failures.append(f'bm2/services/store_application.py imports forbidden dependency {imported}')
+            failures.append(f'binance_alpha/services/store_application.py imports forbidden dependency {imported}')
     forbidden_text = (
         'ConfigRepository',
         'SupabaseClient',
@@ -337,36 +337,36 @@ def check_store_application_is_thin_coordinator() -> list[str]:
     )
     for marker in forbidden_text:
         if marker in text:
-            failures.append(f'bm2/services/store_application.py contains forbidden coordinator marker: {marker}')
+            failures.append(f'binance_alpha/services/store_application.py contains forbidden coordinator marker: {marker}')
     return failures
 
 
 def check_supabase_sdk_boundary() -> list[str]:
     failures: list[str] = []
     allowed = {
-        Path('bm2/repositories/supabase_client.py'),
+        Path('binance_alpha/repositories/supabase_client.py'),
     }
-    for path in (PROJECT_ROOT / 'bm2').rglob('*.py'):
+    for path in (PROJECT_ROOT / 'binance_alpha').rglob('*.py'):
         if _is_ignored(path):
             continue
         rel = path.relative_to(PROJECT_ROOT)
         text = _read_text(path)
         if ('from supabase import' in text or 'import supabase' in text) and rel not in allowed:
             failures.append(f'{rel} imports Supabase SDK outside repository/client boundary')
-    if (PROJECT_ROOT / 'bm2' / 'supabase_sync.py').exists():
-        failures.append('bm2/supabase_sync.py is retired; use bm2/repositories/supabase_client.py')
+    if (PROJECT_ROOT / 'binance_alpha' / 'supabase_sync.py').exists():
+        failures.append('binance_alpha/supabase_sync.py is retired; use binance_alpha/repositories/supabase_client.py')
     return failures
 
 
 def check_excel_boundary() -> list[str]:
     failures: list[str] = []
     blocked_files = [
-        PROJECT_ROOT / 'bm2' / 'web.py',
-        PROJECT_ROOT / 'bm2' / 'store.py',
+        PROJECT_ROOT / 'binance_alpha' / 'web.py',
+        PROJECT_ROOT / 'binance_alpha' / 'store.py',
     ]
     blocked_files.extend(
         path
-        for path in (PROJECT_ROOT / 'bm2' / 'services').rglob('*.py')
+        for path in (PROJECT_ROOT / 'binance_alpha' / 'services').rglob('*.py')
         if path.name != 'excel_import_service.py'
     )
     patterns = (
@@ -408,19 +408,19 @@ def check_docs_deprecate_json_sync() -> list[str]:
 
 def collect_debt_warnings() -> list[str]:
     warnings: list[str] = []
-    store_path = PROJECT_ROOT / 'bm2' / 'store.py'
+    store_path = PROJECT_ROOT / 'binance_alpha' / 'store.py'
     if store_path.exists():
         lines = _read_text(store_path).splitlines()
         if len(lines) > 250:
-            warnings.append(f'bm2/store.py is still thick ({len(lines)} lines); keep thinning in later rounds')
+            warnings.append(f'binance_alpha/store.py is still thick ({len(lines)} lines); keep thinning in later rounds')
         text = '\n'.join(lines)
         for marker in ('local_db.', 'supabase.', 'export_to_excel(', 'get_online_score_sheet_view'):
             if marker in text:
-                warnings.append(f'bm2/store.py still coordinates {marker}; migrate to services/repositories')
+                warnings.append(f'binance_alpha/store.py still coordinates {marker}; migrate to services/repositories')
 
     transitional_files = {
-        'bm2/local_database.py': ('sqlite3',),
-        'bm2/store_base.py': ('openpyxl', 'system_config.json', 'workbook'),
+        'binance_alpha/local_database.py': ('sqlite3',),
+        'binance_alpha/store_base.py': ('openpyxl', 'system_config.json', 'workbook'),
     }
     for rel, markers in transitional_files.items():
         path = PROJECT_ROOT / rel

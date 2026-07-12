@@ -12,7 +12,14 @@ TEST_TEMP_ROOT = PROJECT_ROOT / ".tmp_test_workspaces"
 def _env() -> dict[str, str]:
     env = os.environ.copy()
     env["PYTHONDONTWRITEBYTECODE"] = "1"
-    for key in ("SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_KEY", "BM2_READ_ONLY", "VERCEL"):
+    for key in (
+        "SUPABASE_URL",
+        "SUPABASE_SERVICE_ROLE_KEY",
+        "SUPABASE_KEY",
+        "BINANCE_ALPHA_READ_ONLY",
+        "BM2_READ_ONLY",
+        "VERCEL",
+    ):
         env.pop(key, None)
     return env
 

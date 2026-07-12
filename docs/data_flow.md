@@ -47,7 +47,7 @@ Excel, JSON files, cloud blobs, `bm2_cloud`, and old cloud sync wrappers are not
 - Returns HTML, JSON, redirect, or error.
 - Must not directly import or operate SQLite, Supabase SDK, Excel, or JSON sync files.
 
-`bm2/services/store_application.py`:
+`binance_alpha/services/store_application.py`:
 
 - Explicit application entry and thin coordinator.
 - Must stay under 100 lines.
@@ -87,13 +87,13 @@ These are retired and must not be imported by active source code:
 
 - `bm2_cloud/`
 - `score-records.json`
-- `bm2/cloud_sync.py`
-- `bm2/services/cloud_entry_writer.py`
+- `binance_alpha/cloud_sync.py`
+- `binance_alpha/services/cloud_entry_writer.py`
 - `legacy_json_sync`
 - `json_sync`
 - `blob_sync`
 - JSON/blob/file based score sync
-- `bm2/store_base.py`
+- `binance_alpha/store_base.py`
 - active `public/` source directory
 
 If any retired file is needed for investigation, keep it outside the active runtime or restore it only as read-only legacy material.

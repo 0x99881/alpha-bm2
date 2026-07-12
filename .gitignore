@@ -14,6 +14,7 @@ __pycache__/
 # Generated Excel / local state
 ~$*.xlsx
 BM2记录_*.xlsx
+币安Alpha记录_*.xlsx
 system_config.json
 
 # Local temp and quarantine

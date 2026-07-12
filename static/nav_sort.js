@@ -1,5 +1,5 @@
 (() => {
-    const namespace = window.BM2 || (window.BM2 = {});
+    const namespace = window.BinanceAlpha || (window.BinanceAlpha = {});
     const STORAGE_KEY = "bm2-nav-order";
 
     namespace.initNavSort = () => {

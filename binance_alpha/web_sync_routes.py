@@ -3,7 +3,7 @@ from __future__ import annotations
 from flask import abort, flash, redirect, request, url_for
 
 from .repositories.supabase_client import SUPABASE_REQUEST_ERRORS
-from .ui_text import MESSAGES
+from .ui_text import MESSAGES, display_workbook_filename
 
 
 def _is_transient_network_error(exc: BaseException) -> bool:
@@ -48,7 +48,7 @@ def register_sync_routes(app, store, *, read_only_mode: bool) -> None:
         saved_date = submission["result"]["saved_date"]
         if submission.get("export_error") is not None:
             app.logger.error("Failed to update workbook before Supabase push: %s", submission["export_error"])
-            flash(MESSAGES["excel_save_failed"].format(filename=store.workbook_path.name), "error")
+            flash(MESSAGES["excel_save_failed"].format(filename=display_workbook_filename(store.workbook_path.name)), "error")
         return True, saved_date
 
     def _ensure_supabase_configured() -> bool:

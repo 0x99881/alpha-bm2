@@ -2,7 +2,7 @@
 
 Last updated: 2026-05-01
 
-This file explains how to extend BM2 without drifting back to the old mixed architecture.
+This file explains how to extend the Binance Alpha multi-account manager without drifting back to the old mixed architecture.
 
 ## Golden Path
 
@@ -27,34 +27,34 @@ Excel -> migration/import -> SQLite
 
 New route:
 
-- Add request parsing in `bm2/web.py`.
+- Add request parsing in `binance_alpha/web.py`.
 - Call an existing service or add a focused service method.
 - Do not access database, Excel, Supabase SDK, or JSON files in `web.py`.
 
 New business action:
 
-- Add to `bm2/services/`.
+- Add to `binance_alpha/services/`.
 - Keep the service focused on one use case.
 - Use repositories/writers for data access.
 
 New SQLite query or write:
 
-- Add to `bm2/repositories/sqlite_*.py`.
+- Add to `binance_alpha/repositories/sqlite_*.py`.
 - Keep SQL inside repository files.
 
 New Supabase operation:
 
-- Add to `bm2/repositories/supabase_client.py`.
+- Add to `binance_alpha/repositories/supabase_client.py`.
 - Do not import Supabase SDK elsewhere.
 
 New Excel export/import behavior:
 
-- Add to `bm2/excel/`, `SQLiteToExcelExporter`, or migration/import service.
+- Add to `binance_alpha/excel/`, `SQLiteToExcelExporter`, or migration/import service.
 - Do not make Excel a primary data store.
 
 New page display transformation:
 
-- Add to `bm2/presenters/`.
+- Add to `binance_alpha/presenters/`.
 - Presenters should not write data.
 
 New frontend source:
@@ -64,7 +64,7 @@ New frontend source:
 
 ## Application Boundary
 
-`bm2/services/store_application.py` is also intentionally tiny.
+`binance_alpha/services/store_application.py` is also intentionally tiny.
 
 It exposes explicit application methods and coordinates:
 

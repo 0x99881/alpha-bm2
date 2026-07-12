@@ -1,6 +1,6 @@
 (() => {
-    const namespace = window.BM2 || (window.BM2 = {});
-    const uiText = window.BM2_UI_TEXT || {};
+    const namespace = window.BinanceAlpha || (window.BinanceAlpha = {});
+    const uiText = window.BINANCE_ALPHA_UI_TEXT || {};
 
     namespace.getUiText = (key, fallback = "") => uiText[key] || fallback;
 

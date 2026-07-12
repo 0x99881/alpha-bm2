@@ -17,11 +17,11 @@ TEST_TEMP_ROOT = PROJECT_ROOT / ".tmp_test_workspaces"
 
 
 MODULES_TO_IMPORT = [
-    "bm2.services.store_application",
-    "bm2.services.daily_entry_service",
-    "bm2.presenters.score_presenter",
-    "bm2.presenters.wear_presenter",
-    "bm2.presenters.profit_calendar_presenter",
+    "binance_alpha.services.store_application",
+    "binance_alpha.services.daily_entry_service",
+    "binance_alpha.presenters.score_presenter",
+    "binance_alpha.presenters.wear_presenter",
+    "binance_alpha.presenters.profit_calendar_presenter",
 ]
 
 
@@ -41,7 +41,7 @@ class SmokeCheckRunner:
     def build_store(self):
         if self._store is not None:
             return self._store
-        from bm2.services.store_application import StoreApplication
+        from binance_alpha.services.store_application import StoreApplication
 
         temp_dir = TEST_TEMP_ROOT / "smoke"
         if temp_dir.exists():
@@ -54,6 +54,22 @@ class SmokeCheckRunner:
     def check_module_imports(self) -> None:
         for module_name in MODULES_TO_IMPORT:
             self.check(f"import {module_name}", lambda module_name=module_name: importlib.import_module(module_name).__name__)
+
+    def check_workbook_branding_compatibility(self) -> None:
+        def _run():
+            from binance_alpha.constants import DATA_FILE_PATTERNS, WORKBOOK_FILENAME_PREFIX
+            from binance_alpha.ui_text import display_workbook_filename
+
+            if WORKBOOK_FILENAME_PREFIX != "币安Alpha记录_":
+                raise ValueError("new workbooks do not use the Binance Alpha name")
+            if "BM2记录_*.xlsx" not in DATA_FILE_PATTERNS:
+                raise ValueError("legacy workbooks are no longer discoverable")
+            displayed = display_workbook_filename("BM2记录_2026-07-12.xlsx")
+            if displayed != "币安Alpha记录_2026-07-12.xlsx":
+                raise ValueError("legacy workbook name is still visible")
+            return displayed
+
+        self.check("workbook branding keeps legacy data compatible", _run)
 
     def check_application_init(self) -> None:
         def _run():
@@ -85,7 +101,7 @@ class SmokeCheckRunner:
 
     def check_score_overview_sorting_and_low_score(self) -> None:
         def _run():
-            from bm2.services.store_application import StoreApplication
+            from binance_alpha.services.store_application import StoreApplication
 
             temp_dir = TEST_TEMP_ROOT / "score_overview_sorting"
             if temp_dir.exists():
@@ -132,8 +148,8 @@ class SmokeCheckRunner:
 
     def check_online_score_overview_sorting_and_low_score(self) -> None:
         def _run():
-            from bm2.constants import ENABLED
-            from bm2.services.application_service import ApplicationService
+            from binance_alpha.constants import ENABLED
+            from binance_alpha.services.application_service import ApplicationService
 
             class FakeSupabase:
                 def is_configured(self):
@@ -171,8 +187,8 @@ class SmokeCheckRunner:
 
     def check_online_wear_view_uses_synced_wear(self) -> None:
         def _run():
-            from bm2.constants import ENABLED
-            from bm2.services.application_service import ApplicationService
+            from binance_alpha.constants import ENABLED
+            from binance_alpha.services.application_service import ApplicationService
 
             class FakeSupabase:
                 def is_configured(self):
@@ -272,8 +288,8 @@ class SmokeCheckRunner:
         def _run():
             from flask import Flask
 
-            from bm2.services.store_application import StoreApplication
-            from bm2.web import register_routes
+            from binance_alpha.services.store_application import StoreApplication
+            from binance_alpha.web import register_routes
 
             temp_dir = TEST_TEMP_ROOT / "routes"
             if temp_dir.exists():
@@ -309,8 +325,8 @@ class SmokeCheckRunner:
         def _run():
             from flask import Flask
 
-            from bm2.services.store_application import StoreApplication
-            from bm2.web import register_routes
+            from binance_alpha.services.store_application import StoreApplication
+            from binance_alpha.web import register_routes
 
             temp_dir = TEST_TEMP_ROOT / "read_only_routes"
             if temp_dir.exists():
@@ -345,8 +361,8 @@ class SmokeCheckRunner:
         def _run():
             from openpyxl import load_workbook
 
-            from bm2.constants import NAME_HEADER, SCORE_SHEET
-            from bm2.services.store_application import StoreApplication
+            from binance_alpha.constants import NAME_HEADER, SCORE_SHEET
+            from binance_alpha.services.store_application import StoreApplication
 
             temp_dir = TEST_TEMP_ROOT / "excel_date_notes_import"
             if temp_dir.exists():
@@ -436,8 +452,8 @@ class SmokeCheckRunner:
         def _run():
             from openpyxl import load_workbook
 
-            from bm2.constants import NAME_HEADER, SCORE_SHEET
-            from bm2.services.store_application import StoreApplication
+            from binance_alpha.constants import NAME_HEADER, SCORE_SHEET
+            from binance_alpha.services.store_application import StoreApplication
 
             temp_dir = TEST_TEMP_ROOT / "excel_refresh_side_effects"
             if temp_dir.exists():
@@ -529,7 +545,7 @@ class SmokeCheckRunner:
 
     def check_excel_refresh_does_not_delete_missing_snapshot_rows(self) -> None:
         def _run():
-            from bm2.services.store_application import StoreApplication
+            from binance_alpha.services.store_application import StoreApplication
 
             temp_dir = TEST_TEMP_ROOT / "excel_refresh_missing_rows"
             if temp_dir.exists():
@@ -573,8 +589,8 @@ class SmokeCheckRunner:
 
             from openpyxl import load_workbook
 
-            from bm2.constants import META_SHEET
-            from bm2.services.store_application import StoreApplication
+            from binance_alpha.constants import META_SHEET
+            from binance_alpha.services.store_application import StoreApplication
 
             temp_dir = TEST_TEMP_ROOT / "cross_year_score_meta"
             if temp_dir.exists():
@@ -624,9 +640,9 @@ class SmokeCheckRunner:
         def _run():
             from openpyxl import load_workbook
 
-            from bm2.constants import WEAR_NAME_HEADER, WEAR_SHEET, WEAR_TOTAL_HEADER
-            from bm2.excel.cycle_block_sheets import iter_blocks
-            from bm2.services.store_application import StoreApplication
+            from binance_alpha.constants import WEAR_NAME_HEADER, WEAR_SHEET, WEAR_TOTAL_HEADER
+            from binance_alpha.excel.cycle_block_sheets import iter_blocks
+            from binance_alpha.services.store_application import StoreApplication
 
             temp_dir = TEST_TEMP_ROOT / "historical_cycle_block_refresh"
             if temp_dir.exists():
@@ -684,8 +700,8 @@ class SmokeCheckRunner:
         def _run():
             from openpyxl import load_workbook
 
-            from bm2.constants import SCORE_SHEET
-            from bm2.services.store_application import StoreApplication
+            from binance_alpha.constants import SCORE_SHEET
+            from binance_alpha.services.store_application import StoreApplication
 
             temp_dir = TEST_TEMP_ROOT / "deleted_score_column"
             if temp_dir.exists():
@@ -730,8 +746,8 @@ class SmokeCheckRunner:
 
     def check_member_rename_refresh_preserves_old_rows(self) -> None:
         def _run():
-            from bm2.constants import DISABLED
-            from bm2.services.store_application import StoreApplication
+            from binance_alpha.constants import DISABLED
+            from binance_alpha.services.store_application import StoreApplication
 
             temp_dir = TEST_TEMP_ROOT / "member_rename_refresh"
             if temp_dir.exists():
@@ -762,8 +778,8 @@ class SmokeCheckRunner:
         def _run():
             from openpyxl import load_workbook
 
-            from bm2.constants import DISABLED, NAME_HEADER, SCORE_SHEET
-            from bm2.services.store_application import StoreApplication
+            from binance_alpha.constants import DISABLED, NAME_HEADER, SCORE_SHEET
+            from binance_alpha.services.store_application import StoreApplication
 
             temp_dir = TEST_TEMP_ROOT / "member_status_refresh"
             if temp_dir.exists():
@@ -834,7 +850,7 @@ class SmokeCheckRunner:
 
     def check_existing_config_members_are_not_reseeded(self) -> None:
         def _run():
-            from bm2.services.store_application import StoreApplication
+            from binance_alpha.services.store_application import StoreApplication
 
             temp_dir = TEST_TEMP_ROOT / "config_members_no_reseed"
             if temp_dir.exists():
@@ -874,8 +890,8 @@ class SmokeCheckRunner:
 
     def check_supabase_profit_uses_formal_column(self) -> None:
         def _run():
-            from bm2.constants import ENABLED
-            from bm2.local_database import LocalDatabase
+            from binance_alpha.constants import ENABLED
+            from binance_alpha.local_database import LocalDatabase
 
             class FakeSupabase:
                 def __init__(self) -> None:
@@ -935,7 +951,7 @@ class SmokeCheckRunner:
         def _run():
             import httpx
 
-            from bm2.services.supabase_entry_writer import SupabaseEntryWriter
+            from binance_alpha.services.supabase_entry_writer import SupabaseEntryWriter
 
             class FailingSupabase:
                 def is_configured(self) -> bool:
@@ -960,7 +976,7 @@ class SmokeCheckRunner:
 
     def check_wear_threshold_uses_saved_config(self) -> None:
         def _run():
-            from bm2.services.store_application import StoreApplication
+            from binance_alpha.services.store_application import StoreApplication
 
             temp_dir = TEST_TEMP_ROOT / "wear_threshold_config"
             if temp_dir.exists():
@@ -984,10 +1000,10 @@ class SmokeCheckRunner:
         def _run():
             from openpyxl import load_workbook
 
-            from bm2.constants import WEAR_NAME_HEADER, WEAR_SHEET, WEAR_TOTAL_HEADER
-            from bm2.excel.value_normalizer import normalize_wear
-            from bm2.services.store_application import StoreApplication
-            from bm2.ui_text import UI_TEXT
+            from binance_alpha.constants import WEAR_NAME_HEADER, WEAR_SHEET, WEAR_TOTAL_HEADER
+            from binance_alpha.excel.value_normalizer import normalize_wear
+            from binance_alpha.services.store_application import StoreApplication
+            from binance_alpha.ui_text import UI_TEXT
 
             temp_dir = TEST_TEMP_ROOT / "wear_daily_member_average"
             if temp_dir.exists():
@@ -1047,7 +1063,7 @@ class SmokeCheckRunner:
 
     def check_daily_entry_rejects_incomplete_balance_pair(self) -> None:
         def _run():
-            from bm2.services.store_application import StoreApplication
+            from binance_alpha.services.store_application import StoreApplication
 
             temp_dir = TEST_TEMP_ROOT / "daily_incomplete_balance"
             if temp_dir.exists():
@@ -1075,7 +1091,7 @@ class SmokeCheckRunner:
 
     def check_invalid_save_date_is_rejected(self) -> None:
         def _run():
-            from bm2.services.sqlite_entry_writer import SQLiteEntryWriter
+            from binance_alpha.services.sqlite_entry_writer import SQLiteEntryWriter
 
             class FakeLocalDb:
                 def record_score_entries(self, saved_date, entries, *, source="local"):
@@ -1096,9 +1112,9 @@ class SmokeCheckRunner:
         def _run():
             from openpyxl import Workbook
 
-            from bm2.constants import NAME_HEADER, RESERVED_MEMBER_NAMES
-            from bm2.excel.cycle_block_sheets import CYCLE_BANNER_PREFIX, build_cycle_blocks, iter_blocks
-            from bm2.services.store_application import StoreApplication
+            from binance_alpha.constants import NAME_HEADER, RESERVED_MEMBER_NAMES
+            from binance_alpha.excel.cycle_block_sheets import CYCLE_BANNER_PREFIX, build_cycle_blocks, iter_blocks
+            from binance_alpha.services.store_application import StoreApplication
 
             workbook = Workbook()
             sheet = workbook.active
@@ -1178,8 +1194,8 @@ class SmokeCheckRunner:
         def _run():
             from openpyxl import load_workbook
 
-            from bm2.constants import NAME_HEADER, SCORE_SHEET
-            from bm2.services.store_application import StoreApplication
+            from binance_alpha.constants import NAME_HEADER, SCORE_SHEET
+            from binance_alpha.services.store_application import StoreApplication
 
             temp_dir = TEST_TEMP_ROOT / "excel_unknown_score_date"
             if temp_dir.exists():
@@ -1230,8 +1246,8 @@ class SmokeCheckRunner:
         def _run():
             from openpyxl import load_workbook
 
-            from bm2.constants import META_SHEET
-            from bm2.services.store_application import StoreApplication
+            from binance_alpha.constants import META_SHEET
+            from binance_alpha.services.store_application import StoreApplication
 
             temp_dir = TEST_TEMP_ROOT / "excel_missing_score_meta"
             if temp_dir.exists():
@@ -1271,7 +1287,7 @@ class SmokeCheckRunner:
         def _run():
             from openpyxl import load_workbook
 
-            from bm2.constants import EXPENSE_SHEET, INCOME_SHEET, SCORE_SHEET, WEAR_SHEET
+            from binance_alpha.constants import EXPENSE_SHEET, INCOME_SHEET, SCORE_SHEET, WEAR_SHEET
 
             store = self.build_store()
             target_date = "2026-05-02"
@@ -1314,7 +1330,7 @@ class SmokeCheckRunner:
 
     def check_delete_score_date_rolls_back_on_export_error(self) -> None:
         def _run():
-            from bm2.services.store_application import StoreApplication
+            from binance_alpha.services.store_application import StoreApplication
 
             class FailingExportService:
                 def export_to_excel(self, date_text: str | None = None) -> int:
@@ -1362,8 +1378,8 @@ class SmokeCheckRunner:
         def _run():
             from flask import Flask
 
-            from bm2.services.store_application import StoreApplication
-            from bm2.web import register_routes
+            from binance_alpha.services.store_application import StoreApplication
+            from binance_alpha.web import register_routes
 
             temp_dir = TEST_TEMP_ROOT / "delete_date_empty_flash"
             if temp_dir.exists():
@@ -1396,8 +1412,8 @@ class SmokeCheckRunner:
         def _run():
             from flask import Flask
 
-            from bm2.services.store_application import StoreApplication
-            from bm2.web import register_routes
+            from binance_alpha.services.store_application import StoreApplication
+            from binance_alpha.web import register_routes
 
             class FakeSyncService:
                 def __init__(self) -> None:
@@ -1458,9 +1474,9 @@ class SmokeCheckRunner:
 
     def check_online_manual_wear_syncs_to_local(self) -> None:
         def _run():
-            from bm2.entry_helpers import member_id, score_entry_id
-            from bm2.local_database import LocalDatabase
-            from bm2.services.supabase_entry_writer import SupabaseEntryWriter
+            from binance_alpha.entry_helpers import member_id, score_entry_id
+            from binance_alpha.local_database import LocalDatabase
+            from binance_alpha.services.supabase_entry_writer import SupabaseEntryWriter
 
             class FakeSupabase:
                 def __init__(self) -> None:
@@ -1539,7 +1555,7 @@ class SmokeCheckRunner:
 
     def check_blank_online_detail_fields_do_not_churn(self) -> None:
         def _run():
-            from bm2.local_database import LocalDatabase
+            from binance_alpha.local_database import LocalDatabase
 
             temp_dir = TEST_TEMP_ROOT / "blank_online_detail_churn"
             if temp_dir.exists():
@@ -1573,8 +1589,8 @@ class SmokeCheckRunner:
 
     def check_supabase_remote_reentry_restores_local_tombstone(self) -> None:
         def _run():
-            from bm2.entry_helpers import member_id, score_entry_id
-            from bm2.local_database import LocalDatabase
+            from binance_alpha.entry_helpers import member_id, score_entry_id
+            from binance_alpha.local_database import LocalDatabase
 
             class FakePullSupabase:
                 def __init__(self, row) -> None:
@@ -1631,7 +1647,7 @@ class SmokeCheckRunner:
 
     def check_supabase_pull_overlap_and_force_full(self) -> None:
         def _run():
-            from bm2.local_database import LocalDatabase
+            from binance_alpha.local_database import LocalDatabase
 
             class CapturingSupabase:
                 def __init__(self) -> None:
@@ -1677,8 +1693,8 @@ class SmokeCheckRunner:
 
     def check_supabase_clock_skew_row_is_pulled(self) -> None:
         def _run():
-            from bm2.entry_helpers import member_id, score_entry_id
-            from bm2.local_database import LocalDatabase
+            from binance_alpha.entry_helpers import member_id, score_entry_id
+            from binance_alpha.local_database import LocalDatabase
 
             class FilteringSupabase:
                 def __init__(self, row) -> None:
@@ -1734,8 +1750,8 @@ class SmokeCheckRunner:
 
     def check_supabase_delete_push_reinsert_pull_roundtrip(self) -> None:
         def _run():
-            from bm2.entry_helpers import score_entry_id
-            from bm2.local_database import LocalDatabase
+            from binance_alpha.entry_helpers import score_entry_id
+            from binance_alpha.local_database import LocalDatabase
 
             class MemorySupabase:
                 def __init__(self) -> None:
@@ -1819,7 +1835,7 @@ class SmokeCheckRunner:
         def _run():
             import time
 
-            from bm2.repositories.supabase_client import SupabaseClient
+            from binance_alpha.repositories.supabase_client import SupabaseClient
 
             temp_dir = TEST_TEMP_ROOT / "supabase_env_reload"
             if temp_dir.exists():
@@ -1846,8 +1862,8 @@ class SmokeCheckRunner:
 
     def check_cycle_extra_member_reactivation_normalizes_flag(self) -> None:
         def _run():
-            from bm2.constants import DISABLED, ENABLED
-            from bm2.services.store_application import StoreApplication
+            from binance_alpha.constants import DISABLED, ENABLED
+            from binance_alpha.services.store_application import StoreApplication
 
             temp_dir = TEST_TEMP_ROOT / "cycle_extra_reactivation"
             if temp_dir.exists():
@@ -1882,7 +1898,7 @@ class SmokeCheckRunner:
 
     def check_cycle_extra_member_carries_to_next_until_removed(self) -> None:
         def _run():
-            from bm2.services.store_application import StoreApplication
+            from binance_alpha.services.store_application import StoreApplication
 
             temp_dir = TEST_TEMP_ROOT / "cycle_extra_carry_next"
             if temp_dir.exists():
@@ -1924,8 +1940,8 @@ class SmokeCheckRunner:
         def _run():
             from flask import Flask
 
-            from bm2.services.store_application import StoreApplication
-            from bm2.web import register_routes
+            from binance_alpha.services.store_application import StoreApplication
+            from binance_alpha.web import register_routes
 
             temp_dir = TEST_TEMP_ROOT / "cycle_settle_confirm"
             if temp_dir.exists():
@@ -1959,8 +1975,8 @@ class SmokeCheckRunner:
         def _run():
             from postgrest.exceptions import APIError
 
-            from bm2.repositories import supabase_client as sc
-            from bm2.services.application_service import ApplicationService
+            from binance_alpha.repositories import supabase_client as sc
+            from binance_alpha.services.application_service import ApplicationService
 
             # --- transient APIError (gateway blip) is retried, then succeeds ---
             attempts = {"n": 0}
@@ -2029,8 +2045,8 @@ class SmokeCheckRunner:
         def _run():
             from openpyxl import load_workbook
 
-            from bm2.excel.cash_flow_sheet import CASH_FLOW_SHEET_NAME
-            from bm2.services.store_application import StoreApplication
+            from binance_alpha.excel.cash_flow_sheet import CASH_FLOW_SHEET_NAME
+            from binance_alpha.services.store_application import StoreApplication
 
             temp_dir = TEST_TEMP_ROOT / "cash_flow_persist"
             if temp_dir.exists():
@@ -2049,7 +2065,7 @@ class SmokeCheckRunner:
                 })
 
                 # Every field must survive the round-trip to SQLite — a dropped
-                # field here is exactly the class of data-loss BM2 has hit before.
+                # field here is exactly the class of data loss this project has hit before.
                 rows = store._context.local_db.list_cash_flows()
                 by_note = {r["note"]: r for r in rows}
                 saved = by_note.get("群里发的红包")
@@ -2096,7 +2112,7 @@ class SmokeCheckRunner:
 
     def check_cash_flow_rejects_bad_input(self) -> None:
         def _run():
-            from bm2.services.store_application import StoreApplication
+            from binance_alpha.services.store_application import StoreApplication
 
             temp_dir = TEST_TEMP_ROOT / "cash_flow_bad_input"
             if temp_dir.exists():
@@ -2128,7 +2144,7 @@ class SmokeCheckRunner:
         def _run():
             import logging
 
-            from bm2.services.store_application import StoreApplication
+            from binance_alpha.services.store_application import StoreApplication
 
             temp_dir = TEST_TEMP_ROOT / "settle_next_rollback"
             if temp_dir.exists():
@@ -2144,7 +2160,7 @@ class SmokeCheckRunner:
                     raise PermissionError("workbook locked")
 
                 store._context.cycle_service._on_overview_regen = _fail_regen
-                cycle_logger = logging.getLogger("bm2.services.cycle_service")
+                cycle_logger = logging.getLogger("binance_alpha.services.cycle_service")
                 previous_disabled = cycle_logger.disabled
                 cycle_logger.disabled = True
                 try:
@@ -2174,7 +2190,7 @@ class SmokeCheckRunner:
 
     def check_new_cycle_first_day_entry_counts_in_new_window(self) -> None:
         def _run():
-            from bm2.services.store_application import StoreApplication
+            from binance_alpha.services.store_application import StoreApplication
 
             temp_dir = TEST_TEMP_ROOT / "new_cycle_first_day"
             if temp_dir.exists():
@@ -2211,7 +2227,7 @@ class SmokeCheckRunner:
 
     def check_mobile_row_then_desktop_completion_updates_cycle_profit(self) -> None:
         def _run():
-            from bm2.services.store_application import StoreApplication
+            from binance_alpha.services.store_application import StoreApplication
 
             temp_dir = TEST_TEMP_ROOT / "mobile_then_desktop_cycle"
             if temp_dir.exists():
@@ -2249,7 +2265,7 @@ class SmokeCheckRunner:
 
     def check_cycle_push_pull_roundtrip(self) -> None:
         def _run():
-            from bm2.local_database import LocalDatabase
+            from binance_alpha.local_database import LocalDatabase
 
             class FakeSupabase:
                 def __init__(self) -> None:
@@ -2351,7 +2367,7 @@ class SmokeCheckRunner:
     def check_online_wear_uses_cycle_window(self) -> None:
         def _run():
             from datetime import date, timedelta
-            from bm2.services.application_service import ApplicationService
+            from binance_alpha.services.application_service import ApplicationService
 
             cycle_start = (date.today() - timedelta(days=30)).strftime("%Y-%m-%d")
             today = date.today().strftime("%Y-%m-%d")
@@ -2430,8 +2446,8 @@ class SmokeCheckRunner:
             from datetime import datetime, timedelta
             from openpyxl import load_workbook
 
-            from bm2.constants import NAME_HEADER, SCORE_LOW_DAILY_FONT_COLOR, SCORE_SHEET
-            from bm2.services.store_application import StoreApplication
+            from binance_alpha.constants import NAME_HEADER, SCORE_LOW_DAILY_FONT_COLOR, SCORE_SHEET
+            from binance_alpha.services.store_application import StoreApplication
 
             temp_dir = TEST_TEMP_ROOT / "low_score_format"
             if temp_dir.exists():
@@ -2512,6 +2528,7 @@ class SmokeCheckRunner:
     def run(self) -> int:
         try:
             self.check_module_imports()
+            self.check_workbook_branding_compatibility()
             self.check_application_init()
             self.check_store_read_entry()
             self.check_presenter_entry()

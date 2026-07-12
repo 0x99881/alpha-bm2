@@ -8,7 +8,7 @@ from typing import Any
 from flask import abort, flash, redirect, render_template, request, Response, send_from_directory, url_for
 
 from .constants import DISABLED, ENABLED
-from .ui_text import JS_UI_TEXT, MESSAGES, UI_TEXT
+from .ui_text import JS_UI_TEXT, MESSAGES, UI_TEXT, display_workbook_filename
 from .web_cashflow_routes import register_cashflow_routes
 from .web_cycle_routes import register_cycle_routes
 from .web_member_routes import register_member_routes
@@ -19,16 +19,16 @@ from .web_sync_routes import register_sync_routes
 def register_routes(app, store) -> None:
     read_only_mode = bool(getattr(store, 'read_only', False))
 
-    _app_password = os.environ.get("BM2_PASSWORD", "")
+    _app_password = os.environ.get("BINANCE_ALPHA_PASSWORD") or os.environ.get("BM2_PASSWORD", "")
     if _app_password:
         @app.before_request
         def _require_auth():
             auth = request.authorization
             if not auth or not hmac.compare_digest(str(auth.password), _app_password):
                 return Response(
-                    "BM2 requires authentication.",
+                    "币安 Alpha 多号管理系统需要登录。",
                     401,
-                    {"WWW-Authenticate": 'Basic realm="BM2"'},
+                    {"WWW-Authenticate": 'Basic realm="Binance Alpha"'},
                 )
 
     if 'asset_file' not in app.view_functions and app.static_folder:
@@ -48,9 +48,9 @@ def register_routes(app, store) -> None:
     @app.context_processor
     def inject_shared_data() -> dict[str, Any]:
         return {
-            'excel_filename': store.workbook_path.name,
+            'excel_filename': display_workbook_filename(store.workbook_path.name),
             'quick_scores': store.get_quick_scores(),
-            'asset_version': '20260518-01',
+            'asset_version': '20260712-01',
             'ui': UI_TEXT,
             'js_ui_text': JS_UI_TEXT,
             'enabled_status': ENABLED,
