@@ -55,6 +55,7 @@ class StoreApplication:
     def get_online_next_score_date(self): return self._context.query_service.get_online_next_score_date()
     def get_mobile_overview(self): return self._context.query_service.get_mobile_overview()
     def is_supabase_configured(self): return self._context.command_service.is_supabase_configured()
+    def get_cash_flow_view(self): return self._context.cashflow_service.get_view()
 
     # ---- commands ---------------------------------------------------------
     def create_settlement_cycle(self, start_date): return self._context.command_service.create_settlement_cycle(start_date)
@@ -70,6 +71,8 @@ class StoreApplication:
     def save_daily_entry(self, form_data, selected_date, *, existing_notes=None, export_to_excel=True): return self._context.command_service.save_daily_entry(form_data, selected_date, existing_notes=existing_notes, export_to_excel=export_to_excel)
     def export_to_excel(self, date_text=None): return self._context.export_service.export_to_excel(date_text)
     def delete_score_date(self, date_text): return self._context.command_service.delete_score_date(date_text)
+    def add_cash_flow(self, form_data): return self._context.cashflow_service.add(form_data)
+    def delete_cash_flow(self, flow_id): return self._context.cashflow_service.delete(flow_id)
     def supabase_push(self, *, force_full=True): return self._context.command_service.supabase_push(force_full=force_full)
     def supabase_pull(self, *, force_full=False): return self._context.command_service.supabase_pull(force_full=force_full)
 

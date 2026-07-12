@@ -5,6 +5,7 @@
 @import url("styles/members.css");
 @import url("styles/profit-calendar.css");
 @import url("styles/cycle-profit.css");
+@import url("styles/cash-flow.css");
 
 .abnormal-cell {
     color: red;

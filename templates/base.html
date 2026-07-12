@@ -38,6 +38,7 @@
                 <a href="{{ url_for('expense_chart') }}" draggable="true" data-nav-item="expense_chart" class="{% if request.endpoint == 'expense_chart' %}active{% endif %}"><span class="nav-drag-handle" aria-hidden="true">::</span>{{ ui.nav_expense_chart }}</a>
                 <a href="{{ url_for('profit_calendar') }}" draggable="true" data-nav-item="profit_calendar" class="{% if request.endpoint in ['profit_calendar', 'member_detail'] %}active{% endif %}"><span class="nav-drag-handle" aria-hidden="true">::</span>{{ ui.nav_calendar }}</a>
                 <a href="{{ url_for('cycle_profit') }}" draggable="true" data-nav-item="cycle_profit" class="{% if request.endpoint == 'cycle_profit' %}active{% endif %}"><span class="nav-drag-handle" aria-hidden="true">::</span>{{ ui.nav_cycle_profit }}</a>
+                <a href="{{ url_for('cash_flow') }}" draggable="true" data-nav-item="cash_flow" class="{% if request.endpoint == 'cash_flow' %}active{% endif %}"><span class="nav-drag-handle" aria-hidden="true">::</span>{{ ui.nav_cash_flow }}</a>
                 <a href="{{ url_for('members') }}" draggable="true" data-nav-item="members" class="{% if request.endpoint == 'members' %}active{% endif %}"><span class="nav-drag-handle" aria-hidden="true">::</span>{{ ui.nav_members }}</a>
                 {% endif %}
             </nav>
@@ -81,6 +82,7 @@
     <script src="{{ url_for('asset_file', filename='members_sort.js', v=asset_version) }}"></script>
     <script src="{{ url_for('asset_file', filename='profit_calendar.js', v=asset_version) }}"></script>
     <script src="{{ url_for('asset_file', filename='cycle_sort.js', v=asset_version) }}"></script>
+    <script src="{{ url_for('asset_file', filename='cash_flow.js', v=asset_version) }}"></script>
     <script src="{{ url_for('asset_file', filename='app.js', v=asset_version) }}"></script>
 </body>
 </html>

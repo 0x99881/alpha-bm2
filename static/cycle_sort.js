@@ -124,7 +124,7 @@
             button.addEventListener("click", () => {
                 const name = button.dataset.removeMember;
                 const cid = button.dataset.cycleId;
-                const confirmText = getUiText("cycleRemoveConfirm", "Remove this cycle-only member?");
+                const confirmText = getUiText("cycleRemoveConfirm", "Remove this carried member?");
                 if (!window.confirm(confirmText)) {
                     return;
                 }

@@ -107,6 +107,26 @@
                     </tr>
                     {% endfor %}
                 </tbody>
+                <tfoot>
+                    <tr class="wear-summary-row" data-wear-summary-row>
+                        <td colspan="9">
+                            <div class="wear-summary">
+                                <span class="wear-summary-item">
+                                    <span class="wear-summary-label">{{ ui.wear_summary_total }}</span>
+                                    <span class="wear-summary-value" data-wear-summary="total">—</span>
+                                </span>
+                                <span class="wear-summary-item">
+                                    <span class="wear-summary-label">{{ ui.wear_summary_count }}</span>
+                                    <span class="wear-summary-value" data-wear-summary="count">0</span>
+                                </span>
+                                <span class="wear-summary-item">
+                                    <span class="wear-summary-label">{{ ui.wear_summary_avg }}</span>
+                                    <span class="wear-summary-value" data-wear-summary="avg">—</span>
+                                </span>
+                            </div>
+                        </td>
+                    </tr>
+                </tfoot>
             </table>
         </div>
     </form>

@@ -126,6 +126,12 @@ class WearPresenter:
             row_values.append(name)
             raw_rows.append(row_values)
 
+        # 预览表按各成员磨损合计从大到小排（与 空投收入图/红包图 一致，一眼看出谁磨得多）。
+        # 合计就在每行的第 len(dates) 列；Python 稳定排序让合计相同（含全为 0 的成员）
+        # 保持原来的成员顺序。日均行是按列汇总的，不受行顺序影响。
+        total_col = len(dates)
+        raw_rows.sort(key=lambda row: -float(row[total_col] or 0))
+
         return self._build_view_from_raw(
             headers=headers,
             raw_rows=raw_rows,

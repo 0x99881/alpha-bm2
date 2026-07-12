@@ -16,6 +16,10 @@
         return div.innerHTML;
     };
 
+    // For interpolating free text (e.g. member names) into attribute selectors.
+    namespace.cssEscape = (value) =>
+        window.CSS && CSS.escape ? CSS.escape(value) : String(value).replace(/["\\]/g, "\\$&");
+
     namespace.toNumber = (value, fallback = 0) => {
         if (value === "" || value == null) {
             return fallback;

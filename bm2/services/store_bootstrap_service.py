@@ -12,6 +12,7 @@ from ..presenters import CycleProfitPresenter, ProfitCalendarPresenter, ScorePre
 from ..repositories import ConfigRepository, SupabaseClient
 from ..sqlite_to_excel_exporter import SQLiteToExcelExporter
 from .application_service import ApplicationService
+from .cashflow_service import CashFlowService
 from .cycle_service import CycleService
 from .daily_entry_service import DailyEntryService
 from .excel_export_service import ExcelExportService
@@ -88,11 +89,17 @@ class StoreBootstrapService:
         if read_only:
             context.cycle_service = None
             context.cycle_profit_presenter = None
+            context.cashflow_service = None
         else:
             context.cycle_service = CycleService(context.local_db, context.query_service.get_active_members)
             context.cycle_profit_presenter = CycleProfitPresenter(context.cycle_service)
             context.cycle_service._on_overview_regen = self._make_overview_regen(context)
             self._sync_cycle_overview_on_startup(context)
+            context.cashflow_service = CashFlowService(
+                context.local_db,
+                context.workbook_repository,
+                today_provider=lambda: datetime.now().strftime("%Y-%m-%d"),
+            )
         return context
 
     @staticmethod

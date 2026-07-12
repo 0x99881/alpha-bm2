@@ -1880,6 +1880,46 @@ class SmokeCheckRunner:
 
         self.check("cycle extra member reactivation normalizes flag", _run)
 
+    def check_cycle_extra_member_carries_to_next_until_removed(self) -> None:
+        def _run():
+            from bm2.services.store_application import StoreApplication
+
+            temp_dir = TEST_TEMP_ROOT / "cycle_extra_carry_next"
+            if temp_dir.exists():
+                shutil.rmtree(temp_dir)
+            temp_dir.mkdir(parents=True)
+            try:
+                store = StoreApplication(temp_dir)
+                extra_name = "carry-extra"
+                cycle_id = store.create_settlement_cycle("2026-05-01")
+                store.add_cycle_member(cycle_id, extra_name)
+
+                next_cycle_id = store.settle_and_create_next_cycle(cycle_id, "2026-05-01", {})
+                next_entries = store._context.local_db.get_settlement_entries(next_cycle_id)
+                carried = next_entries.get(extra_name)
+                if not carried or int(carried.get("is_extra", 0) or 0) != 1:
+                    raise ValueError("extra member did not carry to next cycle")
+                next_row = next(
+                    row for row in store.get_cycle_profit_view(next_cycle_id)["rows"]
+                    if row["member_name"] == extra_name
+                )
+                if not next_row["is_extra"]:
+                    raise ValueError("carried extra member is not displayed as removable")
+
+                store.remove_cycle_member(next_cycle_id, extra_name)
+                third_cycle_id = store.settle_and_create_next_cycle(next_cycle_id, "2026-05-02", {})
+                third_names = {
+                    row["member_name"]
+                    for row in store.get_cycle_profit_view(third_cycle_id)["rows"]
+                }
+                if extra_name in third_names:
+                    raise ValueError("removed extra member still carried to later cycle")
+                return "carried until removed"
+            finally:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+
+        self.check("cycle extra member carries to next until removed", _run)
+
     def check_cycle_settle_confirmation_rendered(self) -> None:
         def _run():
             from flask import Flask
@@ -1914,6 +1954,175 @@ class SmokeCheckRunner:
                 shutil.rmtree(temp_dir, ignore_errors=True)
 
         self.check("cycle settle confirmation rendered", _run)
+
+    def check_online_pull_retries_transient_and_caches(self) -> None:
+        def _run():
+            from postgrest.exceptions import APIError
+
+            from bm2.repositories import supabase_client as sc
+            from bm2.services.application_service import ApplicationService
+
+            # --- transient APIError (gateway blip) is retried, then succeeds ---
+            attempts = {"n": 0}
+
+            def flaky():
+                attempts["n"] += 1
+                if attempts["n"] < 3:
+                    raise APIError({"message": "connection reset by peer", "code": "503"})
+                return "ok"
+
+            original_delay = sc._RETRY_DELAY_SECONDS
+            sc._RETRY_DELAY_SECONDS = 0  # keep the test fast
+            try:
+                if sc._retry_on_transient(flaky, label="test") != "ok" or attempts["n"] != 3:
+                    raise ValueError("transient APIError was not retried to success")
+
+                # --- permanent APIError (schema) fails fast, NOT retried ---
+                perm = {"n": 0}
+
+                def permanent():
+                    perm["n"] += 1
+                    raise APIError({"message": 'relation "x" does not exist', "code": "42P01"})
+
+                try:
+                    sc._retry_on_transient(permanent, label="test")
+                    raise ValueError("permanent APIError should have raised")
+                except APIError:
+                    pass
+                if perm["n"] != 1:
+                    raise ValueError(f"permanent error retried {perm['n']}x; must fail fast")
+            finally:
+                sc._RETRY_DELAY_SECONDS = original_delay
+
+            # --- per-request pull cache collapses repeat pulls into one call ---
+            class FakeClient:
+                def __init__(self):
+                    self.member_pulls = 0
+                    self.score_pulls = 0
+
+                def is_configured(self):
+                    return True
+
+                def pull_members(self):
+                    self.member_pulls += 1
+                    return [{"name": "a", "status": "x", "deleted": 0, "sort_order": 0}]
+
+                def pull_score_entries(self):
+                    self.score_pulls += 1
+                    return []
+
+            fake = FakeClient()
+            svc = ApplicationService(None, fake, lambda: "2026-01-01")
+            svc._online_member_rows()
+            svc._online_member_rows()
+            svc._online_score_rows()
+            svc._online_score_rows()
+            if fake.member_pulls != 1 or fake.score_pulls != 1:
+                raise ValueError(
+                    f"pull cache miss: members={fake.member_pulls} scores={fake.score_pulls} (expected 1/1)"
+                )
+            return "transient retried, permanent fast-failed, pulls cached"
+
+        self.check("online pull retries transient + caches", _run)
+
+    def check_cash_flow_entry_persists_all_fields(self) -> None:
+        def _run():
+            from openpyxl import load_workbook
+
+            from bm2.excel.cash_flow_sheet import CASH_FLOW_SHEET_NAME
+            from bm2.services.store_application import StoreApplication
+
+            temp_dir = TEST_TEMP_ROOT / "cash_flow_persist"
+            if temp_dir.exists():
+                shutil.rmtree(temp_dir)
+            temp_dir.mkdir(parents=True)
+            try:
+                store = StoreApplication(temp_dir)
+                out_form = {
+                    "entry_date": "2026-07-12", "direction": "out", "amount": "300",
+                    "category": "红包支出", "note": "群里发的红包",
+                }
+                store.add_cash_flow(out_form)
+                store.add_cash_flow({
+                    "entry_date": "2026-07-10", "direction": "in", "amount": "1000",
+                    "category": "入金", "note": "充值",
+                })
+
+                # Every field must survive the round-trip to SQLite — a dropped
+                # field here is exactly the class of data-loss BM2 has hit before.
+                rows = store._context.local_db.list_cash_flows()
+                by_note = {r["note"]: r for r in rows}
+                saved = by_note.get("群里发的红包")
+                if saved is None:
+                    raise ValueError("out entry not persisted")
+                for field, expected in (
+                    ("entry_date", "2026-07-12"), ("direction", "out"),
+                    ("amount", "300"), ("category", "红包支出"),
+                ):
+                    if saved[field] != expected:
+                        raise ValueError(f"{field} not persisted: {saved[field]!r} != {expected!r}")
+
+                summary = store.get_cash_flow_view()["summary"]
+                if (summary["total_out"], summary["total_in"], summary["net_out"], summary["month_out"]) != (
+                    "300", "1000", "-700", "300"
+                ):
+                    raise ValueError(f"summary math wrong: {summary}")
+
+                # Excel sheet mirrors the ledger.
+                wb = load_workbook(store.workbook_path)
+                try:
+                    if CASH_FLOW_SHEET_NAME not in wb.sheetnames:
+                        raise ValueError("资金流水 sheet missing from workbook")
+                    headers = [wb[CASH_FLOW_SHEET_NAME].cell(1, c).value for c in range(1, 6)]
+                    if headers != ["日期", "方向", "金额(U)", "分类", "备注"]:
+                        raise ValueError(f"unexpected excel headers: {headers}")
+                finally:
+                    wb.close()
+
+                # Soft delete removes it from the view but keeps history.
+                store.delete_cash_flow(saved["id"])
+                if any(r["id"] == saved["id"] for r in store.get_cash_flow_view()["rows"]):
+                    raise ValueError("deleted entry still visible")
+                if not any(
+                    r["id"] == saved["id"]
+                    for r in store._context.local_db.list_cash_flows(include_deleted=True)
+                ):
+                    raise ValueError("soft delete hard-removed the row")
+                return "all fields persisted; excel + delete ok"
+            finally:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+
+        self.check("cash flow entry persists all fields", _run)
+
+    def check_cash_flow_rejects_bad_input(self) -> None:
+        def _run():
+            from bm2.services.store_application import StoreApplication
+
+            temp_dir = TEST_TEMP_ROOT / "cash_flow_bad_input"
+            if temp_dir.exists():
+                shutil.rmtree(temp_dir)
+            temp_dir.mkdir(parents=True)
+            try:
+                store = StoreApplication(temp_dir)
+                bad_inputs = [
+                    {"entry_date": "", "direction": "out", "amount": "10", "category": "其他", "note": ""},
+                    {"entry_date": "2026-07-12", "direction": "out", "amount": "abc", "category": "其他", "note": ""},
+                    {"entry_date": "2026-07-12", "direction": "out", "amount": "0", "category": "其他", "note": ""},
+                    {"entry_date": "2026-07-12", "direction": "out", "amount": "-5", "category": "其他", "note": ""},
+                ]
+                for form in bad_inputs:
+                    try:
+                        store.add_cash_flow(form)
+                    except ValueError:
+                        continue
+                    raise ValueError(f"bad input accepted: {form}")
+                if store.get_cash_flow_view()["rows"]:
+                    raise ValueError("rejected input still created a ledger row")
+                return "bad input rejected, no rows created"
+            finally:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+
+        self.check("cash flow rejects bad input", _run)
 
     def check_settle_and_create_next_rolls_back_on_regen_error(self) -> None:
         def _run():
@@ -2344,7 +2553,11 @@ class SmokeCheckRunner:
             self.check_supabase_delete_push_reinsert_pull_roundtrip()
             self.check_supabase_env_file_reloads()
             self.check_cycle_extra_member_reactivation_normalizes_flag()
+            self.check_cycle_extra_member_carries_to_next_until_removed()
             self.check_cycle_settle_confirmation_rendered()
+            self.check_online_pull_retries_transient_and_caches()
+            self.check_cash_flow_entry_persists_all_fields()
+            self.check_cash_flow_rejects_bad_input()
             self.check_settle_and_create_next_rolls_back_on_regen_error()
             self.check_new_cycle_first_day_entry_counts_in_new_window()
             self.check_mobile_row_then_desktop_completion_updates_cycle_profit()

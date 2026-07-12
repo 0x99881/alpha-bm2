@@ -86,11 +86,26 @@ class SQLiteSchemaMixin:
                     PRIMARY KEY (cycle_id, member_name)
                 );
 
+                CREATE TABLE IF NOT EXISTS cash_flows (
+                    id TEXT PRIMARY KEY,
+                    entry_date TEXT NOT NULL DEFAULT '',
+                    direction TEXT NOT NULL DEFAULT 'out',
+                    amount TEXT NOT NULL DEFAULT '',
+                    category TEXT NOT NULL DEFAULT '',
+                    note TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL DEFAULT '',
+                    updated_at TEXT NOT NULL,
+                    deleted INTEGER NOT NULL DEFAULT 0
+                );
+
                 CREATE INDEX IF NOT EXISTS idx_score_entries_date
                 ON score_entries(score_date);
 
                 CREATE INDEX IF NOT EXISTS idx_settlement_entries_cycle
                 ON settlement_entries(cycle_id);
+
+                CREATE INDEX IF NOT EXISTS idx_cash_flows_date
+                ON cash_flows(entry_date);
                 """
             )
             existing_columns = {
