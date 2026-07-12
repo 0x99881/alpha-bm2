@@ -1,4 +1,4 @@
-# BM2 supervisor — keeps pythonw app.py alive without polling.
+# Binance Alpha supervisor — keeps pythonw app.py alive without polling.
 #
 # Design:
 #   * Task Scheduler fires this once at user login.

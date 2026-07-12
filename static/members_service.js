@@ -1,5 +1,5 @@
 (() => {
-    const namespace = window.BM2 || (window.BM2 = {});
+    const namespace = window.BinanceAlpha || (window.BinanceAlpha = {});
     const { requestJson } = namespace;
 
     namespace.membersService = {

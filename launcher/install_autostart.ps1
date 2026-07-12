@@ -1,4 +1,4 @@
-# Installs a Windows Scheduled Task that auto-starts the BM2 server at user
+# Installs a Windows Scheduled Task that auto-starts the Binance Alpha server at user
 # login. After running this once, the server will be listening on port 5000
 # every time you log in — Chrome just needs to navigate to
 # http://127.0.0.1:5000/scores (we suggest bookmarking that).
@@ -18,7 +18,8 @@ $ErrorActionPreference = 'Stop'
 # ASCII-only task name avoids encoding mismatch when Windows PowerShell 5.1
 # loads this .ps1 (it reads as ANSI / system codepage unless the file has a
 # UTF-8 BOM). The task is for the user's own machine — readable enough.
-$TaskName  = 'BM2_AutoStart'
+$TaskName       = 'BinanceAlpha_AutoStart'
+$LegacyTaskName = 'BM2_AutoStart'
 $here      = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot  = Split-Path -Parent $here
 $appPy     = Join-Path $repoRoot 'app.py'
@@ -29,10 +30,12 @@ if (-not (Test-Path $appPy)) {
 
 # Always remove the existing task first — Register-ScheduledTask without -Force
 # would error otherwise, and -Force still complains if Description differs.
-$existing = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
-if ($existing) {
-    Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false
-    Write-Output "Removed prior task '$TaskName'."
+foreach ($name in @($TaskName, $LegacyTaskName)) {
+    $existing = Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue
+    if ($existing) {
+        Unregister-ScheduledTask -TaskName $name -Confirm:$false
+        Write-Output "Removed prior task '$name'."
+    }
 }
 
 if ($Uninstall) {
@@ -94,7 +97,7 @@ Register-ScheduledTask `
     -Trigger     $trigger `
     -Settings    $settings `
     -Principal   $principal `
-    -Description "Auto-starts BM2 local web server on user login. Server listens on http://127.0.0.1:5000" | Out-Null
+    -Description "Auto-starts the Binance Alpha multi-account manager on user login. Server listens on http://127.0.0.1:5000" | Out-Null
 
 Write-Output ""
 Write-Output "✓ Scheduled task '$TaskName' installed."

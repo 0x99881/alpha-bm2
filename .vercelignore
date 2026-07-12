@@ -14,5 +14,6 @@ scripts
 *.db-shm
 *.db-wal
 BM2*.xlsx
+币安Alpha*.xlsx
 ~$*.xlsx
 system_config.json

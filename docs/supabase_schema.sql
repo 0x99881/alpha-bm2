@@ -1,4 +1,4 @@
--- Supabase schema for BM2
+-- Supabase schema for the Binance Alpha multi-account manager
 -- Run this in Supabase SQL Editor:
 -- Dashboard -> SQL Editor -> New query
 --

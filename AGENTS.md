@@ -1,4 +1,4 @@
-# BM2 Project Instructions
+# Binance Alpha Multi-Account Manager Instructions
 
 This file is for AI coding agents and future maintainers.
 
@@ -32,6 +32,7 @@ Real local data files include:
 ```text
 bm2_local.db
 BM2记录_*.xlsx
+币安Alpha记录_*.xlsx
 system_config.json
 .env.local
 ```
@@ -69,21 +70,21 @@ Excel import/export, or the score entry page must verify:
 
 ## Layer Responsibilities
 
-`bm2/web*.py`
+`binance_alpha/web*.py`
 
 - HTTP request parsing.
 - Calls explicit application or service methods.
 - Returns response.
 - Must not import or directly operate SQLite, Supabase SDK, Excel, or JSON sync files.
 
-`bm2/services/store_application.py`
+`binance_alpha/services/store_application.py`
 
 - Explicit application entry and thin coordinator.
 - Must stay under 100 lines.
 - Delegates to focused services.
 - Must not become another business center.
 
-`bm2/services/`
+`binance_alpha/services/`
 
 - Business use cases and flow coordination.
 - No Flask imports.
@@ -91,18 +92,18 @@ Excel import/export, or the score entry page must verify:
 - No direct Supabase SDK imports.
 - No `openpyxl` except migration/import/export boundary code when explicitly allowed by architecture checks.
 
-`bm2/repositories/`
+`binance_alpha/repositories/`
 
 - Concrete data access.
 - SQLite SQL belongs in SQLite repository modules.
 - Supabase SDK belongs in `supabase_client.py`.
 
-`bm2/excel/`
+`binance_alpha/excel/`
 
 - Workbook structure, import/export helpers, Excel compatibility logic.
 - Excel must not become a primary write path again.
 
-`bm2/presenters/`
+`binance_alpha/presenters/`
 
 - Page/view data assembly.
 - No writes.
@@ -135,7 +136,7 @@ Do not:
 - Add a new wrapper just to hide old logic.
 - Reconnect Excel as the main database.
 - Reconnect JSON/blob/cloud sync.
-- Restore `bm2/store.py` or the old `ExcelStore` entry point.
+- Restore `binance_alpha/store.py` or the old `ExcelStore` entry point.
 - Put repository logic into services.
 - Put service logic into repositories.
 - Restore quarantined or retired files into active runtime.
@@ -155,7 +156,7 @@ python scripts/smoke_check.py
 Code package may include:
 
 ```text
-bm2/
+binance_alpha/
 scripts/
 static/
 templates/
@@ -173,6 +174,7 @@ Do not package:
 .env.local
 bm2_local.db
 BM2记录_*.xlsx
+币安Alpha记录_*.xlsx
 __pycache__/
 .tmp_*/
 public/

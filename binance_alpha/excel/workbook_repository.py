@@ -10,7 +10,7 @@ from ..constants import (
     DATA_FILE_PATTERNS,
     WORKBOOK_FILENAME_PREFIX,
 )
-from ..ui_text import MESSAGES
+from ..ui_text import MESSAGES, display_workbook_filename
 
 
 class WorkbookRepository:
@@ -77,9 +77,9 @@ class WorkbookRepository:
         try:
             workbook.save(self.workbook_path)
         except PermissionError as exc:
-            raise ValueError(MESSAGES["excel_busy"].format(filename=self.workbook_path.name)) from exc
+            raise ValueError(MESSAGES["excel_busy"].format(filename=display_workbook_filename(self.workbook_path.name))) from exc
         except OSError as exc:
-            raise ValueError(MESSAGES["excel_save_failed"].format(filename=self.workbook_path.name)) from exc
+            raise ValueError(MESSAGES["excel_save_failed"].format(filename=display_workbook_filename(self.workbook_path.name))) from exc
 
     def update_workbook(self, change_func) -> None:
         workbook = self.open()

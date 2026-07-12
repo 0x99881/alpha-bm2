@@ -8,7 +8,7 @@ from typing import Any, Callable
 
 from flask import abort, flash, jsonify, redirect, render_template, request, url_for
 
-from .ui_text import MESSAGES
+from .ui_text import MESSAGES, display_workbook_filename
 
 
 def register_score_routes(
@@ -138,10 +138,10 @@ def register_score_routes(
                 subprocess.Popen(["open", str(workbook_path)])
             else:
                 subprocess.Popen(["xdg-open", str(workbook_path)])
-            flash(MESSAGES["excel_opened"].format(filename=workbook_path.name), "success")
+            flash(MESSAGES["excel_opened"].format(filename=display_workbook_filename(workbook_path.name)), "success")
         except OSError:
             app.logger.exception("Failed to open workbook: %s", workbook_path)
-            flash(MESSAGES["excel_open_failed"].format(filename=workbook_path.name), "error")
+            flash(MESSAGES["excel_open_failed"].format(filename=display_workbook_filename(workbook_path.name)), "error")
         return redirect(url_for("score_entry"))
 
     @app.post("/scores/save")
@@ -164,7 +164,7 @@ def register_score_routes(
         if not read_only_mode:
             if submission.get("export_error") is not None:
                 app.logger.error("Failed to update workbook after score save: %s", submission["export_error"])
-                flash(MESSAGES["excel_save_failed"].format(filename=store.workbook_path.name), "error")
+                flash(MESSAGES["excel_save_failed"].format(filename=display_workbook_filename(store.workbook_path.name)), "error")
             flash_remote_sync_needed()
         return redirect(url_for("score_entry", date=submission["result"]["saved_date"], draft_saved="1"))
 

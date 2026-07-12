@@ -1,4 +1,4 @@
-# BM2 Main Paths
+# Binance Alpha Main Paths
 
 This document records the only supported runtime paths. Code that creates a
 second active path for the same action should be removed rather than wrapped.

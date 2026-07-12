@@ -5,8 +5,8 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 CONFIG_FILE = BASE_DIR / "system_config.json"
-WORKBOOK_FILENAME_PREFIX = 'BM2\u8bb0\u5f55_'
-DATA_FILE_PATTERNS = ['BM2\u8bb0\u5f55_*.xlsx']
+WORKBOOK_FILENAME_PREFIX = '币安Alpha记录_'
+DATA_FILE_PATTERNS = ['币安Alpha记录_*.xlsx', 'BM2\u8bb0\u5f55_*.xlsx']
 
 DEFAULT_MEMBERS = [
     "zj", "bb", "hd", "hp", "xys", "ryl", "gpp", "gsh", "gj", "dcl", "ys", "gmj",

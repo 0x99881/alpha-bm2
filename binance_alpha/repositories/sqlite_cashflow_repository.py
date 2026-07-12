@@ -10,7 +10,7 @@ class SQLiteCashFlowRepositoryMixin:
     A flat append-only ledger: every entry is one row keyed by a random id, so
     two identical entries on the same day (e.g. 两笔 200 红包) never collide.
     Deletes are soft (``deleted = 1``) so a mis-tap never destroys history —
-    the same caution the rest of BM2 uses for real financial data.
+    the same caution the rest of the project uses for real financial data.
 
     This table intentionally has no version/source columns: the ledger is
     local-only and does not participate in Supabase sync.
