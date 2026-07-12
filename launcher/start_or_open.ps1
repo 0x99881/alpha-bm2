@@ -34,7 +34,7 @@ function Get-PythonLaunch {
     return $null
 }
 
-function Test-Bm2Ready {
+function Test-BinanceAlphaReady {
     param([int]$Seconds = 5)
 
     $deadline = (Get-Date).AddSeconds($Seconds)
@@ -57,7 +57,7 @@ function Test-Bm2Ready {
     return $false
 }
 
-function Stop-StaleBm2Process {
+function Stop-StaleBinanceAlphaProcess {
     $connections = Get-NetTCPConnection -LocalPort 5000 -State Listen -ErrorAction SilentlyContinue
     foreach ($connection in @($connections)) {
         $process = Get-CimInstance Win32_Process -Filter "ProcessId=$($connection.OwningProcess)" -ErrorAction SilentlyContinue
@@ -94,12 +94,12 @@ if ($Check) {
     exit 0
 }
 
-if (Test-Bm2Ready -Seconds 5) {
+if (Test-BinanceAlphaReady -Seconds 5) {
     Start-Process $appUrl
     exit 0
 }
 
-Stop-StaleBm2Process
+Stop-StaleBinanceAlphaProcess
 
 $waitAndOpen = @"
 `$url = '$appUrl'
