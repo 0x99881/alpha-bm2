@@ -2,7 +2,7 @@ from __future__ import annotations
 
 
 UI_TEXT = {
-    'app_title': '\u0042\u004d\u0032\u7ba1\u7406\u7cfb\u7edf',
+    'app_title': '币安Alpha多号管理系统',
     'local_tool': '\u672c\u5730\u5355\u7528\u6237\u5de5\u5177',
     'local_tool_read_only': '\u53ea\u8bfb\u6570\u636e\u67e5\u770b',
     'nav_scores': '\u6bcf\u65e5\u79ef\u5206\u5f55\u5165',
